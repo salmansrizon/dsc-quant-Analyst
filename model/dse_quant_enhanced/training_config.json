@@ -1,0 +1,20 @@
+{
+  "base_model": "unsloth/llama-3.2-3b-bnb-4bit",
+  "lora_r": 16,
+  "training_steps": 150,
+  "learning_rate": 0.0002,
+  "dataset_size": 855,
+  "data_sources": [
+    "lankabd_data_all_sectors.csv - Current market data",
+    "dse_historical_prices.csv - 3 years daily OHLCV",
+    "dse_announcements.csv - Corporate events & announcements"
+  ],
+  "enhanced_features": [
+    "Temporal analysis (3-year trends)",
+    "Event-driven analysis (announcements)",
+    "Volatility forecasting",
+    "Support/resistance from historical data",
+    "Earnings quality analysis",
+    "Momentum trend analysis"
+  ]
+}

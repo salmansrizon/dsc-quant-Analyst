@@ -5,11 +5,10 @@ import time
 from datetime import datetime, timedelta
 from urllib.parse import urlencode
 
-# Dagster
-from dagster import op, job, OpExecutionContext
 
 # logging utility
 from utils.logger import Log
+from utils.supabase_helper import SupabaseHelper
 
 # create a module-level logger with file output
 from datetime import datetime as _dt
@@ -146,8 +145,34 @@ def scrape_price_archive(symbol, from_date, to_date):
         else:
             df = pd.DataFrame(data)
         
-        # Add symbol column
-        df['Symbol'] = symbol
+        # Standardize column names to match migration and CSV headers
+        df.rename(columns={
+            'symbol': 'Symbol',
+            'date': 'Date',
+            'open': 'Open',
+            'high': 'High',
+            'low': 'Low',
+            'close': 'Close',
+            'volume': 'Volume',
+            # Alternative cases
+            'Opening': 'Open',
+            'Highest': 'High',
+            'Lowest': 'Low',
+            'Closing': 'Close',
+            'Volume ': 'Volume',
+        }, inplace=True, errors='ignore')
+
+        # Add symbol column and indicators placeholders if not present
+        if 'Symbol' not in df.columns:
+            df['Symbol'] = symbol
+        
+        # Add technical indicator placeholders consistent with schema
+        df['SMA_20'] = None
+        df['Volatility_20d'] = None
+        df['Price_Momentum_20d'] = None
+        if 'Sector' not in df.columns:
+            df['Sector'] = None
+
         logger.info(f"Successfully parsed data for {symbol} ({len(df)} rows)")
         
         return df
@@ -162,17 +187,17 @@ def scrape_price_archive(symbol, from_date, to_date):
 
 def scrape_all_symbols_price_data(from_date=None, to_date=None):
     """Scrape price data for all symbols from the sectors file"""
+    db = SupabaseHelper()
     
-    if from_date is None or to_date is None:
-        from_date, to_date = get_date_range(years=3)
+    # Global range fallback
+    if to_date is None:
+        _, to_date = get_date_range(years=3)
     
     symbols = get_symbols_from_sectors()
-    
     if not symbols:
         logger.error("No symbols found to scrape")
         return None
     
-    logger.info(f"Fetching price data for last 3 years: {from_date} to {to_date}")
     logger.info(f"Total symbols to process: {len(symbols)}")
     
     all_data = []
@@ -180,14 +205,50 @@ def scrape_all_symbols_price_data(from_date=None, to_date=None):
     failed_symbols = []
     
     for idx, symbol in enumerate(symbols, 1):
-        logger.info(f"[{idx}/{len(symbols)}] Fetching price data for {symbol}...")
+        # Fetch incremental date for THIS specific symbol
+        symbol_from_date = from_date
+        if symbol_from_date is None:
+             # Check database for last record of this specific symbol
+             try:
+                 # Note: In a large table, searching by symbol might be slow without proper indexing.
+                 # Our migration already has idx_price_archive_symbol_date.
+                 last_record = db._supabase.table('lankabd_price_archive') \
+                    .select('Date') \
+                    .eq('Symbol', symbol) \
+                    .order('Date', desc=True) \
+                    .limit(1) \
+                    .execute()
+                 
+                 if last_record.data:
+                     # Start from the day AFTER the last record
+                     last_dt = datetime.strptime(last_record.data[0]['Date'], '%Y-%m-%d')
+                     symbol_from_date = (last_dt + timedelta(days=1)).strftime('%Y-%m-%d')
+                     logger.debug(f"[{symbol}] Resuming from {symbol_from_date}")
+                 else:
+                     symbol_from_date, _ = get_date_range(years=3)
+             except Exception as e:
+                 logger.warning(f"Could not fetch last date for {symbol}: {e}")
+                 symbol_from_date, _ = get_date_range(years=3)
+
+        logger.info(f"[{idx}/{len(symbols)}] Fetching price data for {symbol} (from {symbol_from_date})...")
         
-        df = scrape_price_archive(symbol, from_date, to_date)
+        df = scrape_price_archive(symbol, symbol_from_date, to_date)
         
         if df is not None and len(df) > 0:
+            # Cleanup and format for SQL
+            import numpy as np
+            df = df.replace(['-', 'N/A', 'n/a', 'nan', 'inf', '-inf'], np.nan)
+            
+            # UPLOAD TO SUPABASE
+            try:
+                db.upload_dataframe(df, 'lankabd_price_archive')
+                success_count += 1
+            except Exception as e:
+                logger.error(f"Error uploading {symbol}: {e}")
+                failed_symbols.append(symbol)
+
             all_data.append(df)
             logger.debug(f"Received {len(df)} rows for {symbol}")
-            success_count += 1
         else:
             logger.warning(f"No data returned for {symbol}")
             failed_symbols.append(symbol)
@@ -308,41 +369,7 @@ def scrape_price_archive_by_sector(sector=None, from_date=None, to_date=None):
         return None
 
 
-# ── Dagster Ops ───────────────────────────────────────────────────────────────
-# Thin wrappers around the existing plain-Python functions above.
-# Existing functions are NOT modified so they remain directly callable/testable.
-
-@op(name="price_archive_fetch_all_symbols")
-def price_archive_fetch_all_op(context: OpExecutionContext):
-    """Dagster op: scrape price archive for all symbols over the last 3 years."""
-    from_date, to_date = get_date_range(years=3)
-    context.log.info(f"Fetching price data for all symbols: {from_date} → {to_date}")
-    return scrape_all_symbols_price_data(from_date, to_date)
-
-
-@op(name="price_archive_fetch_by_sector")
-def price_archive_by_sector_op(context: OpExecutionContext):
-    """Dagster op: scrape price archive grouped by sector over the last 3 years."""
-    from_date, to_date = get_date_range(years=3)
-    context.log.info(f"Fetching sector price data: {from_date} → {to_date}")
-    return scrape_price_archive_by_sector(from_date=from_date, to_date=to_date)
-
-
-# ── Dagster Jobs ──────────────────────────────────────────────────────────────
-
-@job(name="price_archive_job")
-def price_archive_job():
-    """Default job: fetch price archive for all symbols."""
-    price_archive_fetch_all_op()
-
-
-@job(name="price_archive_by_sector_job")
-def price_archive_by_sector_job():
-    """Job: fetch price archive grouped by sector."""
-    price_archive_by_sector_op()
-
 
 if __name__ == "__main__":
-    # Runs the job locally without a running Dagster server.
-    # Use `dagster dev` to launch the UI with full scheduling support.
-    price_archive_job.execute_in_process()
+    # Local execution support
+    scrape_all_symbols_price_data()

@@ -4,11 +4,10 @@ import pandas as pd
 import time
 import json
 
-# Dagster
-from dagster import op, job, OpExecutionContext, asset
 
 # logging utility
 from utils.logger import Log
+from utils.supabase_helper import SupabaseHelper
 from datetime import datetime as _dt
 
 # module logger
@@ -130,6 +129,32 @@ def scrape_lankabd(sector=None):
         # Create a DataFrame
         df = pd.DataFrame(data, columns=headers_list)
         
+        # Standardize column naming and drop unnamed columns
+        df.rename(columns={
+            'Symbol': 'Symbol',
+            'Sector': 'Sector',
+            'LTP': 'LTP',
+            'Volume(Qty)': 'Volume(Qty)',
+            'Value(Turnover)': 'Value(Turnover)',
+        }, inplace=True, errors='ignore')
+
+        # Drop truly empty or "Unnamed" columns that confuse SQL importers
+        df = df.loc[:, ~df.columns.astype(str).str.contains('^Unnamed|^$', case=False, na=False)]
+        df = df.loc[:, df.columns.astype(str) != ""] # Extra check for literally empty names
+
+        # Replace standard placeholders with None (NULL) for SQL compat
+        import numpy as np
+        df = df.replace(['-', 'N/A', 'n/a', 'nan', 'inf', '-inf'], np.nan)
+
+        # Explicitly keep only common columns that exist in the database schema
+        allowed_columns = [
+            "Symbol", "Sector", "LTP", "Open", "High", "Low", "Close", "YCP", 
+            "Change", "% Change", "Volume(Qty)", "Value(Turnover)", "Trade", 
+            "Market_Cap", "PE", "EPS", "Div_Yield", "ROE", "Net_Asset", 
+            "SMA_20", "SMA_50", "RSI_14", "Bollinger_Upper", "Bollinger_Lower", "Volatility_20d"
+        ]
+        df = df[[col for col in allowed_columns if col in df.columns]]
+
         # Apply sector filter if specified
         if sector:
             if 'Sector' in df.columns:
@@ -172,61 +197,27 @@ def scrape_all_sectors():
     # Combine all data
     if all_data:
         combined_df = pd.concat(all_data, ignore_index=True)
+        
+        # Save to CSV (local backup)
         output_file = 'lankabd_data_all_sectors.csv'
         combined_df.to_csv(output_file, index=False)
         logger.info(f"\n✓ Combined data saved to {output_file}")
-        logger.info(f"Total rows: {len(combined_df)}")
+        
+        # NEW: Upload to Supabase
+        try:
+            db = SupabaseHelper()
+            db.upload_dataframe(combined_df, 'lankabd_datamatrix', truncate=True)
+            logger.info("✓ Data successfully uploaded to Supabase.")
+        except Exception as e:
+            logger.error(f"Error uploading to Supabase: {e}")
+            raise e # Allow failure to propagate for CI/CD retry
+            
         return combined_df
     else:
         logger.warning("\nNo data collected from any sector")
         return None
 
-# ── Dagster Assets ────────────────────────────────────────────────────────────
-
-@asset(group_name="datagrid", compute_kind="python")
-def available_sectors(context: OpExecutionContext) -> list:
-    """Asset: The list of available sector names from LankaBD."""
-    sectors = get_available_sectors()
-    context.add_output_metadata({"num_sectors": len(sectors)})
-    return sectors
-
-
-@asset(group_name="datagrid", compute_kind="pandas")
-def lankabd_data_all_sectors(context: OpExecutionContext, available_sectors: list) -> pd.DataFrame:
-    """
-    Asset: Scraped DataMatrix for all sectors.
-    Depends on: available_sectors
-    """
-    context.log.info(f"Starting scrape for {len(available_sectors)} sectors...")
-    
-    all_data = []
-    for sector in available_sectors:
-        df = scrape_lankabd(sector=sector)
-        if df is not None and not df.empty:
-            all_data.append(df)
-        time.sleep(0.5)
-        
-    if not all_data:
-        raise ValueError("No data collected from any sector")
-        
-    combined_df = pd.concat(all_data, ignore_index=True)
-    
-    # Save precisely as requested in the script logic
-    output_file = 'lankabd_data_all_sectors.csv'
-    combined_df.to_csv(output_file, index=False)
-    
-    # Metadata for Dagster UI
-    context.add_output_metadata({
-        "total_rows": len(combined_df),
-        "file_path": output_file,
-        "preview": combined_df.head().to_string()
-    })
-    
-    return combined_df
-
 
 if __name__ == "__main__":
-    # Local execution support
-    scrape_all_sectors()
     # Local execution support
     scrape_all_sectors()

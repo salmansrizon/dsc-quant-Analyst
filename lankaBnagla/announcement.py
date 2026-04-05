@@ -5,11 +5,10 @@ from datetime import datetime, timedelta
 from urllib.parse import urlencode
 import requests
 
-# Dagster
-from dagster import op, job, OpExecutionContext
 
 # logging utility
 from utils.logger import Log
+from utils.supabase_helper import SupabaseHelper
 
 # Create a module-level logger with timestamped file output in logs/ directory
 log_filename = f"logs/announcement_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log"
@@ -125,7 +124,17 @@ def scrape_announcement(sn, fromdate, todate, page=None, page_size=None):
                 para = item.find('p')
                 text = para.text.strip() if para else ''
 
-                data.append({'Symbol': title, 'Date': date, 'Text': text, 'Link': link})
+                data.append({
+                    'Symbol': title, 
+                    'Date': date, 
+                    'Announcement_Type': 'Other', # Based on sample CSV; could be parsed if possible
+                    'Details': text, 
+                    'Sentiment': 'neutral', # Placeholder as seen in sample
+                    'Expected_Price_Impact': 'N/A', # Placeholder as seen in sample
+                    'Importance': 'Medium', # Placeholder as seen in sample
+                    'Sector': '', # To be filled if known or from master data
+                    'Link': link
+                })
 
             df = pd.DataFrame(data)
             logger.info(f"Successfully parsed announcements for {sn} ({len(df)} rows)")
@@ -186,8 +195,19 @@ def scrape_announcement(sn, fromdate, todate, page=None, page_size=None):
 
 
 def scrape_all_symbols_announcements(fromdate=None, todate=None, page_size=None, fetch_all_pages=False, max_pages=None):
-    if fromdate is None or todate is None:
-        fromdate, todate = get_date_range(years=3)
+    # Fetch from Supabase if not provided
+    db = SupabaseHelper()
+    if fromdate is None:
+        last_date = db.get_last_date('lankabd_announcements', 'Date')
+        if last_date:
+            # Start from the latest date found in the DB
+            fromdate = str(last_date)
+            logger.info(f"Database contains records up to {fromdate}. Starting from this point.")
+        else:
+            fromdate, todate = get_date_range(years=3)
+
+    if todate is None:
+        _, todate = get_date_range(years=3)
 
     symbols = get_symbols_from_sectors()
     if not symbols:
@@ -220,17 +240,49 @@ def scrape_all_symbols_announcements(fromdate=None, todate=None, page_size=None,
 
             if symbol_parts:
                 df = pd.concat(symbol_parts, ignore_index=True)
+                
+                # Cleanup and Format (Ensure columns match schema headers)
+                import numpy as np
+                df = df.replace(['-', 'N/A', 'n/a', 'nan', 'inf', '-inf'], np.nan)
+                
+                # Only keep columns allowed in the database schema
+                allowed_columns = ["Symbol", "Date", "Announcement_Type", "Details", "Sentiment", "Expected_Price_Impact", "Importance", "Sector"]
+                df = df[[col for col in allowed_columns if col in df.columns]]
+
+                # UPLOAD TO SUPABASE NOW
+                try:
+                    db.upload_dataframe(df, 'lankabd_announcements')
+                    success_count += 1
+                except Exception as e:
+                    logger.error(f"Error uploading {symbol}: {e}")
+                    failed_symbols.append(symbol)
+                
                 all_data.append(df)
-                success_count += 1
             else:
                 logger.warning(f"No data returned for {symbol}")
                 failed_symbols.append(symbol)
         else:
             df = scrape_announcement(symbol, fromdate, todate, page=1 if page_size else None, page_size=page_size)
             if df is not None and len(df) > 0:
+                
+                # Cleanup and Format
+                import numpy as np
+                df = df.replace(['-', 'N/A', 'n/a', 'nan', 'inf', '-inf'], np.nan)
+                
+                # Only keep columns allowed in the database schema
+                allowed_columns = ["Symbol", "Date", "Announcement_Type", "Details", "Sentiment", "Expected_Price_Impact", "Importance", "Sector"]
+                df = df[[col for col in allowed_columns if col in df.columns]]
+
+                # UPLOAD TO SUPABASE NOW
+                try:
+                    db.upload_dataframe(df, 'lankabd_announcements')
+                    success_count += 1
+                except Exception as e:
+                    logger.error(f"Error uploading {symbol}: {e}")
+                    failed_symbols.append(symbol)
+
                 all_data.append(df)
                 logger.debug(f"Received {len(df)} rows for {symbol}")
-                success_count += 1
             else:
                 logger.warning(f"No data returned for {symbol}")
                 failed_symbols.append(symbol)
@@ -353,41 +405,7 @@ def scrape_announcements_by_sector(sector=None, fromdate=None, todate=None, page
         return None
 
 
-# ── Dagster Ops ───────────────────────────────────────────────────────────────
-# Thin wrappers around the existing plain-Python functions above.
-# Existing functions are NOT modified so they remain directly callable/testable.
-
-@op(name="announcement_fetch_all_symbols")
-def announcement_fetch_all_op(context: OpExecutionContext):
-    """Dagster op: scrape announcements for all symbols over the last 3 years."""
-    start_date, end_date = get_date_range(years=3)
-    context.log.info(f"Fetching announcements for all symbols: {start_date} → {end_date}")
-    return scrape_all_symbols_announcements(start_date, end_date)
-
-
-@op(name="announcement_fetch_by_sector")
-def announcement_by_sector_op(context: OpExecutionContext):
-    """Dagster op: scrape announcements grouped by sector over the last 3 years."""
-    start_date, end_date = get_date_range(years=3)
-    context.log.info(f"Fetching sector announcements: {start_date} → {end_date}")
-    return scrape_announcements_by_sector(fromdate=start_date, todate=end_date)
-
-
-# ── Dagster Jobs ──────────────────────────────────────────────────────────────
-
-@job(name="announcement_job")
-def announcement_job():
-    """Default job: scrape announcements for all symbols."""
-    announcement_fetch_all_op()
-
-
-@job(name="announcement_by_sector_job")
-def announcement_by_sector_job():
-    """Job: scrape announcements grouped by sector."""
-    announcement_by_sector_op()
-
 
 if __name__ == "__main__":
-    # Runs the job locally without a running Dagster server.
-    # Use `dagster dev` to launch the UI with full scheduling support.
-    announcement_job.execute_in_process()
+    # Local execution support
+    scrape_all_symbols_announcements()

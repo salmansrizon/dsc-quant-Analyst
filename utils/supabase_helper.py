@@ -25,26 +25,35 @@ class SupabaseHelper:
             return self._table_schemas[table_name]
         
         try:
-            # Fetch a single row to probe the schema
+            # More robust way to probe schema: Use a select with a limit 0 is not always supported for headers 
+            # in the client, so we try to get one row. If empty, we'll try a common set of columns 
+            # or rely on the error message to parse (but that's hacky).
+            # The most reliable way in Supabase/PostgREST to get column names of an empty table 
+            # is to look at the first record, but if it's empty, we need another way.
+            
+            # Simple fix: If we can't find columns, we'll use the ones defined in the migration 
+            # for 'lankabd_price_archive' as a fallback specifically for this project.
+            
             response = self._supabase.table(table_name).select("*").limit(1).execute()
-            if hasattr(response, 'data') and len(response.data) >= 0:
-                # If table is empty, we still get an empty list with correct structure in metadata or similar
-                # For now, we take keys from the first record if available, 
-                # or we use a more robust way to probe if needed.
-                # However, in PostgREST, a simple way is to check the keys of the first non-empty response.
-                if len(response.data) > 0:
-                    cols = list(response.data[0].keys())
-                    self._table_schemas[table_name] = cols
-                    return cols
-                else:
-                    # Fallback or empty table - we might need to handle this differently
-                    # For now, if table is empty, we can't easily probe via select * unless we use a view or RPC.
-                    # As a simpler fallback, we'll return None and skip filtering if we can't probe.
-                    return None
+            if hasattr(response, 'data') and len(response.data) > 0:
+                cols = list(response.data[0].keys())
+                self._table_schemas[table_name] = cols
+                return cols
+            
+            # Fallback for empty tables based on project schema
+            if table_name == 'lankabd_price_archive':
+                cols = ["id", "Symbol", "Date", "Open", "High", "Low", "Close", "Volume", "SMA_20", "SMA_50", "RSI_14", "Bollinger_Upper", "Bollinger_Lower", "Volatility_20d", "Price_Momentum_20d", "Sector", "captured_at_timestamp"]
+                self._table_schemas[table_name] = cols
+                return cols
+            elif table_name == 'lankabd_datamatrix':
+                cols = ["id", "Symbol", "Sector", "LTP", "Open", "High", "Low", "Close", "YCP", "Change", "% Change", "Volume(Qty)", "Value(Turnover)", "Market Category", "Audited PE", "Forward PE", "Free Float", "Director Holdings", "Govt. Holdings", "Institute Holdings", "Foreign Holdings", "Public Holdings", "Market Capitalization (mn)", "Paid Up Capital (mn)", "Last Dividend Declaration Date", "Last AGM Date", "Dividend Yield(%)", "Cash Dividend", "Stock Dividend", "EPS", "NAV(Quarter End)", "RSI(14)", "Turnover Velocity(22)", "Beta(5)", "SMA_20", "SMA_50", "Volatility_20d", "Date", "captured_at_timestamp"]
+                self._table_schemas[table_name] = cols
+                return cols
+                
+            return None
         except Exception as e:
             print(f"Warning: Could not fetch schema for {table_name}: {e}")
             return None
-        return None
 
     def get_last_date(self, table_name, date_column):
         """Fetches the latest date from a specific table and column."""

@@ -4,7 +4,6 @@
 # Virtual environment
 .venv
 venv
-ENV
 
 # Python artifacts
 __pycache__/
@@ -15,8 +14,6 @@ __pycache__/
 logs/
 *.log
 
-# CSV files (if they are large or generated data)
-*.csv
 
 # OS files
 .DS_Store

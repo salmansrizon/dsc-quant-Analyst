@@ -25,22 +25,14 @@ class SupabaseHelper:
             return self._table_schemas[table_name]
         
         try:
-            # More robust way to probe schema: Use a select with a limit 0 is not always supported for headers 
-            # in the client, so we try to get one row. If empty, we'll try a common set of columns 
-            # or rely on the error message to parse (but that's hacky).
-            # The most reliable way in Supabase/PostgREST to get column names of an empty table 
-            # is to look at the first record, but if it's empty, we need another way.
-            
-            # Simple fix: If we can't find columns, we'll use the ones defined in the migration 
-            # for 'lankabd_price_archive' as a fallback specifically for this project.
-            
+            # First attempt: Probe the table to see if it has data and column keys
             response = self._supabase.table(table_name).select("*").limit(1).execute()
             if hasattr(response, 'data') and len(response.data) > 0:
                 cols = list(response.data[0].keys())
                 self._table_schemas[table_name] = cols
                 return cols
             
-            # Fallback for empty tables based on project schema
+            # Fallback for empty tables based on fixed project migration schemas
             if table_name == 'lankabd_price_archive':
                 cols = ["id", "Symbol", "Date", "Open", "High", "Low", "Close", "Volume", "SMA_20", "SMA_50", "RSI_14", "Bollinger_Upper", "Bollinger_Lower", "Volatility_20d", "Price_Momentum_20d", "Sector", "captured_at_timestamp"]
                 self._table_schemas[table_name] = cols

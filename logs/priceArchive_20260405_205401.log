@@ -1,0 +1,480 @@
+2026-04-05 20:54:01,539 [INFO] Extracted 413 unique symbols from lankabd_data_all_sectors.csv
+2026-04-05 20:54:01,539 [INFO] Total symbols to process: 413
+2026-04-05 20:54:04,680 [INFO] [1/413] Fetching price data for ABBANK (from 2026-02-27)...
+2026-04-05 20:54:04,680 [INFO] Starting scrape for symbol=ABBANK, range=2026-02-27 to 2026-04-05
+2026-04-05 20:54:06,024 [INFO] Successfully parsed data for ABBANK (20 rows)
+2026-04-05 20:54:06,228 [ERROR] Error uploading ABBANK: {'message': "Could not find the 'Audited PE' column of 'lankabd_price_archive' in the schema cache", 'code': 'PGRST204', 'hint': None, 'details': None}
+2026-04-05 20:54:06,928 [INFO] [2/413] Fetching price data for ALARABANK (from 2026-02-27)...
+2026-04-05 20:54:06,928 [INFO] Starting scrape for symbol=ALARABANK, range=2026-02-27 to 2026-04-05
+2026-04-05 20:54:08,305 [INFO] Successfully parsed data for ALARABANK (20 rows)
+2026-04-05 20:54:08,770 [ERROR] Error uploading ALARABANK: {'message': "Could not find the 'Audited PE' column of 'lankabd_price_archive' in the schema cache", 'code': 'PGRST204', 'hint': None, 'details': None}
+2026-04-05 20:54:09,477 [INFO] [3/413] Fetching price data for BANKASIA (from 2026-02-27)...
+2026-04-05 20:54:09,477 [INFO] Starting scrape for symbol=BANKASIA, range=2026-02-27 to 2026-04-05
+2026-04-05 20:54:10,993 [INFO] Successfully parsed data for BANKASIA (20 rows)
+2026-04-05 20:54:11,177 [ERROR] Error uploading BANKASIA: {'message': "Could not find the 'Audited PE' column of 'lankabd_price_archive' in the schema cache", 'code': 'PGRST204', 'hint': None, 'details': None}
+2026-04-05 20:54:11,867 [INFO] [4/413] Fetching price data for BRACBANK (from 2026-02-27)...
+2026-04-05 20:54:11,868 [INFO] Starting scrape for symbol=BRACBANK, range=2026-02-27 to 2026-04-05
+2026-04-05 20:54:13,310 [INFO] Successfully parsed data for BRACBANK (20 rows)
+2026-04-05 20:54:13,490 [ERROR] Error uploading BRACBANK: {'message': "Could not find the 'Audited PE' column of 'lankabd_price_archive' in the schema cache", 'code': 'PGRST204', 'hint': None, 'details': None}
+2026-04-05 20:54:14,175 [INFO] [5/413] Fetching price data for CITYBANK (from 2026-02-27)...
+2026-04-05 20:54:14,175 [INFO] Starting scrape for symbol=CITYBANK, range=2026-02-27 to 2026-04-05
+2026-04-05 20:54:15,507 [INFO] Successfully parsed data for CITYBANK (20 rows)
+2026-04-05 20:54:15,688 [ERROR] Error uploading CITYBANK: {'message': "Could not find the 'Audited PE' column of 'lankabd_price_archive' in the schema cache", 'code': 'PGRST204', 'hint': None, 'details': None}
+2026-04-05 20:54:16,374 [INFO] [6/413] Fetching price data for DHAKABANK (from 2026-02-27)...
+2026-04-05 20:54:16,374 [INFO] Starting scrape for symbol=DHAKABANK, range=2026-02-27 to 2026-04-05
+2026-04-05 20:54:17,888 [INFO] Successfully parsed data for DHAKABANK (20 rows)
+2026-04-05 20:54:18,069 [ERROR] Error uploading DHAKABANK: {'message': "Could not find the 'Audited PE' column of 'lankabd_price_archive' in the schema cache", 'code': 'PGRST204', 'hint': None, 'details': None}
+2026-04-05 20:54:18,768 [INFO] [7/413] Fetching price data for DUTCHBANGL (from 2026-02-27)...
+2026-04-05 20:54:18,768 [INFO] Starting scrape for symbol=DUTCHBANGL, range=2026-02-27 to 2026-04-05
+2026-04-05 20:54:20,241 [INFO] Successfully parsed data for DUTCHBANGL (20 rows)
+2026-04-05 20:54:20,554 [ERROR] Error uploading DUTCHBANGL: {'message': "Could not find the 'Audited PE' column of 'lankabd_price_archive' in the schema cache", 'code': 'PGRST204', 'hint': None, 'details': None}
+2026-04-05 20:54:21,234 [INFO] [8/413] Fetching price data for EBL (from 2026-02-27)...
+2026-04-05 20:54:21,234 [INFO] Starting scrape for symbol=EBL, range=2026-02-27 to 2026-04-05
+2026-04-05 20:54:22,575 [INFO] Successfully parsed data for EBL (20 rows)
+2026-04-05 20:54:22,744 [ERROR] Error uploading EBL: {'message': "Could not find the 'Audited PE' column of 'lankabd_price_archive' in the schema cache", 'code': 'PGRST204', 'hint': None, 'details': None}
+2026-04-05 20:54:23,428 [INFO] [9/413] Fetching price data for EXIMBANK (from 2026-02-27)...
+2026-04-05 20:54:23,428 [INFO] Starting scrape for symbol=EXIMBANK, range=2026-02-27 to 2026-04-05
+2026-04-05 20:54:24,843 [INFO] Successfully parsed data for EXIMBANK (20 rows)
+2026-04-05 20:54:25,024 [ERROR] Error uploading EXIMBANK: {'message': "Could not find the 'Audited PE' column of 'lankabd_price_archive' in the schema cache", 'code': 'PGRST204', 'hint': None, 'details': None}
+2026-04-05 20:54:25,716 [INFO] [10/413] Fetching price data for FIRSTSBANK (from 2026-02-27)...
+2026-04-05 20:54:25,716 [INFO] Starting scrape for symbol=FIRSTSBANK, range=2026-02-27 to 2026-04-05
+2026-04-05 20:54:27,098 [INFO] Successfully parsed data for FIRSTSBANK (20 rows)
+2026-04-05 20:54:27,274 [ERROR] Error uploading FIRSTSBANK: {'message': "Could not find the 'Audited PE' column of 'lankabd_price_archive' in the schema cache", 'code': 'PGRST204', 'hint': None, 'details': None}
+2026-04-05 20:54:27,955 [INFO] [11/413] Fetching price data for GIB (from 2026-02-27)...
+2026-04-05 20:54:27,955 [INFO] Starting scrape for symbol=GIB, range=2026-02-27 to 2026-04-05
+2026-04-05 20:54:29,353 [INFO] Successfully parsed data for GIB (20 rows)
+2026-04-05 20:54:29,521 [ERROR] Error uploading GIB: {'message': "Could not find the 'Audited PE' column of 'lankabd_price_archive' in the schema cache", 'code': 'PGRST204', 'hint': None, 'details': None}
+2026-04-05 20:54:30,210 [INFO] [12/413] Fetching price data for ICBIBANK (from 2026-02-27)...
+2026-04-05 20:54:30,210 [INFO] Starting scrape for symbol=ICBIBANK, range=2026-02-27 to 2026-04-05
+2026-04-05 20:54:32,083 [INFO] Successfully parsed data for ICBIBANK (20 rows)
+2026-04-05 20:54:32,638 [ERROR] Error uploading ICBIBANK: {'message': "Could not find the 'Audited PE' column of 'lankabd_price_archive' in the schema cache", 'code': 'PGRST204', 'hint': None, 'details': None}
+2026-04-05 20:54:33,397 [INFO] [13/413] Fetching price data for IFIC (from 2026-02-27)...
+2026-04-05 20:54:33,397 [INFO] Starting scrape for symbol=IFIC, range=2026-02-27 to 2026-04-05
+2026-04-05 20:54:34,800 [INFO] Successfully parsed data for IFIC (20 rows)
+2026-04-05 20:54:34,972 [ERROR] Error uploading IFIC: {'message': "Could not find the 'Audited PE' column of 'lankabd_price_archive' in the schema cache", 'code': 'PGRST204', 'hint': None, 'details': None}
+2026-04-05 20:54:36,680 [INFO] [14/413] Fetching price data for ISLAMIBANK (from 2026-02-27)...
+2026-04-05 20:54:36,680 [INFO] Starting scrape for symbol=ISLAMIBANK, range=2026-02-27 to 2026-04-05
+2026-04-05 20:54:38,973 [INFO] Successfully parsed data for ISLAMIBANK (20 rows)
+2026-04-05 20:54:39,290 [ERROR] Error uploading ISLAMIBANK: {'message': "Could not find the 'Audited PE' column of 'lankabd_price_archive' in the schema cache", 'code': 'PGRST204', 'hint': None, 'details': None}
+2026-04-05 20:54:39,995 [INFO] [15/413] Fetching price data for JAMUNABANK (from 2026-02-27)...
+2026-04-05 20:54:39,995 [INFO] Starting scrape for symbol=JAMUNABANK, range=2026-02-27 to 2026-04-05
+2026-04-05 20:54:42,424 [INFO] Successfully parsed data for JAMUNABANK (20 rows)
+2026-04-05 20:54:42,682 [ERROR] Error uploading JAMUNABANK: {'message': "Could not find the 'Audited PE' column of 'lankabd_price_archive' in the schema cache", 'code': 'PGRST204', 'hint': None, 'details': None}
+2026-04-05 20:54:43,727 [INFO] [16/413] Fetching price data for MERCANBANK (from 2026-02-27)...
+2026-04-05 20:54:43,727 [INFO] Starting scrape for symbol=MERCANBANK, range=2026-02-27 to 2026-04-05
+2026-04-05 20:54:47,044 [INFO] Successfully parsed data for MERCANBANK (20 rows)
+2026-04-05 20:54:47,259 [ERROR] Error uploading MERCANBANK: {'message': "Could not find the 'Audited PE' column of 'lankabd_price_archive' in the schema cache", 'code': 'PGRST204', 'hint': None, 'details': None}
+2026-04-05 20:54:47,956 [INFO] [17/413] Fetching price data for MIDLANDBNK (from 2026-02-27)...
+2026-04-05 20:54:47,956 [INFO] Starting scrape for symbol=MIDLANDBNK, range=2026-02-27 to 2026-04-05
+2026-04-05 20:54:49,767 [INFO] Successfully parsed data for MIDLANDBNK (20 rows)
+2026-04-05 20:54:50,024 [ERROR] Error uploading MIDLANDBNK: {'message': "Could not find the 'Audited PE' column of 'lankabd_price_archive' in the schema cache", 'code': 'PGRST204', 'hint': None, 'details': None}
+2026-04-05 20:54:50,750 [INFO] [18/413] Fetching price data for MTB (from 2026-02-27)...
+2026-04-05 20:54:50,750 [INFO] Starting scrape for symbol=MTB, range=2026-02-27 to 2026-04-05
+2026-04-05 20:54:52,812 [INFO] Successfully parsed data for MTB (20 rows)
+2026-04-05 20:54:53,036 [ERROR] Error uploading MTB: {'message': "Could not find the 'Audited PE' column of 'lankabd_price_archive' in the schema cache", 'code': 'PGRST204', 'hint': None, 'details': None}
+2026-04-05 20:54:53,786 [INFO] [19/413] Fetching price data for NBL (from 2026-02-27)...
+2026-04-05 20:54:53,786 [INFO] Starting scrape for symbol=NBL, range=2026-02-27 to 2026-04-05
+2026-04-05 20:54:55,840 [INFO] Successfully parsed data for NBL (20 rows)
+2026-04-05 20:54:56,146 [ERROR] Error uploading NBL: {'message': "Could not find the 'Audited PE' column of 'lankabd_price_archive' in the schema cache", 'code': 'PGRST204', 'hint': None, 'details': None}
+2026-04-05 20:54:56,828 [INFO] [20/413] Fetching price data for NCCBANK (from 2026-02-27)...
+2026-04-05 20:54:56,828 [INFO] Starting scrape for symbol=NCCBANK, range=2026-02-27 to 2026-04-05
+2026-04-05 20:54:58,421 [INFO] Successfully parsed data for NCCBANK (20 rows)
+2026-04-05 20:54:58,707 [ERROR] Error uploading NCCBANK: {'message': "Could not find the 'Audited PE' column of 'lankabd_price_archive' in the schema cache", 'code': 'PGRST204', 'hint': None, 'details': None}
+2026-04-05 20:55:00,015 [INFO] [21/413] Fetching price data for NRBBANK (from 2026-02-27)...
+2026-04-05 20:55:00,015 [INFO] Starting scrape for symbol=NRBBANK, range=2026-02-27 to 2026-04-05
+2026-04-05 20:55:02,755 [INFO] Successfully parsed data for NRBBANK (20 rows)
+2026-04-05 20:55:03,209 [ERROR] Error uploading NRBBANK: {'message': "Could not find the 'Audited PE' column of 'lankabd_price_archive' in the schema cache", 'code': 'PGRST204', 'hint': None, 'details': None}
+2026-04-05 20:55:04,211 [INFO] [22/413] Fetching price data for NRBCBANK (from 2026-02-27)...
+2026-04-05 20:55:04,211 [INFO] Starting scrape for symbol=NRBCBANK, range=2026-02-27 to 2026-04-05
+2026-04-05 20:55:07,519 [INFO] Successfully parsed data for NRBCBANK (20 rows)
+2026-04-05 20:55:07,951 [ERROR] Error uploading NRBCBANK: {'message': "Could not find the 'Audited PE' column of 'lankabd_price_archive' in the schema cache", 'code': 'PGRST204', 'hint': None, 'details': None}
+2026-04-05 20:55:08,817 [INFO] [23/413] Fetching price data for ONEBANKPLC (from 2026-02-27)...
+2026-04-05 20:55:08,817 [INFO] Starting scrape for symbol=ONEBANKPLC, range=2026-02-27 to 2026-04-05
+2026-04-05 20:55:11,860 [INFO] Successfully parsed data for ONEBANKPLC (20 rows)
+2026-04-05 20:55:12,130 [ERROR] Error uploading ONEBANKPLC: {'message': "Could not find the 'Audited PE' column of 'lankabd_price_archive' in the schema cache", 'code': 'PGRST204', 'hint': None, 'details': None}
+2026-04-05 20:55:13,078 [INFO] [24/413] Fetching price data for PREMIERBAN (from 2026-02-27)...
+2026-04-05 20:55:13,078 [INFO] Starting scrape for symbol=PREMIERBAN, range=2026-02-27 to 2026-04-05
+2026-04-05 20:55:16,098 [INFO] Successfully parsed data for PREMIERBAN (20 rows)
+2026-04-05 20:55:16,348 [ERROR] Error uploading PREMIERBAN: {'message': "Could not find the 'Audited PE' column of 'lankabd_price_archive' in the schema cache", 'code': 'PGRST204', 'hint': None, 'details': None}
+2026-04-05 20:55:17,037 [INFO] [25/413] Fetching price data for PRIMEBANK (from 2026-02-27)...
+2026-04-05 20:55:17,037 [INFO] Starting scrape for symbol=PRIMEBANK, range=2026-02-27 to 2026-04-05
+2026-04-05 20:55:18,351 [INFO] Successfully parsed data for PRIMEBANK (20 rows)
+2026-04-05 20:55:18,539 [ERROR] Error uploading PRIMEBANK: {'message': "Could not find the 'Audited PE' column of 'lankabd_price_archive' in the schema cache", 'code': 'PGRST204', 'hint': None, 'details': None}
+2026-04-05 20:55:19,224 [INFO] [26/413] Fetching price data for PUBALIBANK (from 2026-02-27)...
+2026-04-05 20:55:19,224 [INFO] Starting scrape for symbol=PUBALIBANK, range=2026-02-27 to 2026-04-05
+2026-04-05 20:55:20,696 [INFO] Successfully parsed data for PUBALIBANK (20 rows)
+2026-04-05 20:55:20,957 [ERROR] Error uploading PUBALIBANK: {'message': "Could not find the 'Audited PE' column of 'lankabd_price_archive' in the schema cache", 'code': 'PGRST204', 'hint': None, 'details': None}
+2026-04-05 20:55:21,658 [INFO] [27/413] Fetching price data for RUPALIBANK (from 2026-02-27)...
+2026-04-05 20:55:21,659 [INFO] Starting scrape for symbol=RUPALIBANK, range=2026-02-27 to 2026-04-05
+2026-04-05 20:55:22,947 [INFO] Successfully parsed data for RUPALIBANK (20 rows)
+2026-04-05 20:55:23,119 [ERROR] Error uploading RUPALIBANK: {'message': "Could not find the 'Audited PE' column of 'lankabd_price_archive' in the schema cache", 'code': 'PGRST204', 'hint': None, 'details': None}
+2026-04-05 20:55:23,809 [INFO] [28/413] Fetching price data for SBACBANK (from 2026-02-27)...
+2026-04-05 20:55:23,809 [INFO] Starting scrape for symbol=SBACBANK, range=2026-02-27 to 2026-04-05
+2026-04-05 20:55:25,141 [INFO] Successfully parsed data for SBACBANK (20 rows)
+2026-04-05 20:55:25,314 [ERROR] Error uploading SBACBANK: {'message': "Could not find the 'Audited PE' column of 'lankabd_price_archive' in the schema cache", 'code': 'PGRST204', 'hint': None, 'details': None}
+2026-04-05 20:55:26,001 [INFO] [29/413] Fetching price data for SHAHJABANK (from 2026-02-27)...
+2026-04-05 20:55:26,001 [INFO] Starting scrape for symbol=SHAHJABANK, range=2026-02-27 to 2026-04-05
+2026-04-05 20:55:27,471 [INFO] Successfully parsed data for SHAHJABANK (20 rows)
+2026-04-05 20:55:27,651 [ERROR] Error uploading SHAHJABANK: {'message': "Could not find the 'Audited PE' column of 'lankabd_price_archive' in the schema cache", 'code': 'PGRST204', 'hint': None, 'details': None}
+2026-04-05 20:55:28,337 [INFO] [30/413] Fetching price data for SIBL (from 2026-02-27)...
+2026-04-05 20:55:28,338 [INFO] Starting scrape for symbol=SIBL, range=2026-02-27 to 2026-04-05
+2026-04-05 20:55:29,811 [INFO] Successfully parsed data for SIBL (20 rows)
+2026-04-05 20:55:30,113 [ERROR] Error uploading SIBL: {'message': "Could not find the 'Audited PE' column of 'lankabd_price_archive' in the schema cache", 'code': 'PGRST204', 'hint': None, 'details': None}
+2026-04-05 20:55:30,815 [INFO] [31/413] Fetching price data for SOUTHEASTB (from 2026-02-27)...
+2026-04-05 20:55:30,815 [INFO] Starting scrape for symbol=SOUTHEASTB, range=2026-02-27 to 2026-04-05
+2026-04-05 20:55:32,273 [INFO] Successfully parsed data for SOUTHEASTB (20 rows)
+2026-04-05 20:55:32,455 [ERROR] Error uploading SOUTHEASTB: {'message': "Could not find the 'Audited PE' column of 'lankabd_price_archive' in the schema cache", 'code': 'PGRST204', 'hint': None, 'details': None}
+2026-04-05 20:55:33,145 [INFO] [32/413] Fetching price data for STANDBANKL (from 2026-02-27)...
+2026-04-05 20:55:33,145 [INFO] Starting scrape for symbol=STANDBANKL, range=2026-02-27 to 2026-04-05
+2026-04-05 20:55:34,466 [INFO] Successfully parsed data for STANDBANKL (20 rows)
+2026-04-05 20:55:34,642 [ERROR] Error uploading STANDBANKL: {'message': "Could not find the 'Audited PE' column of 'lankabd_price_archive' in the schema cache", 'code': 'PGRST204', 'hint': None, 'details': None}
+2026-04-05 20:55:35,343 [INFO] [33/413] Fetching price data for TRUSTBANK (from 2026-02-27)...
+2026-04-05 20:55:35,343 [INFO] Starting scrape for symbol=TRUSTBANK, range=2026-02-27 to 2026-04-05
+2026-04-05 20:55:36,780 [INFO] Successfully parsed data for TRUSTBANK (20 rows)
+2026-04-05 20:55:36,960 [ERROR] Error uploading TRUSTBANK: {'message': "Could not find the 'Audited PE' column of 'lankabd_price_archive' in the schema cache", 'code': 'PGRST204', 'hint': None, 'details': None}
+2026-04-05 20:55:37,655 [INFO] [34/413] Fetching price data for UCB (from 2026-02-27)...
+2026-04-05 20:55:37,656 [INFO] Starting scrape for symbol=UCB, range=2026-02-27 to 2026-04-05
+2026-04-05 20:55:39,034 [INFO] Successfully parsed data for UCB (20 rows)
+2026-04-05 20:55:39,659 [ERROR] Error uploading UCB: {'message': "Could not find the 'Audited PE' column of 'lankabd_price_archive' in the schema cache", 'code': 'PGRST204', 'hint': None, 'details': None}
+2026-04-05 20:55:40,355 [INFO] [35/413] Fetching price data for UNIONBANK (from 2026-02-27)...
+2026-04-05 20:55:40,355 [INFO] Starting scrape for symbol=UNIONBANK, range=2026-02-27 to 2026-04-05
+2026-04-05 20:55:41,997 [INFO] Successfully parsed data for UNIONBANK (20 rows)
+2026-04-05 20:55:42,218 [ERROR] Error uploading UNIONBANK: {'message': "Could not find the 'Audited PE' column of 'lankabd_price_archive' in the schema cache", 'code': 'PGRST204', 'hint': None, 'details': None}
+2026-04-05 20:55:42,927 [INFO] [36/413] Fetching price data for UTTARABANK (from 2026-02-27)...
+2026-04-05 20:55:42,927 [INFO] Starting scrape for symbol=UTTARABANK, range=2026-02-27 to 2026-04-05
+2026-04-05 20:55:44,309 [INFO] Successfully parsed data for UTTARABANK (20 rows)
+2026-04-05 20:55:44,491 [ERROR] Error uploading UTTARABANK: {'message': "Could not find the 'Audited PE' column of 'lankabd_price_archive' in the schema cache", 'code': 'PGRST204', 'hint': None, 'details': None}
+2026-04-05 20:55:45,191 [INFO] [37/413] Fetching price data for ARAMITCEM (from 2026-02-27)...
+2026-04-05 20:55:45,191 [INFO] Starting scrape for symbol=ARAMITCEM, range=2026-02-27 to 2026-04-05
+2026-04-05 20:55:46,607 [INFO] Successfully parsed data for ARAMITCEM (20 rows)
+2026-04-05 20:55:47,088 [ERROR] Error uploading ARAMITCEM: {'message': "Could not find the 'Audited PE' column of 'lankabd_price_archive' in the schema cache", 'code': 'PGRST204', 'hint': None, 'details': None}
+2026-04-05 20:55:47,787 [INFO] [38/413] Fetching price data for CONFIDCEM (from 2026-02-27)...
+2026-04-05 20:55:47,787 [INFO] Starting scrape for symbol=CONFIDCEM, range=2026-02-27 to 2026-04-05
+2026-04-05 20:55:49,135 [INFO] Successfully parsed data for CONFIDCEM (20 rows)
+2026-04-05 20:55:49,347 [ERROR] Error uploading CONFIDCEM: {'message': "Could not find the 'Audited PE' column of 'lankabd_price_archive' in the schema cache", 'code': 'PGRST204', 'hint': None, 'details': None}
+2026-04-05 20:55:50,034 [INFO] [39/413] Fetching price data for CROWNCEMNT (from 2026-02-27)...
+2026-04-05 20:55:50,034 [INFO] Starting scrape for symbol=CROWNCEMNT, range=2026-02-27 to 2026-04-05
+2026-04-05 20:55:51,799 [INFO] Successfully parsed data for CROWNCEMNT (20 rows)
+2026-04-05 20:55:51,969 [ERROR] Error uploading CROWNCEMNT: {'message': "Could not find the 'Audited PE' column of 'lankabd_price_archive' in the schema cache", 'code': 'PGRST204', 'hint': None, 'details': None}
+2026-04-05 20:55:52,665 [INFO] [40/413] Fetching price data for HEIDELBCEM (from 2026-02-27)...
+2026-04-05 20:55:52,665 [INFO] Starting scrape for symbol=HEIDELBCEM, range=2026-02-27 to 2026-04-05
+2026-04-05 20:55:54,086 [INFO] Successfully parsed data for HEIDELBCEM (20 rows)
+2026-04-05 20:55:54,344 [ERROR] Error uploading HEIDELBCEM: {'message': "Could not find the 'Audited PE' column of 'lankabd_price_archive' in the schema cache", 'code': 'PGRST204', 'hint': None, 'details': None}
+2026-04-05 20:55:55,065 [INFO] [41/413] Fetching price data for LHB (from 2026-02-27)...
+2026-04-05 20:55:55,065 [INFO] Starting scrape for symbol=LHB, range=2026-02-27 to 2026-04-05
+2026-04-05 20:55:56,554 [INFO] Successfully parsed data for LHB (80 rows)
+2026-04-05 20:55:56,801 [ERROR] Error uploading LHB: {'message': "Could not find the 'Audited PE' column of 'lankabd_price_archive' in the schema cache", 'code': 'PGRST204', 'hint': None, 'details': None}
+2026-04-05 20:55:57,488 [INFO] [42/413] Fetching price data for MEGHNACEM (from 2026-02-27)...
+2026-04-05 20:55:57,488 [INFO] Starting scrape for symbol=MEGHNACEM, range=2026-02-27 to 2026-04-05
+2026-04-05 20:55:58,926 [INFO] Successfully parsed data for MEGHNACEM (20 rows)
+2026-04-05 20:55:59,104 [ERROR] Error uploading MEGHNACEM: {'message': "Could not find the 'Audited PE' column of 'lankabd_price_archive' in the schema cache", 'code': 'PGRST204', 'hint': None, 'details': None}
+2026-04-05 20:55:59,793 [INFO] [43/413] Fetching price data for PREMIERCEM (from 2026-02-27)...
+2026-04-05 20:55:59,794 [INFO] Starting scrape for symbol=PREMIERCEM, range=2026-02-27 to 2026-04-05
+2026-04-05 20:56:01,321 [INFO] Successfully parsed data for PREMIERCEM (20 rows)
+2026-04-05 20:56:01,602 [ERROR] Error uploading PREMIERCEM: {'message': "Could not find the 'Audited PE' column of 'lankabd_price_archive' in the schema cache", 'code': 'PGRST204', 'hint': None, 'details': None}
+2026-04-05 20:56:02,299 [INFO] [44/413] Fetching price data for FUWANGCER (from 2026-02-27)...
+2026-04-05 20:56:02,300 [INFO] Starting scrape for symbol=FUWANGCER, range=2026-02-27 to 2026-04-05
+2026-04-05 20:56:03,687 [INFO] Successfully parsed data for FUWANGCER (20 rows)
+2026-04-05 20:56:03,885 [ERROR] Error uploading FUWANGCER: {'message': "Could not find the 'Audited PE' column of 'lankabd_price_archive' in the schema cache", 'code': 'PGRST204', 'hint': None, 'details': None}
+2026-04-05 20:56:04,589 [INFO] [45/413] Fetching price data for MONNOCERA (from 2026-02-27)...
+2026-04-05 20:56:04,589 [INFO] Starting scrape for symbol=MONNOCERA, range=2026-02-27 to 2026-04-05
+2026-04-05 20:56:06,048 [INFO] Successfully parsed data for MONNOCERA (20 rows)
+2026-04-05 20:56:06,324 [ERROR] Error uploading MONNOCERA: {'message': "Could not find the 'Audited PE' column of 'lankabd_price_archive' in the schema cache", 'code': 'PGRST204', 'hint': None, 'details': None}
+2026-04-05 20:56:07,214 [INFO] [46/413] Fetching price data for RAKCERAMIC (from 2026-02-27)...
+2026-04-05 20:56:07,215 [INFO] Starting scrape for symbol=RAKCERAMIC, range=2026-02-27 to 2026-04-05
+2026-04-05 20:56:08,733 [INFO] Successfully parsed data for RAKCERAMIC (20 rows)
+2026-04-05 20:56:09,001 [ERROR] Error uploading RAKCERAMIC: {'message': "Could not find the 'Audited PE' column of 'lankabd_price_archive' in the schema cache", 'code': 'PGRST204', 'hint': None, 'details': None}
+2026-04-05 20:56:09,710 [INFO] [47/413] Fetching price data for SPCERAMICS (from 2026-02-27)...
+2026-04-05 20:56:09,710 [INFO] Starting scrape for symbol=SPCERAMICS, range=2026-02-27 to 2026-04-05
+2026-04-05 20:56:11,292 [INFO] Successfully parsed data for SPCERAMICS (20 rows)
+2026-04-05 20:56:11,559 [ERROR] Error uploading SPCERAMICS: {'message': "Could not find the 'Audited PE' column of 'lankabd_price_archive' in the schema cache", 'code': 'PGRST204', 'hint': None, 'details': None}
+2026-04-05 20:56:12,256 [INFO] [48/413] Fetching price data for STANCERAM (from 2026-02-27)...
+2026-04-05 20:56:12,256 [INFO] Starting scrape for symbol=STANCERAM, range=2026-02-27 to 2026-04-05
+2026-04-05 20:56:13,645 [INFO] Successfully parsed data for STANCERAM (20 rows)
+2026-04-05 20:56:13,849 [ERROR] Error uploading STANCERAM: {'message': "Could not find the 'Audited PE' column of 'lankabd_price_archive' in the schema cache", 'code': 'PGRST204', 'hint': None, 'details': None}
+2026-04-05 20:56:14,545 [INFO] [49/413] Fetching price data for ABBLPBOND (from 2026-02-27)...
+2026-04-05 20:56:14,545 [INFO] Starting scrape for symbol=ABBLPBOND, range=2026-02-27 to 2026-04-05
+2026-04-05 20:56:16,001 [INFO] Successfully parsed data for ABBLPBOND (20 rows)
+2026-04-05 20:56:16,258 [ERROR] Error uploading ABBLPBOND: {'message': "Could not find the 'Audited PE' column of 'lankabd_price_archive' in the schema cache", 'code': 'PGRST204', 'hint': None, 'details': None}
+2026-04-05 20:56:16,975 [INFO] [50/413] Fetching price data for AIBLPBOND (from 2026-02-27)...
+2026-04-05 20:56:16,975 [INFO] Starting scrape for symbol=AIBLPBOND, range=2026-02-27 to 2026-04-05
+2026-04-05 20:56:18,944 [INFO] Successfully parsed data for AIBLPBOND (20 rows)
+2026-04-05 20:56:19,112 [ERROR] Error uploading AIBLPBOND: {'message': "Could not find the 'Audited PE' column of 'lankabd_price_archive' in the schema cache", 'code': 'PGRST204', 'hint': None, 'details': None}
+2026-04-05 20:56:19,798 [INFO] [51/413] Fetching price data for APSCLBOND (from 2026-02-27)...
+2026-04-05 20:56:19,799 [INFO] Starting scrape for symbol=APSCLBOND, range=2026-02-27 to 2026-04-05
+2026-04-05 20:56:21,149 [INFO] Successfully parsed data for APSCLBOND (20 rows)
+2026-04-05 20:56:21,323 [ERROR] Error uploading APSCLBOND: {'message': "Could not find the 'Audited PE' column of 'lankabd_price_archive' in the schema cache", 'code': 'PGRST204', 'hint': None, 'details': None}
+2026-04-05 20:56:22,096 [INFO] [52/413] Fetching price data for BANKASI1PB (from 2026-02-27)...
+2026-04-05 20:56:22,096 [INFO] Starting scrape for symbol=BANKASI1PB, range=2026-02-27 to 2026-04-05
+2026-04-05 20:56:23,681 [INFO] Successfully parsed data for BANKASI1PB (20 rows)
+2026-04-05 20:56:23,881 [ERROR] Error uploading BANKASI1PB: {'message': "Could not find the 'Audited PE' column of 'lankabd_price_archive' in the schema cache", 'code': 'PGRST204', 'hint': None, 'details': None}
+2026-04-05 20:56:24,566 [INFO] [53/413] Fetching price data for BEXGSUKUK (from 2026-02-27)...
+2026-04-05 20:56:24,567 [INFO] Starting scrape for symbol=BEXGSUKUK, range=2026-02-27 to 2026-04-05
+2026-04-05 20:56:25,911 [INFO] Successfully parsed data for BEXGSUKUK (20 rows)
+2026-04-05 20:56:26,088 [ERROR] Error uploading BEXGSUKUK: {'message': "Could not find the 'Audited PE' column of 'lankabd_price_archive' in the schema cache", 'code': 'PGRST204', 'hint': None, 'details': None}
+2026-04-05 20:56:26,781 [INFO] [54/413] Fetching price data for CBLPBOND (from 2026-02-27)...
+2026-04-05 20:56:26,781 [INFO] Starting scrape for symbol=CBLPBOND, range=2026-02-27 to 2026-04-05
+2026-04-05 20:56:28,124 [INFO] Successfully parsed data for CBLPBOND (20 rows)
+2026-04-05 20:56:28,292 [ERROR] Error uploading CBLPBOND: {'message': "Could not find the 'Audited PE' column of 'lankabd_price_archive' in the schema cache", 'code': 'PGRST204', 'hint': None, 'details': None}
+2026-04-05 20:56:28,988 [INFO] [55/413] Fetching price data for DBLPBOND (from 2026-02-27)...
+2026-04-05 20:56:28,988 [INFO] Starting scrape for symbol=DBLPBOND, range=2026-02-27 to 2026-04-05
+2026-04-05 20:56:30,438 [INFO] Successfully parsed data for DBLPBOND (20 rows)
+2026-04-05 20:56:30,648 [ERROR] Error uploading DBLPBOND: {'message': "Could not find the 'Audited PE' column of 'lankabd_price_archive' in the schema cache", 'code': 'PGRST204', 'hint': None, 'details': None}
+2026-04-05 20:56:31,331 [INFO] [56/413] Fetching price data for IBBL2PBOND (from 2026-02-27)...
+2026-04-05 20:56:31,332 [INFO] Starting scrape for symbol=IBBL2PBOND, range=2026-02-27 to 2026-04-05
+2026-04-05 20:56:32,712 [INFO] Successfully parsed data for IBBL2PBOND (20 rows)
+2026-04-05 20:56:32,898 [ERROR] Error uploading IBBL2PBOND: {'message': "Could not find the 'Audited PE' column of 'lankabd_price_archive' in the schema cache", 'code': 'PGRST204', 'hint': None, 'details': None}
+2026-04-05 20:56:33,611 [INFO] [57/413] Fetching price data for IBBLPBOND (from 2026-02-27)...
+2026-04-05 20:56:33,611 [INFO] Starting scrape for symbol=IBBLPBOND, range=2026-02-27 to 2026-04-05
+2026-04-05 20:56:35,271 [INFO] Successfully parsed data for IBBLPBOND (20 rows)
+2026-04-05 20:56:35,465 [ERROR] Error uploading IBBLPBOND: {'message': "Could not find the 'Audited PE' column of 'lankabd_price_archive' in the schema cache", 'code': 'PGRST204', 'hint': None, 'details': None}
+2026-04-05 20:56:36,155 [INFO] [58/413] Fetching price data for MBPLCPBOND (from 2026-02-27)...
+2026-04-05 20:56:36,156 [INFO] Starting scrape for symbol=MBPLCPBOND, range=2026-02-27 to 2026-04-05
+2026-04-05 20:56:37,549 [INFO] Successfully parsed data for MBPLCPBOND (20 rows)
+2026-04-05 20:56:37,741 [ERROR] Error uploading MBPLCPBOND: {'message': "Could not find the 'Audited PE' column of 'lankabd_price_archive' in the schema cache", 'code': 'PGRST204', 'hint': None, 'details': None}
+2026-04-05 20:56:38,435 [INFO] [59/413] Fetching price data for MTBPBOND (from 2026-02-27)...
+2026-04-05 20:56:38,435 [INFO] Starting scrape for symbol=MTBPBOND, range=2026-02-27 to 2026-04-05
+2026-04-05 20:56:42,826 [INFO] Successfully parsed data for MTBPBOND (20 rows)
+2026-04-05 20:56:43,016 [ERROR] Error uploading MTBPBOND: {'message': "Could not find the 'Audited PE' column of 'lankabd_price_archive' in the schema cache", 'code': 'PGRST204', 'hint': None, 'details': None}
+2026-04-05 20:56:43,714 [INFO] [60/413] Fetching price data for PBLPBOND (from 2026-02-27)...
+2026-04-05 20:56:43,714 [INFO] Starting scrape for symbol=PBLPBOND, range=2026-02-27 to 2026-04-05
+2026-04-05 20:56:45,221 [INFO] Successfully parsed data for PBLPBOND (20 rows)
+2026-04-05 20:56:45,408 [ERROR] Error uploading PBLPBOND: {'message': "Could not find the 'Audited PE' column of 'lankabd_price_archive' in the schema cache", 'code': 'PGRST204', 'hint': None, 'details': None}
+2026-04-05 20:56:46,100 [INFO] [61/413] Fetching price data for PREBPBOND (from 2026-02-27)...
+2026-04-05 20:56:46,100 [INFO] Starting scrape for symbol=PREBPBOND, range=2026-02-27 to 2026-04-05
+2026-04-05 20:56:47,525 [INFO] Successfully parsed data for PREBPBOND (20 rows)
+2026-04-05 20:56:47,721 [ERROR] Error uploading PREBPBOND: {'message': "Could not find the 'Audited PE' column of 'lankabd_price_archive' in the schema cache", 'code': 'PGRST204', 'hint': None, 'details': None}
+2026-04-05 20:56:48,418 [INFO] [62/413] Fetching price data for SEB1PBOND (from 2026-02-27)...
+2026-04-05 20:56:48,418 [INFO] Starting scrape for symbol=SEB1PBOND, range=2026-02-27 to 2026-04-05
+2026-04-05 20:56:49,898 [INFO] Successfully parsed data for SEB1PBOND (20 rows)
+2026-04-05 20:56:50,109 [ERROR] Error uploading SEB1PBOND: {'message': "Could not find the 'Audited PE' column of 'lankabd_price_archive' in the schema cache", 'code': 'PGRST204', 'hint': None, 'details': None}
+2026-04-05 20:56:50,795 [INFO] [63/413] Fetching price data for SJIBLPBOND (from 2026-02-27)...
+2026-04-05 20:56:50,796 [INFO] Starting scrape for symbol=SJIBLPBOND, range=2026-02-27 to 2026-04-05
+2026-04-05 20:56:52,355 [INFO] Successfully parsed data for SJIBLPBOND (20 rows)
+2026-04-05 20:56:52,584 [ERROR] Error uploading SJIBLPBOND: {'message': "Could not find the 'Audited PE' column of 'lankabd_price_archive' in the schema cache", 'code': 'PGRST204', 'hint': None, 'details': None}
+2026-04-05 20:56:53,270 [INFO] [64/413] Fetching price data for UCB2PBOND (from 2026-02-27)...
+2026-04-05 20:56:53,270 [INFO] Starting scrape for symbol=UCB2PBOND, range=2026-02-27 to 2026-04-05
+2026-04-05 20:56:54,709 [INFO] Successfully parsed data for UCB2PBOND (20 rows)
+2026-04-05 20:56:54,968 [ERROR] Error uploading UCB2PBOND: {'message': "Could not find the 'Audited PE' column of 'lankabd_price_archive' in the schema cache", 'code': 'PGRST204', 'hint': None, 'details': None}
+2026-04-05 20:56:55,668 [INFO] [65/413] Fetching price data for AFTABAUTO (from 2026-02-27)...
+2026-04-05 20:56:55,668 [INFO] Starting scrape for symbol=AFTABAUTO, range=2026-02-27 to 2026-04-05
+2026-04-05 20:56:57,060 [INFO] Successfully parsed data for AFTABAUTO (20 rows)
+2026-04-05 20:56:57,247 [ERROR] Error uploading AFTABAUTO: {'message': "Could not find the 'Audited PE' column of 'lankabd_price_archive' in the schema cache", 'code': 'PGRST204', 'hint': None, 'details': None}
+2026-04-05 20:56:57,946 [INFO] [66/413] Fetching price data for ANWARGALV (from 2026-02-27)...
+2026-04-05 20:56:57,946 [INFO] Starting scrape for symbol=ANWARGALV, range=2026-02-27 to 2026-04-05
+2026-04-05 20:56:59,421 [INFO] Successfully parsed data for ANWARGALV (20 rows)
+2026-04-05 20:56:59,672 [ERROR] Error uploading ANWARGALV: {'message': "Could not find the 'Audited PE' column of 'lankabd_price_archive' in the schema cache", 'code': 'PGRST204', 'hint': None, 'details': None}
+2026-04-05 20:57:00,369 [INFO] [67/413] Fetching price data for APOLOISPAT (from 2026-02-27)...
+2026-04-05 20:57:00,369 [INFO] Starting scrape for symbol=APOLOISPAT, range=2026-02-27 to 2026-04-05
+2026-04-05 20:57:01,717 [INFO] Successfully parsed data for APOLOISPAT (20 rows)
+2026-04-05 20:57:01,907 [ERROR] Error uploading APOLOISPAT: {'message': "Could not find the 'Audited PE' column of 'lankabd_price_archive' in the schema cache", 'code': 'PGRST204', 'hint': None, 'details': None}
+2026-04-05 20:57:02,608 [INFO] [68/413] Fetching price data for ATLASBANG (from 2026-02-27)...
+2026-04-05 20:57:02,608 [INFO] Starting scrape for symbol=ATLASBANG, range=2026-02-27 to 2026-04-05
+2026-04-05 20:57:04,025 [INFO] Successfully parsed data for ATLASBANG (20 rows)
+2026-04-05 20:57:04,283 [ERROR] Error uploading ATLASBANG: {'message': "Could not find the 'Audited PE' column of 'lankabd_price_archive' in the schema cache", 'code': 'PGRST204', 'hint': None, 'details': None}
+2026-04-05 20:57:04,982 [INFO] [69/413] Fetching price data for AZIZPIPES (from 2026-02-27)...
+2026-04-05 20:57:04,983 [INFO] Starting scrape for symbol=AZIZPIPES, range=2026-02-27 to 2026-04-05
+2026-04-05 20:57:06,378 [INFO] Successfully parsed data for AZIZPIPES (20 rows)
+2026-04-05 20:57:06,573 [ERROR] Error uploading AZIZPIPES: {'message': "Could not find the 'Audited PE' column of 'lankabd_price_archive' in the schema cache", 'code': 'PGRST204', 'hint': None, 'details': None}
+2026-04-05 20:57:07,254 [INFO] [70/413] Fetching price data for BBS (from 2026-02-27)...
+2026-04-05 20:57:07,254 [INFO] Starting scrape for symbol=BBS, range=2026-02-27 to 2026-04-05
+2026-04-05 20:57:08,736 [INFO] Successfully parsed data for BBS (20 rows)
+2026-04-05 20:57:08,914 [ERROR] Error uploading BBS: {'message': "Could not find the 'Audited PE' column of 'lankabd_price_archive' in the schema cache", 'code': 'PGRST204', 'hint': None, 'details': None}
+2026-04-05 20:57:09,615 [INFO] [71/413] Fetching price data for BBSCABLES (from 2026-02-27)...
+2026-04-05 20:57:09,615 [INFO] Starting scrape for symbol=BBSCABLES, range=2026-02-27 to 2026-04-05
+2026-04-05 20:57:10,959 [INFO] Successfully parsed data for BBSCABLES (20 rows)
+2026-04-05 20:57:11,135 [ERROR] Error uploading BBSCABLES: {'message': "Could not find the 'Audited PE' column of 'lankabd_price_archive' in the schema cache", 'code': 'PGRST204', 'hint': None, 'details': None}
+2026-04-05 20:57:11,833 [INFO] [72/413] Fetching price data for BDAUTOCA (from 2026-02-27)...
+2026-04-05 20:57:11,834 [INFO] Starting scrape for symbol=BDAUTOCA, range=2026-02-27 to 2026-04-05
+2026-04-05 20:57:13,161 [INFO] Successfully parsed data for BDAUTOCA (20 rows)
+2026-04-05 20:57:13,400 [ERROR] Error uploading BDAUTOCA: {'message': "Could not find the 'Audited PE' column of 'lankabd_price_archive' in the schema cache", 'code': 'PGRST204', 'hint': None, 'details': None}
+2026-04-05 20:57:14,112 [INFO] [73/413] Fetching price data for BDLAMPS (from 2026-02-27)...
+2026-04-05 20:57:14,113 [INFO] Starting scrape for symbol=BDLAMPS, range=2026-02-27 to 2026-04-05
+2026-04-05 20:57:15,498 [INFO] Successfully parsed data for BDLAMPS (20 rows)
+2026-04-05 20:57:15,672 [ERROR] Error uploading BDLAMPS: {'message': "Could not find the 'Audited PE' column of 'lankabd_price_archive' in the schema cache", 'code': 'PGRST204', 'hint': None, 'details': None}
+2026-04-05 20:57:16,357 [INFO] [74/413] Fetching price data for BDTHAI (from 2026-02-27)...
+2026-04-05 20:57:16,358 [INFO] Starting scrape for symbol=BDTHAI, range=2026-02-27 to 2026-04-05
+2026-04-05 20:57:17,847 [INFO] Successfully parsed data for BDTHAI (20 rows)
+2026-04-05 20:57:18,028 [ERROR] Error uploading BDTHAI: {'message': "Could not find the 'Audited PE' column of 'lankabd_price_archive' in the schema cache", 'code': 'PGRST204', 'hint': None, 'details': None}
+2026-04-05 20:57:18,725 [INFO] [75/413] Fetching price data for BENGALWTL (from 2026-02-27)...
+2026-04-05 20:57:18,726 [INFO] Starting scrape for symbol=BENGALWTL, range=2026-02-27 to 2026-04-05
+2026-04-05 20:57:20,099 [INFO] Successfully parsed data for BENGALWTL (20 rows)
+2026-04-05 20:57:20,281 [ERROR] Error uploading BENGALWTL: {'message': "Could not find the 'Audited PE' column of 'lankabd_price_archive' in the schema cache", 'code': 'PGRST204', 'hint': None, 'details': None}
+2026-04-05 20:57:20,975 [INFO] [76/413] Fetching price data for BSRMLTD (from 2026-02-27)...
+2026-04-05 20:57:20,975 [INFO] Starting scrape for symbol=BSRMLTD, range=2026-02-27 to 2026-04-05
+2026-04-05 20:57:22,399 [INFO] Successfully parsed data for BSRMLTD (20 rows)
+2026-04-05 20:57:22,580 [ERROR] Error uploading BSRMLTD: {'message': "Could not find the 'Audited PE' column of 'lankabd_price_archive' in the schema cache", 'code': 'PGRST204', 'hint': None, 'details': None}
+2026-04-05 20:57:23,270 [INFO] [77/413] Fetching price data for BSRMSTEEL (from 2026-02-27)...
+2026-04-05 20:57:23,270 [INFO] Starting scrape for symbol=BSRMSTEEL, range=2026-02-27 to 2026-04-05
+2026-04-05 20:57:24,607 [INFO] Successfully parsed data for BSRMSTEEL (20 rows)
+2026-04-05 20:57:24,792 [ERROR] Error uploading BSRMSTEEL: {'message': "Could not find the 'Audited PE' column of 'lankabd_price_archive' in the schema cache", 'code': 'PGRST204', 'hint': None, 'details': None}
+2026-04-05 20:57:25,481 [INFO] [78/413] Fetching price data for COPPERTECH (from 2026-02-27)...
+2026-04-05 20:57:25,481 [INFO] Starting scrape for symbol=COPPERTECH, range=2026-02-27 to 2026-04-05
+2026-04-05 20:57:26,970 [INFO] Successfully parsed data for COPPERTECH (20 rows)
+2026-04-05 20:57:27,146 [ERROR] Error uploading COPPERTECH: {'message': "Could not find the 'Audited PE' column of 'lankabd_price_archive' in the schema cache", 'code': 'PGRST204', 'hint': None, 'details': None}
+2026-04-05 20:57:27,834 [INFO] [79/413] Fetching price data for DESHBANDHU (from 2026-02-27)...
+2026-04-05 20:57:27,834 [INFO] Starting scrape for symbol=DESHBANDHU, range=2026-02-27 to 2026-04-05
+2026-04-05 20:57:29,214 [INFO] Successfully parsed data for DESHBANDHU (20 rows)
+2026-04-05 20:57:29,415 [ERROR] Error uploading DESHBANDHU: {'message': "Could not find the 'Audited PE' column of 'lankabd_price_archive' in the schema cache", 'code': 'PGRST204', 'hint': None, 'details': None}
+2026-04-05 20:57:30,104 [INFO] [80/413] Fetching price data for DOMINAGE (from 2026-02-27)...
+2026-04-05 20:57:30,104 [INFO] Starting scrape for symbol=DOMINAGE, range=2026-02-27 to 2026-04-05
+2026-04-05 20:57:31,428 [INFO] Successfully parsed data for DOMINAGE (20 rows)
+2026-04-05 20:57:31,611 [ERROR] Error uploading DOMINAGE: {'message': "Could not find the 'Audited PE' column of 'lankabd_price_archive' in the schema cache", 'code': 'PGRST204', 'hint': None, 'details': None}
+2026-04-05 20:57:32,302 [INFO] [81/413] Fetching price data for ECABLES (from 2026-02-27)...
+2026-04-05 20:57:32,302 [INFO] Starting scrape for symbol=ECABLES, range=2026-02-27 to 2026-04-05
+2026-04-05 20:57:33,821 [INFO] Successfully parsed data for ECABLES (20 rows)
+2026-04-05 20:57:34,100 [ERROR] Error uploading ECABLES: {'message': "Could not find the 'Audited PE' column of 'lankabd_price_archive' in the schema cache", 'code': 'PGRST204', 'hint': None, 'details': None}
+2026-04-05 20:57:34,800 [INFO] [82/413] Fetching price data for GOLDENSON (from 2026-02-27)...
+2026-04-05 20:57:34,801 [INFO] Starting scrape for symbol=GOLDENSON, range=2026-02-27 to 2026-04-05
+2026-04-05 20:57:36,174 [INFO] Successfully parsed data for GOLDENSON (20 rows)
+2026-04-05 20:57:36,342 [ERROR] Error uploading GOLDENSON: {'message': "Could not find the 'Audited PE' column of 'lankabd_price_archive' in the schema cache", 'code': 'PGRST204', 'hint': None, 'details': None}
+2026-04-05 20:57:37,019 [INFO] [83/413] Fetching price data for GPHISPAT (from 2026-02-27)...
+2026-04-05 20:57:37,020 [INFO] Starting scrape for symbol=GPHISPAT, range=2026-02-27 to 2026-04-05
+2026-04-05 20:57:38,432 [INFO] Successfully parsed data for GPHISPAT (20 rows)
+2026-04-05 20:57:38,691 [ERROR] Error uploading GPHISPAT: {'message': "Could not find the 'Audited PE' column of 'lankabd_price_archive' in the schema cache", 'code': 'PGRST204', 'hint': None, 'details': None}
+2026-04-05 20:57:39,372 [INFO] [84/413] Fetching price data for IFADAUTOS (from 2026-02-27)...
+2026-04-05 20:57:39,372 [INFO] Starting scrape for symbol=IFADAUTOS, range=2026-02-27 to 2026-04-05
+2026-04-05 20:57:40,789 [INFO] Successfully parsed data for IFADAUTOS (20 rows)
+2026-04-05 20:57:41,012 [ERROR] Error uploading IFADAUTOS: {'message': "Could not find the 'Audited PE' column of 'lankabd_price_archive' in the schema cache", 'code': 'PGRST204', 'hint': None, 'details': None}
+2026-04-05 20:57:41,709 [INFO] [85/413] Fetching price data for KAY&QUE (from 2026-02-27)...
+2026-04-05 20:57:41,709 [INFO] Starting scrape for symbol=KAY&QUE, range=2026-02-27 to 2026-04-05
+2026-04-05 20:57:43,067 [INFO] Successfully parsed data for KAY&QUE (20 rows)
+2026-04-05 20:57:43,243 [ERROR] Error uploading KAY&QUE: {'message': "Could not find the 'Audited PE' column of 'lankabd_price_archive' in the schema cache", 'code': 'PGRST204', 'hint': None, 'details': None}
+2026-04-05 20:57:43,930 [INFO] [86/413] Fetching price data for KDSALTD (from 2026-02-27)...
+2026-04-05 20:57:43,931 [INFO] Starting scrape for symbol=KDSALTD, range=2026-02-27 to 2026-04-05
+2026-04-05 20:57:45,245 [INFO] Successfully parsed data for KDSALTD (20 rows)
+2026-04-05 20:57:45,423 [ERROR] Error uploading KDSALTD: {'message': "Could not find the 'Audited PE' column of 'lankabd_price_archive' in the schema cache", 'code': 'PGRST204', 'hint': None, 'details': None}
+2026-04-05 20:57:46,120 [INFO] [87/413] Fetching price data for MIRAKHTER (from 2026-02-27)...
+2026-04-05 20:57:46,120 [INFO] Starting scrape for symbol=MIRAKHTER, range=2026-02-27 to 2026-04-05
+2026-04-05 20:57:47,545 [INFO] Successfully parsed data for MIRAKHTER (20 rows)
+2026-04-05 20:57:47,835 [ERROR] Error uploading MIRAKHTER: {'message': "Could not find the 'Audited PE' column of 'lankabd_price_archive' in the schema cache", 'code': 'PGRST204', 'hint': None, 'details': None}
+2026-04-05 20:57:48,522 [INFO] [88/413] Fetching price data for MONNOAGML (from 2026-02-27)...
+2026-04-05 20:57:48,522 [INFO] Starting scrape for symbol=MONNOAGML, range=2026-02-27 to 2026-04-05
+2026-04-05 20:57:49,903 [INFO] Successfully parsed data for MONNOAGML (20 rows)
+2026-04-05 20:57:50,072 [ERROR] Error uploading MONNOAGML: {'message': "Could not find the 'Audited PE' column of 'lankabd_price_archive' in the schema cache", 'code': 'PGRST204', 'hint': None, 'details': None}
+2026-04-05 20:57:50,751 [INFO] [89/413] Fetching price data for NAHEEACP (from 2026-02-27)...
+2026-04-05 20:57:50,752 [INFO] Starting scrape for symbol=NAHEEACP, range=2026-02-27 to 2026-04-05
+2026-04-05 20:57:52,461 [INFO] Successfully parsed data for NAHEEACP (20 rows)
+2026-04-05 20:57:52,648 [ERROR] Error uploading NAHEEACP: {'message': "Could not find the 'Audited PE' column of 'lankabd_price_archive' in the schema cache", 'code': 'PGRST204', 'hint': None, 'details': None}
+2026-04-05 20:57:53,330 [INFO] [90/413] Fetching price data for NAVANACNG (from 2026-02-27)...
+2026-04-05 20:57:53,330 [INFO] Starting scrape for symbol=NAVANACNG, range=2026-02-27 to 2026-04-05
+2026-04-05 20:57:54,718 [INFO] Successfully parsed data for NAVANACNG (20 rows)
+2026-04-05 20:57:54,886 [ERROR] Error uploading NAVANACNG: {'message': "Could not find the 'Audited PE' column of 'lankabd_price_archive' in the schema cache", 'code': 'PGRST204', 'hint': None, 'details': None}
+2026-04-05 20:57:55,610 [INFO] [91/413] Fetching price data for NPOLYMER (from 2023-04-06)...
+2026-04-05 20:57:55,611 [INFO] Starting scrape for symbol=NPOLYMER, range=2023-04-06 to 2026-04-05
+2026-04-05 20:57:56,752 [WARNING] No data returned for NPOLYMER
+2026-04-05 20:57:57,441 [INFO] [92/413] Fetching price data for NTLTUBES (from 2026-02-27)...
+2026-04-05 20:57:57,441 [INFO] Starting scrape for symbol=NTLTUBES, range=2026-02-27 to 2026-04-05
+2026-04-05 20:57:58,809 [INFO] Successfully parsed data for NTLTUBES (20 rows)
+2026-04-05 20:57:58,992 [ERROR] Error uploading NTLTUBES: {'message': "Could not find the 'Audited PE' column of 'lankabd_price_archive' in the schema cache", 'code': 'PGRST204', 'hint': None, 'details': None}
+2026-04-05 20:57:59,672 [INFO] [93/413] Fetching price data for OAL (from 2026-02-27)...
+2026-04-05 20:57:59,673 [INFO] Starting scrape for symbol=OAL, range=2026-02-27 to 2026-04-05
+2026-04-05 20:58:01,058 [INFO] Successfully parsed data for OAL (20 rows)
+2026-04-05 20:58:01,234 [ERROR] Error uploading OAL: {'message': "Could not find the 'Audited PE' column of 'lankabd_price_archive' in the schema cache", 'code': 'PGRST204', 'hint': None, 'details': None}
+2026-04-05 20:58:01,921 [INFO] [94/413] Fetching price data for OIMEX (from 2026-02-27)...
+2026-04-05 20:58:01,921 [INFO] Starting scrape for symbol=OIMEX, range=2026-02-27 to 2026-04-05
+2026-04-05 20:58:03,319 [INFO] Successfully parsed data for OIMEX (20 rows)
+2026-04-05 20:58:03,679 [ERROR] Error uploading OIMEX: {'message': "Could not find the 'Audited PE' column of 'lankabd_price_archive' in the schema cache", 'code': 'PGRST204', 'hint': None, 'details': None}
+2026-04-05 20:58:04,374 [INFO] [95/413] Fetching price data for QUASEMIND (from 2026-02-27)...
+2026-04-05 20:58:04,375 [INFO] Starting scrape for symbol=QUASEMIND, range=2026-02-27 to 2026-04-05
+2026-04-05 20:58:06,165 [INFO] Successfully parsed data for QUASEMIND (80 rows)
+2026-04-05 20:58:06,417 [ERROR] Error uploading QUASEMIND: {'message': "Could not find the 'Audited PE' column of 'lankabd_price_archive' in the schema cache", 'code': 'PGRST204', 'hint': None, 'details': None}
+2026-04-05 20:58:07,113 [INFO] [96/413] Fetching price data for RANFOUNDRY (from 2026-02-27)...
+2026-04-05 20:58:07,113 [INFO] Starting scrape for symbol=RANFOUNDRY, range=2026-02-27 to 2026-04-05
+2026-04-05 20:58:08,459 [INFO] Successfully parsed data for RANFOUNDRY (20 rows)
+2026-04-05 20:58:08,645 [ERROR] Error uploading RANFOUNDRY: {'message': "Could not find the 'Audited PE' column of 'lankabd_price_archive' in the schema cache", 'code': 'PGRST204', 'hint': None, 'details': None}
+2026-04-05 20:58:09,331 [INFO] [97/413] Fetching price data for RENWICKJA (from 2026-02-27)...
+2026-04-05 20:58:09,331 [INFO] Starting scrape for symbol=RENWICKJA, range=2026-02-27 to 2026-04-05
+2026-04-05 20:58:10,798 [INFO] Successfully parsed data for RENWICKJA (20 rows)
+2026-04-05 20:58:11,049 [ERROR] Error uploading RENWICKJA: {'message': "Could not find the 'Audited PE' column of 'lankabd_price_archive' in the schema cache", 'code': 'PGRST204', 'hint': None, 'details': None}
+2026-04-05 20:58:11,731 [INFO] [98/413] Fetching price data for RSRMSTEEL (from 2026-02-27)...
+2026-04-05 20:58:11,731 [INFO] Starting scrape for symbol=RSRMSTEEL, range=2026-02-27 to 2026-04-05
+2026-04-05 20:58:13,061 [INFO] Successfully parsed data for RSRMSTEEL (20 rows)
+2026-04-05 20:58:13,409 [ERROR] Error uploading RSRMSTEEL: {'message': "Could not find the 'Audited PE' column of 'lankabd_price_archive' in the schema cache", 'code': 'PGRST204', 'hint': None, 'details': None}
+2026-04-05 20:58:14,103 [INFO] [99/413] Fetching price data for RUNNERAUTO (from 2026-02-27)...
+2026-04-05 20:58:14,104 [INFO] Starting scrape for symbol=RUNNERAUTO, range=2026-02-27 to 2026-04-05
+2026-04-05 20:58:15,505 [INFO] Successfully parsed data for RUNNERAUTO (20 rows)
+2026-04-05 20:58:15,688 [ERROR] Error uploading RUNNERAUTO: {'message': "Could not find the 'Audited PE' column of 'lankabd_price_archive' in the schema cache", 'code': 'PGRST204', 'hint': None, 'details': None}
+2026-04-05 20:58:16,386 [INFO] [100/413] Fetching price data for SALAMCRST (from 2026-02-27)...
+2026-04-05 20:58:16,386 [INFO] Starting scrape for symbol=SALAMCRST, range=2026-02-27 to 2026-04-05
+2026-04-05 20:58:17,725 [INFO] Successfully parsed data for SALAMCRST (20 rows)
+2026-04-05 20:58:17,898 [ERROR] Error uploading SALAMCRST: {'message': "Could not find the 'Audited PE' column of 'lankabd_price_archive' in the schema cache", 'code': 'PGRST204', 'hint': None, 'details': None}
+2026-04-05 20:58:18,587 [INFO] [101/413] Fetching price data for SHURWID (from 2026-02-27)...
+2026-04-05 20:58:18,587 [INFO] Starting scrape for symbol=SHURWID, range=2026-02-27 to 2026-04-05
+2026-04-05 20:58:19,916 [INFO] Successfully parsed data for SHURWID (20 rows)
+2026-04-05 20:58:20,092 [ERROR] Error uploading SHURWID: {'message': "Could not find the 'Audited PE' column of 'lankabd_price_archive' in the schema cache", 'code': 'PGRST204', 'hint': None, 'details': None}
+2026-04-05 20:58:20,780 [INFO] [102/413] Fetching price data for SINGERBD (from 2026-02-27)...
+2026-04-05 20:58:20,780 [INFO] Starting scrape for symbol=SINGERBD, range=2026-02-27 to 2026-04-05
+2026-04-05 20:58:22,567 [INFO] Successfully parsed data for SINGERBD (20 rows)
+2026-04-05 20:58:22,800 [ERROR] Error uploading SINGERBD: {'message': "Could not find the 'Audited PE' column of 'lankabd_price_archive' in the schema cache", 'code': 'PGRST204', 'hint': None, 'details': None}
+2026-04-05 20:58:23,494 [INFO] [103/413] Fetching price data for SSSTEEL (from 2026-02-27)...
+2026-04-05 20:58:23,494 [INFO] Starting scrape for symbol=SSSTEEL, range=2026-02-27 to 2026-04-05
+2026-04-05 20:58:24,933 [INFO] Successfully parsed data for SSSTEEL (20 rows)
+2026-04-05 20:58:25,143 [ERROR] Error uploading SSSTEEL: {'message': "Could not find the 'Audited PE' column of 'lankabd_price_archive' in the schema cache", 'code': 'PGRST204', 'hint': None, 'details': None}
+2026-04-05 20:58:25,834 [INFO] [104/413] Fetching price data for WALTONHIL (from 2026-02-27)...
+2026-04-05 20:58:25,834 [INFO] Starting scrape for symbol=WALTONHIL, range=2026-02-27 to 2026-04-05
+2026-04-05 20:58:27,381 [INFO] Successfully parsed data for WALTONHIL (20 rows)
+2026-04-05 20:58:27,557 [ERROR] Error uploading WALTONHIL: {'message': "Could not find the 'Audited PE' column of 'lankabd_price_archive' in the schema cache", 'code': 'PGRST204', 'hint': None, 'details': None}
+2026-04-05 20:58:28,240 [INFO] [105/413] Fetching price data for WMSHIPYARD (from 2026-02-27)...
+2026-04-05 20:58:28,240 [INFO] Starting scrape for symbol=WMSHIPYARD, range=2026-02-27 to 2026-04-05
+2026-04-05 20:58:29,744 [INFO] Successfully parsed data for WMSHIPYARD (20 rows)
+2026-04-05 20:58:29,940 [ERROR] Error uploading WMSHIPYARD: {'message': "Could not find the 'Audited PE' column of 'lankabd_price_archive' in the schema cache", 'code': 'PGRST204', 'hint': None, 'details': None}
+2026-04-05 20:58:30,627 [INFO] [106/413] Fetching price data for YPL (from 2026-02-27)...
+2026-04-05 20:58:30,627 [INFO] Starting scrape for symbol=YPL, range=2026-02-27 to 2026-04-05
+2026-04-05 20:58:31,956 [INFO] Successfully parsed data for YPL (20 rows)
+2026-04-05 20:58:32,128 [ERROR] Error uploading YPL: {'message': "Could not find the 'Audited PE' column of 'lankabd_price_archive' in the schema cache", 'code': 'PGRST204', 'hint': None, 'details': None}
+2026-04-05 20:58:32,811 [INFO] [107/413] Fetching price data for BAYLEASING (from 2026-02-27)...
+2026-04-05 20:58:32,811 [INFO] Starting scrape for symbol=BAYLEASING, range=2026-02-27 to 2026-04-05
+2026-04-05 20:58:34,142 [INFO] Successfully parsed data for BAYLEASING (20 rows)
+2026-04-05 20:58:34,313 [ERROR] Error uploading BAYLEASING: {'message': "Could not find the 'Audited PE' column of 'lankabd_price_archive' in the schema cache", 'code': 'PGRST204', 'hint': None, 'details': None}
+2026-04-05 20:58:35,007 [INFO] [108/413] Fetching price data for BDFINANCE (from 2026-02-27)...
+2026-04-05 20:58:35,008 [INFO] Starting scrape for symbol=BDFINANCE, range=2026-02-27 to 2026-04-05
+2026-04-05 20:58:36,357 [INFO] Successfully parsed data for BDFINANCE (20 rows)
+2026-04-05 20:58:36,529 [ERROR] Error uploading BDFINANCE: {'message': "Could not find the 'Audited PE' column of 'lankabd_price_archive' in the schema cache", 'code': 'PGRST204', 'hint': None, 'details': None}
+2026-04-05 20:58:37,228 [INFO] [109/413] Fetching price data for BIFC (from 2026-02-27)...
+2026-04-05 20:58:37,228 [INFO] Starting scrape for symbol=BIFC, range=2026-02-27 to 2026-04-05
+2026-04-05 20:58:38,646 [INFO] Successfully parsed data for BIFC (20 rows)
+2026-04-05 20:58:38,832 [ERROR] Error uploading BIFC: {'message': "Could not find the 'Audited PE' column of 'lankabd_price_archive' in the schema cache", 'code': 'PGRST204', 'hint': None, 'details': None}
+2026-04-05 20:58:39,515 [INFO] [110/413] Fetching price data for DBH (from 2026-02-27)...
+2026-04-05 20:58:39,516 [INFO] Starting scrape for symbol=DBH, range=2026-02-27 to 2026-04-05
+2026-04-05 20:58:40,900 [INFO] Successfully parsed data for DBH (20 rows)
+2026-04-05 20:58:41,157 [ERROR] Error uploading DBH: {'message': "Could not find the 'Audited PE' column of 'lankabd_price_archive' in the schema cache", 'code': 'PGRST204', 'hint': None, 'details': None}
+2026-04-05 20:58:41,852 [INFO] [111/413] Fetching price data for FAREASTFIN (from 2026-02-27)...
+2026-04-05 20:58:41,852 [INFO] Starting scrape for symbol=FAREASTFIN, range=2026-02-27 to 2026-04-05
+2026-04-05 20:58:43,259 [INFO] Successfully parsed data for FAREASTFIN (20 rows)
+2026-04-05 20:58:43,442 [ERROR] Error uploading FAREASTFIN: {'message': "Could not find the 'Audited PE' column of 'lankabd_price_archive' in the schema cache", 'code': 'PGRST204', 'hint': None, 'details': None}
+2026-04-05 20:58:44,145 [INFO] [112/413] Fetching price data for FASFIN (from 2026-02-27)...
+2026-04-05 20:58:44,145 [INFO] Starting scrape for symbol=FASFIN, range=2026-02-27 to 2026-04-05
+2026-04-05 20:58:45,630 [INFO] Successfully parsed data for FASFIN (20 rows)
+2026-04-05 20:58:45,872 [ERROR] Error uploading FASFIN: {'message': "Could not find the 'Audited PE' column of 'lankabd_price_archive' in the schema cache", 'code': 'PGRST204', 'hint': None, 'details': None}
+2026-04-05 20:58:46,563 [INFO] [113/413] Fetching price data for FIRSTFIN (from 2026-02-27)...
+2026-04-05 20:58:46,563 [INFO] Starting scrape for symbol=FIRSTFIN, range=2026-02-27 to 2026-04-05
+2026-04-05 20:58:48,030 [INFO] Successfully parsed data for FIRSTFIN (20 rows)
+2026-04-05 20:58:48,204 [ERROR] Error uploading FIRSTFIN: {'message': "Could not find the 'Audited PE' column of 'lankabd_price_archive' in the schema cache", 'code': 'PGRST204', 'hint': None, 'details': None}
+2026-04-05 20:58:48,890 [INFO] [114/413] Fetching price data for GSPFINANCE (from 2026-02-27)...
+2026-04-05 20:58:48,890 [INFO] Starting scrape for symbol=GSPFINANCE, range=2026-02-27 to 2026-04-05
+2026-04-05 20:58:50,321 [INFO] Successfully parsed data for GSPFINANCE (20 rows)
+2026-04-05 20:58:50,576 [ERROR] Error uploading GSPFINANCE: {'message': "Could not find the 'Audited PE' column of 'lankabd_price_archive' in the schema cache", 'code': 'PGRST204', 'hint': None, 'details': None}
+2026-04-05 20:58:51,263 [INFO] [115/413] Fetching price data for ICB (from 2026-02-27)...
+2026-04-05 20:58:51,263 [INFO] Starting scrape for symbol=ICB, range=2026-02-27 to 2026-04-05
+2026-04-05 20:58:52,642 [INFO] Successfully parsed data for ICB (20 rows)
+2026-04-05 20:58:53,340 [ERROR] Error uploading ICB: {'message': "Could not find the 'Audited PE' column of 'lankabd_price_archive' in the schema cache", 'code': 'PGRST204', 'hint': None, 'details': None}
+2026-04-05 20:58:54,161 [INFO] [116/413] Fetching price data for IDLC (from 2026-02-27)...
+2026-04-05 20:58:54,161 [INFO] Starting scrape for symbol=IDLC, range=2026-02-27 to 2026-04-05
+2026-04-05 20:58:55,545 [INFO] Successfully parsed data for IDLC (20 rows)
+2026-04-05 20:58:55,727 [ERROR] Error uploading IDLC: {'message': "Could not find the 'Audited PE' column of 'lankabd_price_archive' in the schema cache", 'code': 'PGRST204', 'hint': None, 'details': None}
+2026-04-05 20:58:56,421 [INFO] [117/413] Fetching price data for ILFSL (from 2023-04-06)...
+2026-04-05 20:58:56,422 [INFO] Starting scrape for symbol=ILFSL, range=2023-04-06 to 2026-04-05
+2026-04-05 20:59:07,719 [WARNING] No data returned for ILFSL
+2026-04-05 20:59:08,433 [INFO] [118/413] Fetching price data for IPDC (from 2026-02-27)...
+2026-04-05 20:59:08,433 [INFO] Starting scrape for symbol=IPDC, range=2026-02-27 to 2026-04-05
+2026-04-05 20:59:09,873 [INFO] Successfully parsed data for IPDC (20 rows)
+2026-04-05 20:59:10,060 [ERROR] Error uploading IPDC: {'message': "Could not find the 'Audited PE' column of 'lankabd_price_archive' in the schema cache", 'code': 'PGRST204', 'hint': None, 'details': None}
+2026-04-05 20:59:10,745 [INFO] [119/413] Fetching price data for ISLAMICFIN (from 2026-02-27)...
+2026-04-05 20:59:10,745 [INFO] Starting scrape for symbol=ISLAMICFIN, range=2026-02-27 to 2026-04-05
+2026-04-05 20:59:12,209 [INFO] Successfully parsed data for ISLAMICFIN (20 rows)
+2026-04-05 20:59:12,388 [ERROR] Error uploading ISLAMICFIN: {'message': "Could not find the 'Audited PE' column of 'lankabd_price_archive' in the schema cache", 'code': 'PGRST204', 'hint': None, 'details': None}
+2026-04-05 20:59:13,090 [INFO] [120/413] Fetching price data for LANKABAFIN (from 2026-02-26)...
+2026-04-05 20:59:13,090 [INFO] Starting scrape for symbol=LANKABAFIN, range=2026-02-26 to 2026-04-05
+2026-04-05 20:59:14,438 [INFO] Successfully parsed data for LANKABAFIN (21 rows)
+2026-04-05 20:59:14,622 [ERROR] Error uploading LANKABAFIN: {'message': "Could not find the 'Audited PE' column of 'lankabd_price_archive' in the schema cache", 'code': 'PGRST204', 'hint': None, 'details': None}

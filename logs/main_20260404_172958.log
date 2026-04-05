@@ -1,0 +1,143 @@
+2026-04-04 17:29:58,366 [INFO] Fetching available sectors...
+2026-04-04 17:29:58,756 [INFO] Found 23 sectors
+2026-04-04 17:29:58,757 [INFO] 
+--- Fetching data for sector: Bank ---
+2026-04-04 17:29:58,757 [INFO] Fetching data from https://lankabd.com/Home/DataMatrix...
+2026-04-04 17:29:58,963 [INFO] Successfully fetched the page
+2026-04-04 17:29:59,126 [INFO] Filtered data for sector: Bank (36 rows)
+2026-04-04 17:29:59,126 [INFO] Successfully fetched 36 rows
+2026-04-04 17:30:00,132 [INFO] 
+--- Fetching data for sector: Cement ---
+2026-04-04 17:30:00,132 [INFO] Fetching data from https://lankabd.com/Home/DataMatrix...
+2026-04-04 17:30:00,356 [INFO] Successfully fetched the page
+2026-04-04 17:30:00,605 [INFO] Filtered data for sector: Cement (7 rows)
+2026-04-04 17:30:00,605 [INFO] Successfully fetched 7 rows
+2026-04-04 17:30:01,610 [INFO] 
+--- Fetching data for sector: Ceramics Sector ---
+2026-04-04 17:30:01,611 [INFO] Fetching data from https://lankabd.com/Home/DataMatrix...
+2026-04-04 17:30:01,870 [INFO] Successfully fetched the page
+2026-04-04 17:30:02,094 [INFO] Filtered data for sector: Ceramics Sector (5 rows)
+2026-04-04 17:30:02,095 [INFO] Successfully fetched 5 rows
+2026-04-04 17:30:03,095 [INFO] 
+--- Fetching data for sector: Corporate Bond ---
+2026-04-04 17:30:03,095 [INFO] Fetching data from https://lankabd.com/Home/DataMatrix...
+2026-04-04 17:30:03,302 [INFO] Successfully fetched the page
+2026-04-04 17:30:03,494 [INFO] Filtered data for sector: Corporate Bond (16 rows)
+2026-04-04 17:30:03,494 [INFO] Successfully fetched 16 rows
+2026-04-04 17:30:04,499 [INFO] 
+--- Fetching data for sector: Debenture ---
+2026-04-04 17:30:04,500 [INFO] Fetching data from https://lankabd.com/Home/DataMatrix...
+2026-04-04 17:30:04,723 [INFO] Successfully fetched the page
+2026-04-04 17:30:04,970 [INFO] Filtered data for sector: Debenture (0 rows)
+2026-04-04 17:30:04,971 [WARNING] No data for sector: Debenture
+2026-04-04 17:30:05,976 [INFO] 
+--- Fetching data for sector: Engineering ---
+2026-04-04 17:30:05,976 [INFO] Fetching data from https://lankabd.com/Home/DataMatrix...
+2026-04-04 17:30:06,183 [INFO] Successfully fetched the page
+2026-04-04 17:30:06,373 [INFO] Filtered data for sector: Engineering (42 rows)
+2026-04-04 17:30:06,374 [INFO] Successfully fetched 42 rows
+2026-04-04 17:30:07,379 [INFO] 
+--- Fetching data for sector: Financial Institutions ---
+2026-04-04 17:30:07,379 [INFO] Fetching data from https://lankabd.com/Home/DataMatrix...
+2026-04-04 17:30:07,575 [INFO] Successfully fetched the page
+2026-04-04 17:30:07,820 [INFO] Filtered data for sector: Financial Institutions (23 rows)
+2026-04-04 17:30:07,820 [INFO] Successfully fetched 23 rows
+2026-04-04 17:30:08,825 [INFO] 
+--- Fetching data for sector: Food & Allied ---
+2026-04-04 17:30:08,826 [INFO] Fetching data from https://lankabd.com/Home/DataMatrix...
+2026-04-04 17:30:09,095 [INFO] Successfully fetched the page
+2026-04-04 17:30:09,284 [INFO] Filtered data for sector: Food & Allied (21 rows)
+2026-04-04 17:30:09,284 [INFO] Successfully fetched 21 rows
+2026-04-04 17:30:10,289 [INFO] 
+--- Fetching data for sector: Fuel & Power ---
+2026-04-04 17:30:10,290 [INFO] Fetching data from https://lankabd.com/Home/DataMatrix...
+2026-04-04 17:30:10,528 [INFO] Successfully fetched the page
+2026-04-04 17:30:10,774 [INFO] Filtered data for sector: Fuel & Power (23 rows)
+2026-04-04 17:30:10,774 [INFO] Successfully fetched 23 rows
+2026-04-04 17:30:11,779 [INFO] 
+--- Fetching data for sector: G-SEC (T.Bond) ---
+2026-04-04 17:30:11,780 [INFO] Fetching data from https://lankabd.com/Home/DataMatrix...
+2026-04-04 17:30:11,990 [INFO] Successfully fetched the page
+2026-04-04 17:30:12,171 [INFO] Filtered data for sector: G-SEC (T.Bond) (0 rows)
+2026-04-04 17:30:12,172 [WARNING] No data for sector: G-SEC (T.Bond)
+2026-04-04 17:30:13,177 [INFO] 
+--- Fetching data for sector: Insurance ---
+2026-04-04 17:30:13,177 [INFO] Fetching data from https://lankabd.com/Home/DataMatrix...
+2026-04-04 17:30:13,395 [INFO] Successfully fetched the page
+2026-04-04 17:30:13,639 [INFO] Filtered data for sector: Insurance (58 rows)
+2026-04-04 17:30:13,640 [INFO] Successfully fetched 58 rows
+2026-04-04 17:30:14,645 [INFO] 
+--- Fetching data for sector: IT Sector ---
+2026-04-04 17:30:14,645 [INFO] Fetching data from https://lankabd.com/Home/DataMatrix...
+2026-04-04 17:30:14,859 [INFO] Successfully fetched the page
+2026-04-04 17:30:15,048 [INFO] Filtered data for sector: IT Sector (11 rows)
+2026-04-04 17:30:15,048 [INFO] Successfully fetched 11 rows
+2026-04-04 17:30:16,053 [INFO] 
+--- Fetching data for sector: Jute ---
+2026-04-04 17:30:16,054 [INFO] Fetching data from https://lankabd.com/Home/DataMatrix...
+2026-04-04 17:30:16,269 [INFO] Successfully fetched the page
+2026-04-04 17:30:16,513 [INFO] Filtered data for sector: Jute (3 rows)
+2026-04-04 17:30:16,514 [INFO] Successfully fetched 3 rows
+2026-04-04 17:30:17,519 [INFO] 
+--- Fetching data for sector: Miscellaneous ---
+2026-04-04 17:30:17,519 [INFO] Fetching data from https://lankabd.com/Home/DataMatrix...
+2026-04-04 17:30:17,721 [INFO] Successfully fetched the page
+2026-04-04 17:30:17,910 [INFO] Filtered data for sector: Miscellaneous (15 rows)
+2026-04-04 17:30:17,911 [INFO] Successfully fetched 15 rows
+2026-04-04 17:30:18,916 [INFO] 
+--- Fetching data for sector: Mutual Funds ---
+2026-04-04 17:30:18,917 [INFO] Fetching data from https://lankabd.com/Home/DataMatrix...
+2026-04-04 17:30:19,125 [INFO] Successfully fetched the page
+2026-04-04 17:30:19,359 [INFO] Filtered data for sector: Mutual Funds (36 rows)
+2026-04-04 17:30:19,359 [INFO] Successfully fetched 36 rows
+2026-04-04 17:30:20,365 [INFO] 
+--- Fetching data for sector: Paper & Printing ---
+2026-04-04 17:30:20,365 [INFO] Fetching data from https://lankabd.com/Home/DataMatrix...
+2026-04-04 17:30:20,569 [INFO] Successfully fetched the page
+2026-04-04 17:30:20,760 [INFO] Filtered data for sector: Paper & Printing (6 rows)
+2026-04-04 17:30:20,760 [INFO] Successfully fetched 6 rows
+2026-04-04 17:30:21,766 [INFO] 
+--- Fetching data for sector: Pharmaceuticals & Chemicals ---
+2026-04-04 17:30:21,766 [INFO] Fetching data from https://lankabd.com/Home/DataMatrix...
+2026-04-04 17:30:21,977 [INFO] Successfully fetched the page
+2026-04-04 17:30:22,208 [INFO] Filtered data for sector: Pharmaceuticals & Chemicals (35 rows)
+2026-04-04 17:30:22,209 [INFO] Successfully fetched 35 rows
+2026-04-04 17:30:23,214 [INFO] 
+--- Fetching data for sector: Services & Real Estate ---
+2026-04-04 17:30:23,214 [INFO] Fetching data from https://lankabd.com/Home/DataMatrix...
+2026-04-04 17:30:23,442 [INFO] Successfully fetched the page
+2026-04-04 17:30:23,633 [INFO] Filtered data for sector: Services & Real Estate (4 rows)
+2026-04-04 17:30:23,634 [INFO] Successfully fetched 4 rows
+2026-04-04 17:30:24,639 [INFO] 
+--- Fetching data for sector: Stock Brokers ---
+2026-04-04 17:30:24,639 [INFO] Fetching data from https://lankabd.com/Home/DataMatrix...
+2026-04-04 17:30:24,872 [INFO] Successfully fetched the page
+2026-04-04 17:30:25,125 [INFO] Filtered data for sector: Stock Brokers (1 rows)
+2026-04-04 17:30:25,125 [INFO] Successfully fetched 1 rows
+2026-04-04 17:30:26,130 [INFO] 
+--- Fetching data for sector: Tannery Industries ---
+2026-04-04 17:30:26,131 [INFO] Fetching data from https://lankabd.com/Home/DataMatrix...
+2026-04-04 17:30:26,341 [INFO] Successfully fetched the page
+2026-04-04 17:30:26,575 [INFO] Filtered data for sector: Tannery Industries (6 rows)
+2026-04-04 17:30:26,575 [INFO] Successfully fetched 6 rows
+2026-04-04 17:30:27,580 [INFO] 
+--- Fetching data for sector: Telecommunication ---
+2026-04-04 17:30:27,580 [INFO] Fetching data from https://lankabd.com/Home/DataMatrix...
+2026-04-04 17:30:27,804 [INFO] Successfully fetched the page
+2026-04-04 17:30:27,995 [INFO] Filtered data for sector: Telecommunication (3 rows)
+2026-04-04 17:30:27,995 [INFO] Successfully fetched 3 rows
+2026-04-04 17:30:29,001 [INFO] 
+--- Fetching data for sector: Textile ---
+2026-04-04 17:30:29,001 [INFO] Fetching data from https://lankabd.com/Home/DataMatrix...
+2026-04-04 17:30:29,206 [INFO] Successfully fetched the page
+2026-04-04 17:30:29,510 [INFO] Filtered data for sector: Textile (58 rows)
+2026-04-04 17:30:29,510 [INFO] Successfully fetched 58 rows
+2026-04-04 17:30:30,515 [INFO] 
+--- Fetching data for sector: Travel & Leisure ---
+2026-04-04 17:30:30,516 [INFO] Fetching data from https://lankabd.com/Home/DataMatrix...
+2026-04-04 17:30:30,755 [INFO] Successfully fetched the page
+2026-04-04 17:30:30,945 [INFO] Filtered data for sector: Travel & Leisure (5 rows)
+2026-04-04 17:30:30,945 [INFO] Successfully fetched 5 rows
+2026-04-04 17:30:31,960 [INFO] 
+✓ Combined data saved to lankabd_data_all_sectors.csv
+2026-04-04 17:30:32,894 [INFO] ✓ Data successfully uploaded to Supabase.

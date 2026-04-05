@@ -1,0 +1,65 @@
+Uploading sample/lankabd_data_all_sectors.csv to lankabd_datamatrix...
+  Truncating lankabd_datamatrix...
+  Inserted 414/414 records.
+Uploading sample/dse_announcements.csv to lankabd_announcements...
+  Truncating lankabd_announcements...
+  Inserted 4116/4116 records.
+Uploading sample/dse_historical_prices.csv to lankabd_price_archive...
+  Truncating lankabd_price_archive...
+  Warning during truncation: {'message': 'canceling statement due to statement timeout', 'code': '57014', 'hint': None, 'details': None}
+  Inserted 5000/262156 records.
+  Inserted 10000/262156 records.
+  Inserted 15000/262156 records.
+  Inserted 20000/262156 records.
+  Inserted 25000/262156 records.
+  Inserted 30000/262156 records.
+  Inserted 35000/262156 records.
+  Inserted 40000/262156 records.
+  Inserted 45000/262156 records.
+  Inserted 50000/262156 records.
+  Inserted 55000/262156 records.
+  Inserted 60000/262156 records.
+  Inserted 65000/262156 records.
+  Inserted 70000/262156 records.
+  Inserted 75000/262156 records.
+  Inserted 80000/262156 records.
+  Inserted 85000/262156 records.
+  Inserted 90000/262156 records.
+  Inserted 95000/262156 records.
+  Inserted 100000/262156 records.
+  Inserted 105000/262156 records.
+  Inserted 110000/262156 records.
+  Inserted 115000/262156 records.
+  Inserted 120000/262156 records.
+  Inserted 125000/262156 records.
+  Inserted 130000/262156 records.
+  Inserted 135000/262156 records.
+  Inserted 140000/262156 records.
+  Inserted 145000/262156 records.
+  Error inserting chunk starting at 145000: Out of range float values are not JSON compliant: inf
+  Error inserting chunk starting at 145500: Out of range float values are not JSON compliant: inf
+  Inserted 150000/262156 records.
+  Inserted 155000/262156 records.
+  Inserted 160000/262156 records.
+  Inserted 165000/262156 records.
+  Inserted 170000/262156 records.
+  Inserted 175000/262156 records.
+  Inserted 180000/262156 records.
+  Inserted 185000/262156 records.
+  Inserted 190000/262156 records.
+  Inserted 195000/262156 records.
+  Inserted 200000/262156 records.
+  Inserted 205000/262156 records.
+  Inserted 210000/262156 records.
+  Inserted 215000/262156 records.
+  Inserted 220000/262156 records.
+  Inserted 225000/262156 records.
+  Inserted 230000/262156 records.
+  Inserted 235000/262156 records.
+  Inserted 240000/262156 records.
+  Inserted 245000/262156 records.
+  Inserted 250000/262156 records.
+  Inserted 255000/262156 records.
+  Inserted 260000/262156 records.
+  Inserted 262156/262156 records.
+Success: All uploads completed.

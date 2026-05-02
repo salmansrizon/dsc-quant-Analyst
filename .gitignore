@@ -1,21 +1,42 @@
 # Environment variables
 .env
+.env.*
+
+# Node / Frontend
+node_modules/
+dist/
+build/
+.vercel
+.next/
 
 # Virtual environment
-.venv
-venv
-
-# Python artifacts
+.venv/
+venv/
+env/
 __pycache__/
 *.pyc
-*.pyo
 
 # Logs
 logs/
 *.log
 
+# CSV/JSON Data (Ignore scraped data files)
+lankabd_*.csv
+price_history_*.csv
+*.tmp
 
-# OS files
+# IDE / OS
 .DS_Store
-*.csv
+.vscode/
+.idea/
+
+# BigQuery / Google Cloud Secrets
+keys/
+gcp-key.json
 *.json
+!package.json
+!package-lock.json
+!tsconfig.json
+!vercel.json
+!filters.json
+!pyproject.toml

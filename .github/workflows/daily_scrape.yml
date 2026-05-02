@@ -30,6 +30,7 @@ jobs:
           python-version: '3.13'
 
       - name: Install dependencies
+        working-directory: backend
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
@@ -37,6 +38,7 @@ jobs:
       - name: Run Scrapers (Attempt 1)
         id: scrape_primary
         continue-on-error: true
+        working-directory: backend
         run: |
           echo "Starting daily scrape..."
           python dataGrid.py
@@ -45,6 +47,7 @@ jobs:
 
       - name: Wait and Retry (Attempt 2)
         if: steps.scrape_primary.outcome == 'failure'
+        working-directory: backend
         run: |
           echo "Primary attempt failed. Waiting 1 hour (3600s) to retry..."
           sleep 3600

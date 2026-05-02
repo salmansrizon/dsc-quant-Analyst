@@ -2,6 +2,48 @@
 
 Complete web scraping solution for Lankabangla financial portal stock market data.
 
+## 🏗️ Project Structure
+
+```
+.
+├── backend/               # FastAPI + Scrapers
+│   ├── api.py             # Main API server
+│   ├── auth.py            # JWT Auth logic
+│   ├── models.py          # Pydantic schemas
+│   ├── user_service.py    # User DB logic
+│   ├── alert_checker.py   # Price alert processor
+│   ├── notifications/     # Telegram & WhatsApp services
+│   ├── utils/             # BigQuery helpers
+│   └── requirements.txt
+├── frontend/              # React + Vite
+│   ├── src/
+│   │   ├── api/           # API client
+│   │   ├── components/    # UI components
+│   │   ├── context/       # Auth context
+│   │   ├── pages/         # View pages
+│   │   └── index.css      # TradingView dark theme
+│   └── package.json
+└── .github/workflows/     # CI/CD pipelines
+```
+
+## 🚀 Getting Started
+
+### Backend Setup
+1. `cd backend`
+2. `pip install -r requirements.txt`
+3. `uvicorn api:app --reload`
+
+### Frontend Setup
+1. `cd frontend`
+2. `npm install`
+3. `npm run dev`
+
+## ✨ Features
+- **Admin Panel**: Manage users and monitor scraping pipelines.
+- **Market Data**: Real-time analytics for symbols, sectors, and announcements.
+- **Personalization**: Watchlists, Portfolio tracking with P&L, and Price Alerts.
+- **Notifications**: Integrated Telegram alerts (WhatsApp ready).
+
 ---
 
 ## 📋 Overview
@@ -13,7 +55,6 @@ Four main scripts work together to collect comprehensive stock market data and p
 | **dataGrid.py** | Fetch latest stock data matrix | BigQuery: `lankabd_datamatrix` |
 | **announcement.py** | Fetch company announcements | BigQuery: `lankabd_announcements` |
 | **priceArchive.py** | Fetch historical price data | BigQuery: `lankabd_price_archive` |
-| **upload_csvs.py** | Manual CSV uploader | Push local backups to BigQuery |
 
 ---
 

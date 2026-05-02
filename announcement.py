@@ -8,7 +8,7 @@ import requests
 
 # logging utility
 from utils.logger import Log
-from utils.supabase_helper import SupabaseHelper
+from utils.bigquery_helper import BigQueryHelper
 
 # Create a module-level logger with timestamped file output in logs/ directory
 log_filename = f"logs/announcement_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log"
@@ -196,9 +196,9 @@ def scrape_announcement(sn, fromdate, todate, page=None, page_size=None):
 
 def scrape_all_symbols_announcements(fromdate=None, todate=None, page_size=None, fetch_all_pages=False, max_pages=None):
     # Fetch from Supabase if not provided
-    db = SupabaseHelper()
+    bq = BigQueryHelper()
     if fromdate is None:
-        last_date = db.get_last_date('lankabd_announcements', 'Date')
+        last_date = bq.get_last_date('lankabd_announcements', 'Date')
         if last_date:
             # Start from the latest date found in the DB
             fromdate = str(last_date)
@@ -249,9 +249,8 @@ def scrape_all_symbols_announcements(fromdate=None, todate=None, page_size=None,
                 allowed_columns = ["Symbol", "Date", "Announcement_Type", "Details", "Sentiment", "Expected_Price_Impact", "Importance", "Sector"]
                 df = df[[col for col in allowed_columns if col in df.columns]]
 
-                # UPLOAD TO SUPABASE NOW
                 try:
-                    db.upload_dataframe(df, 'lankabd_announcements')
+                    bq.upload_dataframe(df, 'lankabd_announcements')
                     success_count += 1
                 except Exception as e:
                     logger.error(f"Error uploading {symbol}: {e}")
@@ -273,9 +272,8 @@ def scrape_all_symbols_announcements(fromdate=None, todate=None, page_size=None,
                 allowed_columns = ["Symbol", "Date", "Announcement_Type", "Details", "Sentiment", "Expected_Price_Impact", "Importance", "Sector"]
                 df = df[[col for col in allowed_columns if col in df.columns]]
 
-                # UPLOAD TO SUPABASE NOW
                 try:
-                    db.upload_dataframe(df, 'lankabd_announcements')
+                    bq.upload_dataframe(df, 'lankabd_announcements')
                     success_count += 1
                 except Exception as e:
                     logger.error(f"Error uploading {symbol}: {e}")

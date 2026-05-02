@@ -6,16 +6,18 @@ Complete web scraping solution for Lankabangla financial portal stock market dat
 
 ## 📋 Overview
 
-Two main scripts work together to collect comprehensive stock market data:
+Four main scripts work together to collect comprehensive stock market data and push it to Google BigQuery:
 
-| Script | Purpose | Source | Output |
-|--------|---------|--------|--------|
-| **main.py** | Fetch latest stock data matrix | DataMatrix | All 414 stocks, current fundamentals |
-| **priceArchive.py** | Fetch historical price data | PriceArchive | Price history for last 3 years |
+| Script | Purpose | Output |
+|--------|---------|--------|
+| **dataGrid.py** | Fetch latest stock data matrix | BigQuery: `lankabd_datamatrix` |
+| **announcement.py** | Fetch company announcements | BigQuery: `lankabd_announcements` |
+| **priceArchive.py** | Fetch historical price data | BigQuery: `lankabd_price_archive` |
+| **upload_csvs.py** | Manual CSV uploader | Push local backups to BigQuery |
 
 ---
 
-## 📊 main.py - Stock Data Matrix
+## 📊 dataGrid.py - Stock Data Matrix
 
 **Fetches from**: `https://lankabd.com/Home/DataMatrix`
 
@@ -31,10 +33,10 @@ Bank, Cement, Ceramics, Corporate Bond, Debenture, Engineering, Financial Instit
 ### Usage:
 
 ```python
-from main import scrape_lankabd, scrape_all_sectors
+from dataGrid import scrape_lankabd, scrape_all_sectors
 
 # Option 1: All data
-df = scrape_lankabd()  # → lankabd_data.csv
+df = scrape_lankabd()  # → BigQuery + local CSV
 
 # Option 2: Specific sector
 df = scrape_lankabd(sector='Bank')  # → lankabd_data_bank.csv
@@ -59,7 +61,7 @@ df = scrape_all_sectors()  # → lankabd_data_all_sectors.csv
 
 ### What it does:
 - Fetches 3 years of daily historical price data
-- Covers all 414 symbols from main.py
+- Covers all 414 symbols from dataGrid.py
 - Gets 30 columns including price, volume, and technical indicators
 - Supports filtering by symbol or sector
 - Custom date range selection
@@ -107,18 +109,37 @@ Date, Symbol, LTP, High, Low, Open, Close, YCP, Change %, Weekly %, Bi-weekly %,
 
 ---
 
+## ☁️ Google BigQuery Setup
+
+The project automatically uploads scraped data to Google BigQuery. To configure:
+
+1. Create a service account in GCP and download the JSON key file.
+2. Save it as `utils/dbt-test-420614-6c3337b4e737.json` OR set the path in `.env`.
+3. Create a `.env` file in the root directory:
+```env
+BIGQUERY_PROJECT_ID=dbt-test-420614
+BIGQUERY_DATASET_ID=lankabd_dataset
+GOOGLE_APPLICATION_CREDENTIALS=/path/to/your/service_account.json
+```
+The scraper will automatically create the `lankabd_dataset` dataset if it doesn't exist, sanitize column names, and upload chunks.
+
+---
+
 ## 🚀 Quick Start
 
 ### 1. Run Stock Data Collection:
 ```bash
-cd /Users/salmansakib/Documents/Projects/Data_Science_projects/lankaBnagla
-source venv/bin/activate
-python main.py
+python dataGrid.py
 ```
 
 ### 2. Run Price History Collection:
 ```bash
 python priceArchive.py
+```
+
+### 3. Run Announcements Collection:
+```bash
+python announcement.py
 ```
 
 ### 3. Run Demo Examples:
@@ -130,7 +151,7 @@ python priceArchive_demo.py
 
 ## 📁 Generated Files
 
-### After main.py:
+### After dataGrid.py:
 ```
 lankabd_data.csv (86 KB)
 lankabd_data_bank.csv (7.5 KB)
@@ -215,6 +236,11 @@ requests==2.31.0
 beautifulsoup4==4.12.2
 pandas>=2.2.0
 lxml>=4.10.0
+numpy
+python-dotenv
+google-cloud-bigquery
+pandas-gbq
+db-dtypes
 ```
 
 Install with:
@@ -238,7 +264,7 @@ source venv/bin/activate
 ```
 
 ### Missing CSV files
-- Run `main.py` first to generate `lankabd_data_all_sectors.csv`
+- Run `dataGrid.py` first to generate `lankabd_data_all_sectors.csv`
 - This is required for `priceArchive.py` to work
 
 ---
@@ -249,7 +275,7 @@ source venv/bin/activate
 - **Retry Logic**: Automatic retries for failed requests
 - **Date Format**: Price data uses `YYYY/MM/DD` format
 - **Large Files**: Combined price archive can be large (100+ MB) - normal
-- **Update Frequency**: Main.py data updates daily on the website
+- **Update Frequency**: dataGrid.py data updates daily on the website
 
 ---
 

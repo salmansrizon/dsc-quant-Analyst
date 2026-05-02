@@ -12,12 +12,17 @@ jobs:
     
     env:
       # These must be set in GitHub Repository Secrets
-      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-      SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+      BIGQUERY_PROJECT_ID: ${{ secrets.BIGQUERY_PROJECT_ID }}
+      BIGQUERY_DATASET_ID: ${{ secrets.BIGQUERY_DATASET_ID }}
 
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
+
+      - name: Set up GCP Credentials
+        run: |
+          echo '${{ secrets.GCP_SERVICE_ACCOUNT_JSON }}' > gcp-key.json
+          echo "GOOGLE_APPLICATION_CREDENTIALS=$(pwd)/gcp-key.json" >> $GITHUB_ENV
 
       - name: Set up Python
         uses: actions/setup-python@v5

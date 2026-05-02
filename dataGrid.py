@@ -7,7 +7,7 @@ import json
 
 # logging utility
 from utils.logger import Log
-from utils.supabase_helper import SupabaseHelper
+from utils.bigquery_helper import BigQueryHelper
 from datetime import datetime as _dt
 
 # module logger
@@ -146,6 +146,11 @@ def scrape_lankabd(sector=None):
         import numpy as np
         df = df.replace(['-', 'N/A', 'n/a', 'nan', 'inf', '-inf'], np.nan)
 
+        # Convert numeric columns to match BigQuery schema
+        for col in df.columns:
+            if col not in ['Symbol', 'Sector', 'Trade', 'Market Category', 'Last Dividend Declaration Date', 'Last AGM Date', 'Date', 'captured_at_timestamp']:
+                df[col] = pd.to_numeric(df[col].astype(str).str.replace(',', ''), errors='coerce')
+
         # Explicitly keep only common columns that exist in the database schema
         allowed_columns = [
             "Symbol", "Sector", "LTP", "Open", "High", "Low", "Close", "YCP", 
@@ -203,13 +208,13 @@ def scrape_all_sectors():
         combined_df.to_csv(output_file, index=False)
         logger.info(f"\n✓ Combined data saved to {output_file}")
         
-        # NEW: Upload to Supabase
+        # NEW: Upload to BigQuery
         try:
-            db = SupabaseHelper()
-            db.upload_dataframe(combined_df, 'lankabd_datamatrix', truncate=True)
-            logger.info("✓ Data successfully uploaded to Supabase.")
+            bq = BigQueryHelper()
+            bq.upload_dataframe(combined_df, 'lankabd_datamatrix', truncate=True)
+            logger.info("✓ Data successfully uploaded to BigQuery.")
         except Exception as e:
-            logger.error(f"Error uploading to Supabase: {e}")
+            logger.error(f"Error uploading to BigQuery: {e}")
             raise e # Allow failure to propagate for CI/CD retry
             
         return combined_df

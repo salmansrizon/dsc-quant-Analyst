@@ -8,7 +8,7 @@ from urllib.parse import urlencode
 
 # logging utility
 from utils.logger import Log
-from utils.supabase_helper import SupabaseHelper
+from utils.bigquery_helper import BigQueryHelper
 
 # create a module-level logger with file output
 from datetime import datetime as _dt
@@ -160,6 +160,9 @@ def scrape_price_archive(symbol, from_date, to_date):
             'Lowest': 'Low',
             'Closing': 'Close',
             'Volume ': 'Volume',
+            'LTP*': 'LTP',
+            'CLOSEP*': 'Close',
+            'YCP*': 'YCP'
         }, inplace=True, errors='ignore')
 
         # Add symbol column and indicators placeholders if not present
@@ -187,7 +190,7 @@ def scrape_price_archive(symbol, from_date, to_date):
 
 def scrape_all_symbols_price_data(from_date=None, to_date=None):
     """Scrape price data for all symbols from the sectors file"""
-    db = SupabaseHelper()
+    bq = BigQueryHelper()
     
     # Global range fallback
     if to_date is None:
@@ -212,16 +215,10 @@ def scrape_all_symbols_price_data(from_date=None, to_date=None):
              try:
                  # Note: In a large table, searching by symbol might be slow without proper indexing.
                  # Our migration already has idx_price_archive_symbol_date.
-                 last_record = db._supabase.table('lankabd_price_archive') \
-                    .select('Date') \
-                    .eq('Symbol', symbol) \
-                    .order('Date', desc=True) \
-                    .limit(1) \
-                    .execute()
-                 
-                 if last_record.data:
+                 last_date = bq.get_last_date('lankabd_price_archive', 'Date', filter_column='Symbol', filter_value=symbol)
+                 if last_date:
                      # Start from the day AFTER the last record
-                     last_dt = datetime.strptime(last_record.data[0]['Date'], '%Y-%m-%d')
+                     last_dt = datetime.strptime(last_date, '%Y-%m-%d')
                      symbol_from_date = (last_dt + timedelta(days=1)).strftime('%Y-%m-%d')
                      logger.debug(f"[{symbol}] Resuming from {symbol_from_date}")
                  else:
@@ -235,13 +232,17 @@ def scrape_all_symbols_price_data(from_date=None, to_date=None):
         df = scrape_price_archive(symbol, symbol_from_date, to_date)
         
         if df is not None and len(df) > 0:
-            # Cleanup and format for SQL
             import numpy as np
             df = df.replace(['-', 'N/A', 'n/a', 'nan', 'inf', '-inf'], np.nan)
             
-            # UPLOAD TO SUPABASE
+            # Convert numeric columns to float to match BigQuery schema
+            for col in df.columns:
+                if col not in ['Date', 'Symbol', 'Sector', 'Trade']:
+                    df[col] = pd.to_numeric(df[col].astype(str).str.replace(',', ''), errors='coerce')
+            
+            # UPLOAD TO BigQuery
             try:
-                db.upload_dataframe(df, 'lankabd_price_archive')
+                bq.upload_dataframe(df, 'lankabd_price_archive')
                 success_count += 1
             except Exception as e:
                 logger.error(f"Error uploading {symbol}: {e}")

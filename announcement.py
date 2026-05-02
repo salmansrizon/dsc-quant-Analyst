@@ -119,7 +119,11 @@ def scrape_announcement(sn, fromdate, todate, page=None, page_size=None):
 
                 # Extract announcement date from span with specific styling
                 date_tag = item.find('span', class_='small text-dark font-weight-bold')
-                date = date_tag.text.strip() if date_tag else ''
+                date_str = date_tag.text.strip() if date_tag else ''
+                try:
+                    date = datetime.strptime(date_str, '%d %b, %Y').strftime('%Y-%m-%d')
+                except Exception:
+                    date = date_str
 
                 # Extract announcement text/description from paragraph element
                 para = item.find('p')
@@ -201,9 +205,24 @@ def scrape_all_symbols_announcements(fromdate=None, todate=None, page_size=None,
     if fromdate is None:
         last_date = bq.get_last_date('lankabd_announcements', 'Date')
         if last_date:
-            # Start from the latest date found in the DB
-            fromdate = str(last_date)
-            logger.info(f"Database contains records up to {fromdate}. Starting from this point.")
+            try:
+                # Assuming last_date is YYYY-MM-DD or datetime.date
+                if isinstance(last_date, str):
+                    try:
+                        dt = datetime.strptime(last_date, '%Y-%m-%d')
+                    except ValueError:
+                        # Fallback if old format
+                        dt = datetime.strptime(last_date, '%d %b, %Y')
+                else:
+                    dt = last_date
+                
+                # Add 1 day to prevent fetching overlapping data
+                dt += timedelta(days=1)
+                fromdate = dt.strftime('%Y-%m-%d')
+            except Exception:
+                fromdate = str(last_date)
+                
+            logger.info(f"Database contains records up to {last_date}. Starting from {fromdate}.")
         else:
             fromdate, todate = get_date_range(years=3)
 
@@ -278,6 +297,10 @@ def scrape_all_symbols_announcements(fromdate=None, todate=None, page_size=None,
 
     if all_data:
         combined_df = pd.concat(all_data, ignore_index=True)
+        
+        # Standardize Date column format
+        if 'Date' in combined_df.columns:
+            combined_df['Date'] = pd.to_datetime(combined_df['Date'], errors='coerce').dt.strftime('%Y-%m-%d')
         
         # Upload to BigQuery ONCE to avoid rate limits
         try:

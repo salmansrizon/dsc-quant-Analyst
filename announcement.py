@@ -1,5 +1,6 @@
 from bs4 import BeautifulSoup
 import pandas as pd
+pd.set_option('future.no_silent_downcasting', True)
 import time
 from datetime import datetime, timedelta
 from urllib.parse import urlencode

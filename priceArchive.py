@@ -219,7 +219,7 @@ def scrape_all_symbols_price_data(from_date=None, to_date=None):
                  last_date = bq.get_last_date('lankabd_price_archive', 'Date', filter_column='Symbol', filter_value=symbol)
                  if last_date:
                      # Start from the day AFTER the last record
-                     last_dt = datetime.strptime(last_date, '%Y-%m-%d')
+                     last_dt = pd.to_datetime(last_date)
                      symbol_from_date = (last_dt + timedelta(days=1)).strftime('%Y-%m-%d')
                      logger.debug(f"[{symbol}] Resuming from {symbol_from_date}")
                  else:

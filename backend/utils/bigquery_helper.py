@@ -5,10 +5,20 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-# Set Google Application Credentials if json file exists locally
-json_path = os.path.join(os.path.dirname(__file__), 'dbt-test-420614-6c3337b4e737.json')
-if os.path.exists(json_path) and not os.environ.get("GOOGLE_APPLICATION_CREDENTIALS"):
-    os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = json_path
+# Set Google Application Credentials
+gcp_json = os.environ.get("GCP_SERVICE_ACCOUNT_JSON")
+if gcp_json:
+    # On serverless (Vercel/Actions), we write the env var to a temp file
+    import tempfile
+    temp_key = os.path.join(tempfile.gettempdir(), 'gcp-key.json')
+    with open(temp_key, 'w') as f:
+        f.write(gcp_json)
+    os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = temp_key
+else:
+    # Local fallback
+    json_path = os.path.join(os.path.dirname(__file__), 'dbt-test-420614-6c3337b4e737.json')
+    if os.path.exists(json_path):
+        os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = json_path
 
 BIGQUERY_PROJECT_ID = os.environ.get("BIGQUERY_PROJECT_ID") or "dbt-test-420614"
 BIGQUERY_DATASET_ID = os.environ.get("BIGQUERY_DATASET_ID") or "lankabd_dataset" # Default dataset

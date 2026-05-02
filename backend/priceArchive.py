@@ -225,7 +225,7 @@ def scrape_all_symbols_price_data(from_date=None, to_date=None):
                  else:
                      symbol_from_date, _ = get_date_range(years=3)
              except Exception as e:
-                 logger.warning(f"Could not fetch last date for {symbol}: {e}")
+                 logger.warning(f"Error parsing date for {symbol} ({last_date}): {e}")
                  symbol_from_date, _ = get_date_range(years=3)
 
         logger.info(f"[{idx}/{len(symbols)}] Fetching price data for {symbol} (from {symbol_from_date})...")

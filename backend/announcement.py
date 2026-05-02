@@ -208,20 +208,15 @@ def scrape_all_symbols_announcements(fromdate=None, todate=None, page_size=None,
         if last_date:
             try:
                 # Assuming last_date is YYYY-MM-DD or datetime.date
-                if isinstance(last_date, str):
-                    try:
-                        dt = datetime.strptime(last_date, '%Y-%m-%d')
-                    except ValueError:
-                        # Fallback if old format
-                        dt = datetime.strptime(last_date, '%d %b, %Y')
-                else:
-                    dt = last_date
+                # Robust date parsing
+                dt = pd.to_datetime(last_date)
                 
                 # Add 1 day to prevent fetching overlapping data
                 dt += timedelta(days=1)
                 fromdate = dt.strftime('%Y-%m-%d')
-            except Exception:
-                fromdate = str(last_date)
+            except Exception as e:
+                logger.warning(f"Error parsing last date {last_date}: {e}")
+                fromdate, _ = get_date_range(years=3)
                 
             logger.info(f"Database contains records up to {last_date}. Starting from {fromdate}.")
         else:

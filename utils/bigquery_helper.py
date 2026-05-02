@@ -10,8 +10,8 @@ json_path = os.path.join(os.path.dirname(__file__), 'dbt-test-420614-6c3337b4e73
 if os.path.exists(json_path) and not os.environ.get("GOOGLE_APPLICATION_CREDENTIALS"):
     os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = json_path
 
-BIGQUERY_PROJECT_ID = os.environ.get("BIGQUERY_PROJECT_ID", "dbt-test-420614")
-BIGQUERY_DATASET_ID = os.environ.get("BIGQUERY_DATASET_ID", "lankabd_dataset") # Default dataset
+BIGQUERY_PROJECT_ID = os.environ.get("BIGQUERY_PROJECT_ID") or "dbt-test-420614"
+BIGQUERY_DATASET_ID = os.environ.get("BIGQUERY_DATASET_ID") or "lankabd_dataset" # Default dataset
 
 class BigQueryHelper:
     def __init__(self):

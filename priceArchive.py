@@ -51,17 +51,17 @@ def get_date_range(years=3):
 
 
 def get_symbols_from_sectors():
-    """Extract all symbols from the all sectors CSV file"""
+    """Extract all symbols from BigQuery datamatrix table"""
+    bq = BigQueryHelper()
     try:
-        df = pd.read_csv('lankabd_data_all_sectors.csv')
-        symbols = df['Symbol'].unique()
-        logger.info(f"Extracted {len(symbols)} unique symbols from lankabd_data_all_sectors.csv")
-        return list(symbols)
-    except FileNotFoundError:
-        logger.error("lankabd_data_all_sectors.csv not found. Please run main.py first.")
-        return []
+        full_table_id = bq._get_full_table_id('lankabd_datamatrix')
+        query = f"SELECT DISTINCT Symbol FROM `{full_table_id}` WHERE Symbol IS NOT NULL"
+        results = bq.client.query(query).result()
+        symbols = [row.Symbol for row in results]
+        logger.info(f"Extracted {len(symbols)} unique symbols from BigQuery datamatrix")
+        return symbols
     except Exception as e:
-        logger.error(f"Error reading CSV: {e}")
+        logger.error(f"Error fetching symbols from BigQuery: {e}")
         return []
 
 
@@ -312,20 +312,24 @@ def scrape_price_archive_by_sector(sector=None, from_date=None, to_date=None):
         from_date, to_date = get_date_range(years=3)
     
     # Load sector data
+    bq = BigQueryHelper()
     try:
-        df = pd.read_csv('lankabd_data_all_sectors.csv')
-    except FileNotFoundError:
-        logger.error("lankabd_data_all_sectors.csv not found. Please run main.py first.")
+        query = f"SELECT DISTINCT Symbol FROM `{bq._get_full_table_id('lankabd_datamatrix')}`"
+        if sector:
+            query += f" WHERE Sector = '{sector}' AND Symbol IS NOT NULL"
+        else:
+            query += " WHERE Symbol IS NOT NULL"
+        results = bq.client.query(query).result()
+        symbols = [row.Symbol for row in results]
+        
+        if sector:
+            logger.info(f"Found {len(symbols)} symbols in {sector} sector from BigQuery")
+        else:
+            logger.info(f"Found {len(symbols)} total symbols from BigQuery")
+            
+    except Exception as e:
+        logger.error(f"Error fetching symbols from BigQuery: {e}")
         return None
-    
-    # Get symbols for the sector
-    if sector:
-        sector_data = df[df['Sector'] == sector]
-        symbols = sector_data['Symbol'].unique()
-        logger.info(f"Found {len(symbols)} symbols in {sector} sector")
-    else:
-        symbols = df['Symbol'].unique()
-        logger.info(f"Found {len(symbols)} total symbols")
     
     if len(symbols) == 0:
         logger.error(f"No symbols found for sector: {sector}")

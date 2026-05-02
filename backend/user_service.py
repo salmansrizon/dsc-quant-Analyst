@@ -6,13 +6,20 @@ from datetime import datetime, timezone
 from utils.bigquery_helper import BigQueryHelper
 from auth import hash_password
 
-bq = BigQueryHelper()
+_bq_instance = None
 TABLE = "users"
+
+
+def get_bq():
+    global _bq_instance
+    if _bq_instance is None:
+        _bq_instance = BigQueryHelper()
+    return _bq_instance
 
 
 def _ensure_table():
     """Create users table if not exists."""
-    full_id = bq._get_full_table_id(TABLE)
+    full_id = get_bq()._get_full_table_id(TABLE)
     sql = f"""
     CREATE TABLE IF NOT EXISTS `{full_id}` (
         id STRING,
@@ -25,7 +32,7 @@ def _ensure_table():
         updated_at TIMESTAMP
     )
     """
-    bq.client.query(sql).result()
+    get_bq().client.query(sql).result()
 
 
 def create_user(email: str, phone: str, password: str, full_name: str, role: str = "user") -> dict:
@@ -53,7 +60,7 @@ def create_user(email: str, phone: str, password: str, full_name: str, role: str
         "updated_at": [now]
     }
     df = pd.DataFrame(user_data)
-    bq.upload_dataframe(df, TABLE, "append")
+    get_bq().upload_dataframe(df, TABLE, "append")
 
     return {
         "id": user_id,
@@ -67,10 +74,10 @@ def create_user(email: str, phone: str, password: str, full_name: str, role: str
 
 def get_user_by_email(email: str) -> dict | None:
     """Fetch user by email. Returns dict including password_hash."""
-    full_id = bq._get_full_table_id(TABLE)
+    full_id = get_bq()._get_full_table_id(TABLE)
     sql = f"SELECT * FROM `{full_id}` WHERE email = '{email}' LIMIT 1"
     try:
-        rows = list(bq.client.query(sql).result())
+        rows = list(get_bq().client.query(sql).result())
         if rows:
             return dict(rows[0])
         return None
@@ -80,10 +87,10 @@ def get_user_by_email(email: str) -> dict | None:
 
 def get_user_by_id(user_id: str) -> dict | None:
     """Fetch user by id."""
-    full_id = bq._get_full_table_id(TABLE)
+    full_id = get_bq()._get_full_table_id(TABLE)
     sql = f"SELECT id, email, phone, full_name, role, created_at, updated_at FROM `{full_id}` WHERE id = '{user_id}' LIMIT 1"
     try:
-        rows = list(bq.client.query(sql).result())
+        rows = list(get_bq().client.query(sql).result())
         if rows:
             return dict(rows[0])
         return None
@@ -93,10 +100,10 @@ def get_user_by_id(user_id: str) -> dict | None:
 
 def list_users() -> list:
     """List all users (admin use). No password_hash."""
-    full_id = bq._get_full_table_id(TABLE)
+    full_id = get_bq()._get_full_table_id(TABLE)
     sql = f"SELECT id, email, phone, full_name, role, created_at, updated_at FROM `{full_id}` ORDER BY created_at DESC"
     try:
-        rows = list(bq.client.query(sql).result())
+        rows = list(get_bq().client.query(sql).result())
         return [dict(r) for r in rows]
     except Exception:
         return []
@@ -104,7 +111,7 @@ def list_users() -> list:
 
 def update_user(user_id: str, updates: dict) -> dict | None:
     """Update user fields. Returns updated user."""
-    full_id = bq._get_full_table_id(TABLE)
+    full_id = get_bq()._get_full_table_id(TABLE)
     now = datetime.now(timezone.utc).isoformat()
 
     set_clauses = [f"updated_at = '{now}'"]
@@ -113,13 +120,13 @@ def update_user(user_id: str, updates: dict) -> dict | None:
             set_clauses.append(f"{key} = '{val}'")
 
     sql = f"UPDATE `{full_id}` SET {', '.join(set_clauses)} WHERE id = '{user_id}'"
-    bq.client.query(sql).result()
+    get_bq().client.query(sql).result()
     return get_user_by_id(user_id)
 
 
 def delete_user(user_id: str) -> bool:
     """Delete user by id."""
-    full_id = bq._get_full_table_id(TABLE)
+    full_id = get_bq()._get_full_table_id(TABLE)
     sql = f"DELETE FROM `{full_id}` WHERE id = '{user_id}'"
-    bq.client.query(sql).result()
+    get_bq().client.query(sql).result()
     return True

@@ -1,6 +1,8 @@
 """
 FastAPI backend serving BigQuery data for the frontend dashboard.
 """
+import logging
+
 from fastapi import FastAPI, Query, HTTPException, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from utils.bigquery_helper import BigQueryHelper
@@ -15,6 +17,7 @@ import user_service
 import os
 
 app = FastAPI(title="DSC Quant Analyst API", version="1.0.0")
+logger = logging.getLogger(__name__)
 
 # CORS - allow frontend dev server
 app.add_middleware(
@@ -25,7 +28,21 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-bq = BigQueryHelper()
+_bq_instance = None
+
+def get_bq():
+    global _bq_instance
+    if _bq_instance is None:
+        _bq_instance = BigQueryHelper()
+    return _bq_instance
+
+
+class BigQueryProxy:
+    def __getattr__(self, name):
+        return getattr(get_bq(), name)
+
+
+bq = BigQueryProxy()
 
 
 # ─── Helper ───────────────────────────────────────────────────────────────────
@@ -65,6 +82,9 @@ def signup(data: UserCreate):
         )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.exception("Signup failed")
+        raise HTTPException(status_code=500, detail="Signup failed due to internal server error")
 
 
 @app.post("/api/auth/login", response_model=TokenResponse)

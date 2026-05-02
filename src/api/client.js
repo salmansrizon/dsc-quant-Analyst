@@ -21,8 +21,18 @@ async function request(path, options = {}) {
   }
 
   if (!res.ok) {
-    const err = await res.json().catch(() => ({ detail: 'Request failed' }));
-    throw new Error(err.detail || 'Request failed');
+    const contentType = res.headers.get('content-type') || '';
+    let detail = res.statusText || 'Request failed';
+
+    if (contentType.includes('application/json')) {
+      const err = await res.json().catch(() => null);
+      detail = err?.detail || err?.message || detail;
+    } else {
+      const text = await res.text().catch(() => 'Request failed');
+      if (text) detail = text.trim().slice(0, 300);
+    }
+
+    throw new Error(detail || 'Request failed');
   }
 
   return res.json();

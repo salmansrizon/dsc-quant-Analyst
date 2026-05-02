@@ -21,8 +21,7 @@ logs/
 *.log
 
 # CSV/JSON Data (Ignore scraped data files)
-lankabd_*.csv
-price_history_*.csv
+*.csv
 *.tmp
 
 # IDE / OS

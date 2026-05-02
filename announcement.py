@@ -250,13 +250,7 @@ def scrape_all_symbols_announcements(fromdate=None, todate=None, page_size=None,
                 allowed_columns = ["Symbol", "Date", "Announcement_Type", "Details", "Sentiment", "Expected_Price_Impact", "Importance", "Sector"]
                 df = df[[col for col in allowed_columns if col in df.columns]]
 
-                try:
-                    bq.upload_dataframe(df, 'lankabd_announcements')
-                    success_count += 1
-                except Exception as e:
-                    logger.error(f"Error uploading {symbol}: {e}")
-                    failed_symbols.append(symbol)
-                
+                success_count += 1
                 all_data.append(df)
             else:
                 logger.warning(f"No data returned for {symbol}")
@@ -273,13 +267,7 @@ def scrape_all_symbols_announcements(fromdate=None, todate=None, page_size=None,
                 allowed_columns = ["Symbol", "Date", "Announcement_Type", "Details", "Sentiment", "Expected_Price_Impact", "Importance", "Sector"]
                 df = df[[col for col in allowed_columns if col in df.columns]]
 
-                try:
-                    bq.upload_dataframe(df, 'lankabd_announcements')
-                    success_count += 1
-                except Exception as e:
-                    logger.error(f"Error uploading {symbol}: {e}")
-                    failed_symbols.append(symbol)
-
+                success_count += 1
                 all_data.append(df)
                 logger.debug(f"Received {len(df)} rows for {symbol}")
             else:
@@ -290,6 +278,14 @@ def scrape_all_symbols_announcements(fromdate=None, todate=None, page_size=None,
 
     if all_data:
         combined_df = pd.concat(all_data, ignore_index=True)
+        
+        # Upload to BigQuery ONCE to avoid rate limits
+        try:
+            bq.upload_dataframe(combined_df, 'lankabd_announcements')
+            logger.info(f"Successfully uploaded {len(combined_df)} records to BigQuery.")
+        except Exception as e:
+            logger.error(f"Error uploading to BigQuery: {e}")
+
         output_file = 'lankabd_announcements_3years.csv'
         combined_df.to_csv(output_file, index=False)
         logger.info("\n" + "="*60)

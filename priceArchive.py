@@ -241,13 +241,7 @@ def scrape_all_symbols_price_data(from_date=None, to_date=None):
                 if col not in ['Date', 'Symbol', 'Sector', 'Trade']:
                     df[col] = pd.to_numeric(df[col].astype(str).str.replace(',', ''), errors='coerce')
             
-            # UPLOAD TO BigQuery
-            try:
-                bq.upload_dataframe(df, 'lankabd_price_archive')
-                success_count += 1
-            except Exception as e:
-                logger.error(f"Error uploading {symbol}: {e}")
-                failed_symbols.append(symbol)
+            success_count += 1
 
             all_data.append(df)
             logger.debug(f"Received {len(df)} rows for {symbol}")
@@ -261,6 +255,13 @@ def scrape_all_symbols_price_data(from_date=None, to_date=None):
     # Combine all data
     if all_data:
         combined_df = pd.concat(all_data, ignore_index=True)
+        
+        # Upload to BigQuery ONCE to avoid rate limits
+        try:
+            bq.upload_dataframe(combined_df, 'lankabd_price_archive')
+            logger.info(f"Successfully uploaded {len(combined_df)} records to BigQuery.")
+        except Exception as e:
+            logger.error(f"Error uploading to BigQuery: {e}")
         
         # Save to CSV
         output_file = 'lankabd_price_archive_3years.csv'

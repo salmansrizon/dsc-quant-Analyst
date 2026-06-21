@@ -1,6 +1,4 @@
-"""
-JWT authentication helpers.
-"""
+"""JWT authentication helpers."""
 import jwt
 import bcrypt
 import os
@@ -47,14 +45,18 @@ def decode_token(token: str) -> dict:
         raise HTTPException(status_code=401, detail="Invalid token")
 
 
-def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security)) -> dict:
+def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security)):
     """FastAPI dependency: extract current user from JWT."""
     payload = decode_token(credentials.credentials)
-    return {"user_id": payload["sub"], "role": payload["role"]}
+    from .user_service import get_user_by_id  # local import to avoid circular deps
+    user = get_user_by_id(payload.get("sub"))
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    return user
 
 
-def require_admin(current_user: dict = Depends(get_current_user)) -> dict:
+def require_admin(current_user = Depends(get_current_user)):
     """FastAPI dependency: require admin role."""
-    if current_user["role"] != "admin":
+    if current_user.role != "admin":
         raise HTTPException(status_code=403, detail="Admin access required")
     return current_user

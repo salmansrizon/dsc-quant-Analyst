@@ -1,71 +1,93 @@
-import { useState } from 'react';
+import React, { useState } from 'react';
+import apiClient from '../api/client';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { useNavigate, Link } from 'react-router-dom';
 
-export default function Signup() {
-  const { signup } = useAuth();
-  const navigate = useNavigate();
-  const [form, setForm] = useState({ full_name: '', email: '', phone: '', password: '' });
+export const SignupPage = () => {
+  const [form, setForm] = useState({
+    email: '',
+    phone: '',
+    password: '',
+    full_name: '',
+  });
   const [error, setError] = useState('');
-  const [loading, setLoading] = useState(false);
+  const navigate = useNavigate();
+  const { reloadUser } = useAuth();
 
-  const update = (field) => (e) => setForm({ ...form, [field]: e.target.value });
+  const handleChange = (e) => {
+    const { name, value } = e.target;
+    setForm({ ...form, [name]: value });
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    setError('');
-    setLoading(true);
     try {
-      await signup(form.email, form.phone, form.password, form.full_name);
+      await apiClient.post('/auth/signup', form);
+      reloadUser();
       navigate('/');
     } catch (err) {
-      setError(err.message);
-    } finally {
-      setLoading(false);
+      setError(err.message || 'Signup failed');
     }
   };
 
   return (
-    <div className="auth-container">
-      <div className="auth-card">
-        <div className="logo-section">
-          <div className="logo-icon">📊</div>
-          <h2>Create Account</h2>
-          <p>Start tracking Bangladesh stock market</p>
+    <div style={{ maxWidth: '400px', margin: '100px auto', padding: '20px' }}>
+      <h1 className="text-2xl font-semibold mb-4">Signup</h1>
+      <form className="space-y-4" onSubmit={handleSubmit}>
+        <div>
+          <input
+            type="text"
+            name="full_name"
+            value={form.full_name}
+            onChange={handleChange}
+            placeholder="Full Name"
+            className="w-full p-2 border rounded"
+            required
+          />
         </div>
-
-        {error && <div className="badge badge-danger" style={{ display: 'block', textAlign: 'center', padding: '8px', marginBottom: '16px' }}>{error}</div>}
-
-        <form onSubmit={handleSubmit}>
-          <div className="form-group">
-            <label className="form-label" htmlFor="signup-name">Full Name</label>
-            <input id="signup-name" className="form-input" placeholder="John Doe" value={form.full_name} onChange={update('full_name')} required />
-          </div>
-
-          <div className="form-group">
-            <label className="form-label" htmlFor="signup-email">Email</label>
-            <input id="signup-email" className="form-input" type="email" placeholder="you@example.com" value={form.email} onChange={update('email')} required />
-          </div>
-
-          <div className="form-group">
-            <label className="form-label" htmlFor="signup-phone">Phone</label>
-            <input id="signup-phone" className="form-input" type="tel" placeholder="+880 1XXX-XXXXXX" value={form.phone} onChange={update('phone')} required />
-          </div>
-
-          <div className="form-group">
-            <label className="form-label" htmlFor="signup-password">Password</label>
-            <input id="signup-password" className="form-input" type="password" placeholder="Min 6 characters" value={form.password} onChange={update('password')} required minLength={6} />
-          </div>
-
-          <button className="btn btn-primary btn-lg" type="submit" disabled={loading} style={{ width: '100%' }}>
-            {loading ? 'Creating Account...' : 'Create Account'}
-          </button>
-        </form>
-
-        <div className="auth-footer">
-          Already have an account? <Link to="/login">Sign In</Link>
+        <div>
+          <input
+            type="email"
+            name="email"
+            value={form.email}
+            onChange={handleChange}
+            placeholder="Email"
+            className="w-full p-2 border rounded"
+            required
+          />
         </div>
+        <div>
+          <input
+            type="tel"
+            name="phone"
+            value={form.phone}
+            onChange={handleChange}
+            placeholder="Phone"
+            className="w-full p-2 border rounded"
+            required
+          />
+        </div>
+        <div>
+          <input
+            type="password"
+            name="password"
+            value={form.password}
+            onChange={handleChange}
+            placeholder="Password"
+            className="w-full p-2 border rounded"
+            required
+          />
+        </div>
+        {error && <p className="text-red-600">{error}</p>}
+        <button type="submit" className="w-full bg-green-600 text-white py-2 rounded hover:bg-green-700">
+          Create Account
+        </button>
+      </form>
+      <div>
+        <a href="/login" className="text-align-center">
+          Already have an account? Login
+        </a>
       </div>
     </div>
   );
-}
+};

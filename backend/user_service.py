@@ -1,132 +1,158 @@
-"""
-User CRUD operations against BigQuery.
-"""
 import uuid
+import pandas as pd
 from datetime import datetime, timezone
-from utils.bigquery_helper import BigQueryHelper
-from auth import hash_password
+from typing import Optional
+from google.cloud import bigquery
+from dotenv import load_dotenv
+from .models import UserResponse
 
-_bq_instance = None
-TABLE = "users"
+load_dotenv()
 
+PROJECT = "dbt-test-420614"
+DATASET = "lankabd_dataset"
+bq = bigquery.Client(project=PROJECT)
 
-def get_bq():
-    global _bq_instance
-    if _bq_instance is None:
-        _bq_instance = BigQueryHelper()
-    return _bq_instance
-
-
-def _ensure_table():
-    """Create users table if not exists."""
-    full_id = get_bq()._get_full_table_id(TABLE)
-    sql = f"""
-    CREATE TABLE IF NOT EXISTS `{full_id}` (
-        id STRING,
-        email STRING,
-        phone STRING,
-        password_hash STRING,
-        full_name STRING,
-        role STRING,
-        created_at TIMESTAMP,
-        updated_at TIMESTAMP
-    )
-    """
-    get_bq().client.query(sql).result()
+def _uid(table: str) -> str:
+    return f"`{PROJECT}.{DATASET}.{table}`"
 
 
-def create_user(email: str, phone: str, password: str, full_name: str, role: str = "user") -> dict:
-    """Insert new user. Returns user dict (no password_hash)."""
-    _ensure_table()
+def _insert_user_row(row: dict):
+    df = pd.DataFrame([row])
+    full = f"{PROJECT}.{DATASET}.users"
+    bq.load_table_from_dataframe(df, full, job_config=bigquery.LoadJobConfig(
+        write_disposition=bigquery.WriteDisposition.WRITE_APPEND,
+        schema_update_options=[bigquery.SchemaUpdateOption.ALLOW_FIELD_ADDITION],
+    )).result()
 
-    # Check duplicate email
+
+def create_user(payload) -> UserResponse:
+    from .auth import hash_password
+
+    email = payload.email.strip().lower()
     existing = get_user_by_email(email)
     if existing:
-        raise ValueError("Email already registered")
+        raise ValueError("Email already exists")
 
-    import pandas as pd
     user_id = str(uuid.uuid4())
     now = datetime.now(timezone.utc)
-    pwd_hash = hash_password(password)
+    hashed = hash_password(payload.password)
 
-    user_data = {
-        "id": [user_id],
-        "email": [email],
-        "phone": [phone],
-        "password_hash": [pwd_hash],
-        "full_name": [full_name],
-        "role": [role],
-        "created_at": [now],
-        "updated_at": [now]
-    }
-    df = pd.DataFrame(user_data)
-    get_bq().upload_dataframe(df, TABLE, "append")
-
-    return {
+    _insert_user_row({
         "id": user_id,
         "email": email,
-        "phone": phone,
-        "full_name": full_name,
-        "role": role,
-        "created_at": now.isoformat(),
+        "phone": payload.phone,
+        "password_hash": hashed,
+        "full_name": payload.full_name,
+        "role": "user",
+        "created_at": now,
+        "updated_at": now,
+    })
+
+    return UserResponse(
+        id=user_id,
+        email=email,
+        phone=payload.phone,
+        full_name=payload.full_name,
+        role="user",
+        created_at=str(now),
+    )
+
+
+def get_user_by_email(email: str) -> Optional[UserResponse]:
+    sql = f"""
+        SELECT id, email, phone, full_name, role, created_at
+        FROM {_uid('users')}
+        WHERE LOWER(email) = @email
+        LIMIT 1
+    """
+    params = [bigquery.ScalarQueryParameter("email", "STRING", email.strip().lower())]
+    rows = list(bq.query(sql, job_config=bigquery.QueryJobConfig(query_parameters=params)).result())
+    if not rows:
+        return None
+    r = dict(rows[0])
+    return UserResponse(
+        id=r["id"],
+        email=r["email"],
+        phone=r.get("phone", ""),
+        full_name=r.get("full_name", ""),
+        role=r.get("role", "user"),
+        created_at=str(r["created_at"]) if r.get("created_at") else None,
+    )
+
+
+def get_user_by_id(user_id: str) -> Optional[UserResponse]:
+    sql = f"""
+        SELECT id, email, phone, full_name, role, created_at
+        FROM {_uid('users')}
+        WHERE id = @uid
+        LIMIT 1
+    """
+    params = [bigquery.ScalarQueryParameter("uid", "STRING", user_id)]
+    rows = list(bq.query(sql, job_config=bigquery.QueryJobConfig(query_parameters=params)).result())
+    if not rows:
+        return None
+    r = dict(rows[0])
+    return UserResponse(
+        id=r["id"],
+        email=r["email"],
+        phone=r.get("phone", ""),
+        full_name=r.get("full_name", ""),
+        role=r.get("role", "user"),
+        created_at=str(r["created_at"]) if r.get("created_at") else None,
+    )
+
+
+def get_user_credentials(email: str) -> Optional[dict]:
+    sql = f"""
+        SELECT id, email, phone, password_hash, full_name, role
+        FROM {_uid('users')}
+        WHERE LOWER(email) = @email
+        LIMIT 1
+    """
+    params = [bigquery.ScalarQueryParameter("email", "STRING", email.strip().lower())]
+    rows = list(bq.query(sql, job_config=bigquery.QueryJobConfig(query_parameters=params)).result())
+    if not rows:
+        return None
+    r = dict(rows[0])
+    return {
+        "id": r["id"],
+        "email": r["email"],
+        "password_hash": r.get("password_hash", ""),
+        "role": r.get("role", "user"),
     }
 
 
-def get_user_by_email(email: str) -> dict | None:
-    """Fetch user by email. Returns dict including password_hash."""
-    full_id = get_bq()._get_full_table_id(TABLE)
-    sql = f"SELECT * FROM `{full_id}` WHERE email = '{email}' LIMIT 1"
-    try:
-        rows = list(get_bq().client.query(sql).result())
-        if rows:
-            return dict(rows[0])
-        return None
-    except Exception:
-        return None
+def list_users():
+    sql = f"""
+        SELECT id, email, phone, full_name, role, created_at
+        FROM {_uid('users')}
+        ORDER BY created_at DESC
+    """
+    return [dict(r) for r in bq.query(sql).result()]
 
 
-def get_user_by_id(user_id: str) -> dict | None:
-    """Fetch user by id."""
-    full_id = get_bq()._get_full_table_id(TABLE)
-    sql = f"SELECT id, email, phone, full_name, role, created_at, updated_at FROM `{full_id}` WHERE id = '{user_id}' LIMIT 1"
-    try:
-        rows = list(get_bq().client.query(sql).result())
-        if rows:
-            return dict(rows[0])
-        return None
-    except Exception:
-        return None
+def update_user(user_id: str, updates: dict):
+    rows = list(bq.query(f"SELECT * FROM {_uid('users')}").result())
+    now = datetime.now(timezone.utc)
+    for r in rows:
+        d = dict(r)
+        if d["id"] == user_id:
+            for col in ("full_name", "phone", "role"):
+                if col in updates:
+                    d[col] = updates[col]
+            d["updated_at"] = now
+    df = pd.DataFrame([dict(r) for r in rows])
+    full = f"{PROJECT}.{DATASET}.users"
+    bq.load_table_from_dataframe(df, full, job_config=bigquery.LoadJobConfig(
+        write_disposition=bigquery.WriteDisposition.WRITE_TRUNCATE,
+    )).result()
 
 
-def list_users() -> list:
-    """List all users (admin use). No password_hash."""
-    full_id = get_bq()._get_full_table_id(TABLE)
-    sql = f"SELECT id, email, phone, full_name, role, created_at, updated_at FROM `{full_id}` ORDER BY created_at DESC"
-    try:
-        rows = list(get_bq().client.query(sql).result())
-        return [dict(r) for r in rows]
-    except Exception:
-        return []
-
-
-def update_user(user_id: str, updates: dict) -> dict | None:
-    """Update user fields. Returns updated user."""
-    full_id = get_bq()._get_full_table_id(TABLE)
-    now = datetime.now(timezone.utc).isoformat()
-
-    set_clauses = [f"updated_at = '{now}'"]
-    for key, val in updates.items():
-        if key in ("full_name", "phone", "role") and val is not None:
-            set_clauses.append(f"{key} = '{val}'")
-
-    sql = f"UPDATE `{full_id}` SET {', '.join(set_clauses)} WHERE id = '{user_id}'"
-    get_bq().client.query(sql).result()
-    return get_user_by_id(user_id)
-
-
-def delete_user(user_id: str) -> bool:
-    """Delete user by id."""
-    full_id = get_bq()._get_full_table_id(TABLE)
-    sql = f"DELETE FROM `{full_id}` WHERE id = '{user_id}'"
-    get_bq().client.query(sql).result()
-    return True
+def delete_user(user_id: str):
+    rows = list(bq.query(f"SELECT * FROM {_uid('users')}").result())
+    remaining = [dict(r) for r in rows if r["id"] != user_id]
+    df = pd.DataFrame(remaining) if remaining else pd.DataFrame()
+    full = f"{PROJECT}.{DATASET}.users"
+    bq.load_table_from_dataframe(df, full, job_config=bigquery.LoadJobConfig(
+        write_disposition=bigquery.WriteDisposition.WRITE_TRUNCATE,
+    )).result()

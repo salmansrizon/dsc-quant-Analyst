@@ -1,84 +1,31 @@
+import React from 'react';
+import { NavLink } from 'react-router-dom';
+import { LayoutDashboard, TrendingUp, PieChart, Bell, Users, Settings } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
-import { NavLink, useNavigate } from 'react-router-dom';
-import { 
-  LayoutDashboard, 
-  TrendingUp, 
-  Megaphone, 
-  Star, 
-  Briefcase, 
-  Bell, 
-  Users, 
-  Settings, 
-  LogOut 
-} from 'lucide-react';
 
-export default function Sidebar() {
-  const { user, logout } = useAuth();
-  const navigate = useNavigate();
-  const isAdmin = user?.role === 'admin';
-
-  const handleLogout = () => {
-    logout();
-    navigate('/login');
-  };
-
+export const Sidebar = () => {
+  const { user } = useAuth();
   return (
-    <aside className="sidebar">
-      <div className="sidebar-logo">
-        <div className="logo-icon">
-          <TrendingUp size={20} />
-        </div>
-        <h1>DSC Quant</h1>
-      </div>
-
-      <nav className="sidebar-nav">
-        <div className="sidebar-section-label">Market</div>
-        <NavLink to="/" className={({ isActive }) => `sidebar-link ${isActive ? 'active' : ''}`} end>
-          <LayoutDashboard size={18} className="icon" /> Dashboard
+    <aside className="w-64 bg-gray-900 text-white min-h-screen p-4">
+      <nav className="space-y-2">
+        <NavLink to="/" className="flex items-center gap-3 px-3 py-2 rounded hover:bg-gray-800">
+          <LayoutDashboard size={20} /> Dashboard
         </NavLink>
-        <NavLink to="/symbols" className={({ isActive }) => `sidebar-link ${isActive ? 'active' : ''}`}>
-          <TrendingUp size={18} className="icon" /> Symbols
+        <NavLink to="/watchlist" className="flex items-center gap-3 px-3 py-2 rounded hover:bg-gray-800">
+          <TrendingUp size={20} /> Watchlist
         </NavLink>
-        <NavLink to="/announcements" className={({ isActive }) => `sidebar-link ${isActive ? 'active' : ''}`}>
-          <Megaphone size={18} className="icon" /> Announcements
+        <NavLink to="/portfolio" className="flex items-center gap-3 px-3 py-2 rounded hover:bg-gray-800">
+          <PieChart size={20} /> Portfolio
         </NavLink>
-
-        <div className="sidebar-section-label">Portfolio</div>
-        <NavLink to="/watchlist" className={({ isActive }) => `sidebar-link ${isActive ? 'active' : ''}`}>
-          <Star size={18} className="icon" /> Watchlist
+        <NavLink to="/alerts" className="flex items-center gap-3 px-3 py-2 rounded hover:bg-gray-800">
+          <Bell size={20} /> Alerts
         </NavLink>
-        <NavLink to="/portfolio" className={({ isActive }) => `sidebar-link ${isActive ? 'active' : ''}`}>
-          <Briefcase size={18} className="icon" /> Portfolio
-        </NavLink>
-        <NavLink to="/alerts" className={({ isActive }) => `sidebar-link ${isActive ? 'active' : ''}`}>
-          <Bell size={18} className="icon" /> Price Alerts
-        </NavLink>
-
-        {isAdmin && (
-          <>
-            <div className="sidebar-section-label">Admin</div>
-            <NavLink to="/admin/users" className={({ isActive }) => `sidebar-link ${isActive ? 'active' : ''}`}>
-              <Users size={18} className="icon" /> Users
-            </NavLink>
-            <NavLink to="/admin/pipeline" className={({ isActive }) => `sidebar-link ${isActive ? 'active' : ''}`}>
-              <Settings size={18} className="icon" /> Pipeline
-            </NavLink>
-          </>
+        {user?.role === 'admin' && (
+          <NavLink to="/admin" className="flex items-center gap-3 px-3 py-2 rounded hover:bg-gray-800">
+            <Users size={20} /> Admin
+          </NavLink>
         )}
       </nav>
-
-      <div style={{ padding: 'var(--space-4)', borderTop: '1px solid var(--color-border)' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
-          <div className="topbar-avatar">{user?.full_name?.[0] || '?'}</div>
-          <div style={{ overflow: 'hidden' }}>
-            <div style={{ fontSize: 'var(--font-size-sm)', fontWeight: 500, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{user?.full_name}</div>
-            <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-muted)', textTransform: 'capitalize' }}>{user?.role}</div>
-          </div>
-        </div>
-        <button className="btn btn-ghost btn-sm" onClick={handleLogout} style={{ width: '100%', justifyContent: 'flex-start' }}>
-          <LogOut size={14} /> Logout
-        </button>
-      </div>
     </aside>
   );
-}
+};

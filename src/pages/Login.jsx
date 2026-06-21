@@ -1,76 +1,66 @@
-import { useState } from 'react';
+import React, { useState } from 'react';
+import apiClient from '../api/client';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { useNavigate, Link } from 'react-router-dom';
 
-export default function Login() {
-  const { login } = useAuth();
-  const navigate = useNavigate();
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
+export const LoginPage = () => {
+  const [form, setForm] = useState({ email: '', password: '' });
   const [error, setError] = useState('');
-  const [loading, setLoading] = useState(false);
+  const navigate = useNavigate();
+  const { reloadUser } = useAuth();
+
+  const handleChange = (e) => {
+    const { name, value } = e.target;
+    setForm({ ...form, [name]: value });
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    setError('');
-    setLoading(true);
     try {
-      await login(email, password);
+      await apiClient.post('/auth/login', form);
+      reloadUser();
       navigate('/');
     } catch (err) {
-      setError(err.message);
-    } finally {
-      setLoading(false);
+      setError(err.message || 'Login failed');
     }
   };
 
   return (
-    <div className="auth-container">
-      <div className="auth-card">
-        <div className="logo-section">
-          <div className="logo-icon">📊</div>
-          <h2>Welcome Back</h2>
-          <p>Sign in to DSC Quant Analyst</p>
+    <div style={{ maxWidth: '400px', margin: '100px auto', padding: '20px' }}>
+      <h1 className="text-2xl font-semibold mb-4">Login</h1>
+      <form className="space-y-4" onSubmit={handleSubmit}>
+        <div>
+          <input
+            type="email"
+            name="email"
+            value={form.email}
+            onChange={handleChange}
+            placeholder="Email"
+            className="w-full p-2 border rounded"
+            required
+          />
         </div>
-
-        {error && <div className="badge badge-danger" style={{ display: 'block', textAlign: 'center', padding: '8px', marginBottom: '16px' }}>{error}</div>}
-
-        <form onSubmit={handleSubmit}>
-          <div className="form-group">
-            <label className="form-label" htmlFor="login-email">Email</label>
-            <input
-              id="login-email"
-              className="form-input"
-              type="email"
-              placeholder="you@example.com"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              required
-            />
-          </div>
-
-          <div className="form-group">
-            <label className="form-label" htmlFor="login-password">Password</label>
-            <input
-              id="login-password"
-              className="form-input"
-              type="password"
-              placeholder="••••••••"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              required
-            />
-          </div>
-
-          <button className="btn btn-primary btn-lg" type="submit" disabled={loading} style={{ width: '100%' }}>
-            {loading ? 'Signing in...' : 'Sign In'}
-          </button>
-        </form>
-
-        <div className="auth-footer">
-          Don't have an account? <Link to="/signup">Sign Up</Link>
+        <div>
+          <input
+            type="password"
+            name="password"
+            value={form.password}
+            onChange={handleChange}
+            placeholder="Password"
+            className="w-full p-2 border rounded"
+            required
+          />
         </div>
+        {error && <p className="text-red-600">{error}</p>}
+        <button type="submit" className="w-full bg-blue-600 text-white py-2 rounded hover:bg-blue-700">
+          Sign In
+        </button>
+      </form>
+      <div>
+        <a href="/signup" className="text-align-center">
+          Don’t have an account? Sign Up
+        </a>
       </div>
     </div>
   );
-}
+};

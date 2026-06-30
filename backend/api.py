@@ -1,19 +1,28 @@
 from fastapi import FastAPI, Depends, HTTPException, status, Query
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from fastapi.security import OAuth2PasswordBearer
+from starlette.middleware.base import BaseHTTPMiddleware
 
 from .auth import create_access_token, verify_password, get_current_user, require_admin
 from .models import (
     UserCreate, UserLogin, UserResponse, TokenResponse,
     WatchlistAdd, PortfolioAdd, PortfolioUpdate, AlertCreate,
+    SubscriptionCreate, NotificationPreferences,
 )
 from .user_service import (
     create_user, get_user_by_email, get_user_credentials,
     get_user_by_id, list_users, update_user, delete_user,
 )
 from . import bq_service
+from .repositories import watchlist_repo, portfolio_repo, alert_repo, NotFoundError
 
 app = FastAPI(title="DSC Quant Analyst API", version="1.0.0")
+
+
+@app.exception_handler(NotFoundError)
+def not_found_handler(request, exc):
+    return JSONResponse(status_code=status.HTTP_404_NOT_FOUND, content={"detail": str(exc)})
 
 app.add_middleware(
     CORSMiddleware,
@@ -22,6 +31,17 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+class CacheControlMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request, call_next):
+        response = await call_next(request)
+        if request.method == "GET" and "authorization" not in request.headers:
+            response.headers["Cache-Control"] = "public, max-age=300, stale-while-revalidate=60"
+        return response
+
+
+app.add_middleware(CacheControlMiddleware)
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login")
 
@@ -108,7 +128,7 @@ def watchlist_add(payload: WatchlistAdd, current_user: UserResponse = Depends(ge
 
 @app.delete("/api/watchlist/{symbol}")
 def watchlist_remove(symbol: str, current_user: UserResponse = Depends(get_current_user)):
-    bq_service.remove_from_watchlist(current_user.id, symbol.upper())
+    watchlist_repo.remove(current_user.id, symbol.upper())
     return {"status": "removed"}
 
 
@@ -132,13 +152,13 @@ def portfolio_add(payload: PortfolioAdd, current_user: UserResponse = Depends(ge
 @app.put("/api/portfolio/{portfolio_id}")
 def portfolio_update(portfolio_id: str, payload: PortfolioUpdate, current_user: UserResponse = Depends(get_current_user)):
     data = {k: v for k, v in payload.model_dump().items() if v is not None}
-    bq_service.update_portfolio(portfolio_id, current_user.id, data)
+    portfolio_repo.update(portfolio_id, current_user.id, data)
     return {"status": "updated"}
 
 
 @app.delete("/api/portfolio/{portfolio_id}")
 def portfolio_delete(portfolio_id: str, current_user: UserResponse = Depends(get_current_user)):
-    bq_service.delete_portfolio(portfolio_id, current_user.id)
+    portfolio_repo.delete(portfolio_id, current_user.id)
     return {"status": "deleted"}
 
 
@@ -156,8 +176,55 @@ def alerts_create(payload: AlertCreate, current_user: UserResponse = Depends(get
 
 @app.delete("/api/alerts/{alert_id}")
 def alerts_delete(alert_id: str, current_user: UserResponse = Depends(get_current_user)):
-    bq_service.delete_alert(alert_id, current_user.id)
+    alert_repo.delete(alert_id, current_user.id)
     return {"status": "deleted"}
+
+
+# ── Subscriptions ────────────────────────────────────────────────────────────
+
+@app.post("/api/subscriptions")
+def subscription_create(payload: SubscriptionCreate, current_user: UserResponse = Depends(get_current_user)):
+    return bq_service.create_subscription(current_user.id, payload.model_dump())
+
+
+@app.post("/api/subscriptions/{subscription_id}/transaction")
+def subscription_attach_transaction(subscription_id: str, body: dict, current_user: UserResponse = Depends(get_current_user)):
+    txn_id = body.get("transaction_id", "").strip()
+    if not txn_id:
+        raise HTTPException(status_code=400, detail="transaction_id is required")
+    return bq_service.attach_transaction_id(subscription_id, txn_id)
+
+
+@app.get("/api/subscriptions/pricing")
+def subscription_pricing():
+    return bq_service.get_pricing()
+
+
+@app.get("/api/admin/subscriptions")
+def admin_subscriptions_list(admin: UserResponse = Depends(require_admin)):
+    return bq_service.list_subscriptions()
+
+
+@app.post("/api/admin/subscriptions/{subscription_id}/approve")
+def admin_approve_subscription(subscription_id: str, admin: UserResponse = Depends(require_admin)):
+    return bq_service.decide_subscription(subscription_id, admin.id, approved=True)
+
+
+@app.post("/api/admin/subscriptions/{subscription_id}/reject")
+def admin_reject_subscription(subscription_id: str, admin: UserResponse = Depends(require_admin)):
+    return bq_service.decide_subscription(subscription_id, admin.id, approved=False)
+
+
+# ── Settings ─────────────────────────────────────────────────────────────────
+
+@app.get("/api/settings/notifications")
+def get_notification_prefs(current_user: UserResponse = Depends(get_current_user)):
+    return bq_service.get_notification_preferences(current_user.id)
+
+
+@app.put("/api/settings/notifications")
+def update_notification_prefs(payload: NotificationPreferences, current_user: UserResponse = Depends(get_current_user)):
+    return bq_service.update_notification_preferences(current_user.id, payload.model_dump())
 
 
 # ── Admin ────────────────────────────────────────────────────────────────────

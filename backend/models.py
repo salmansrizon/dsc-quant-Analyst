@@ -102,3 +102,23 @@ class AlertItem(BaseModel):
     is_triggered: bool = False
     triggered_at: Optional[str] = None
     created_at: Optional[str] = None
+
+
+# ─── Subscriptions ────────────────────────────────────────────────────────────
+
+class SubscriptionCreate(BaseModel):
+    medium: list[str]
+    alert_channel: bool
+    digest_channel: bool
+    alert_cap: int
+    digest_cadence: str = Field(..., pattern="^(daily|alternate|weekly)$")
+
+
+# ─── Notification Preferences ─────────────────────────────────────────────────
+
+class NotificationPreferences(BaseModel):
+    telegram_chat_id: Optional[str] = None
+    whatsapp_number: Optional[str] = None
+    email: Optional[str] = None
+    web_push_subscription: Optional[str] = None
+    channels_enabled: list[str] = []

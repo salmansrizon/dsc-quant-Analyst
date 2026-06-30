@@ -32,35 +32,8 @@ def _insert_rows(table: str, rows: list[dict]):
     job.result()
 
 
-def _rewrite_table(table: str, rows: list[dict]):
-    """Replace all rows in a table via load job (free tier eligible)."""
-    df = pd.DataFrame(rows) if rows else pd.DataFrame()
-    full = f"{PROJECT}.{DATASET}.{table}"
-    job = bq.load_table_from_dataframe(
-        df, full,
-        job_config=bigquery.LoadJobConfig(
-            write_disposition=bigquery.WriteDisposition.WRITE_TRUNCATE,
-            schema_update_options=[bigquery.SchemaUpdateOption.ALLOW_FIELD_ADDITION],
-        )
-    )
-    job.result()
-
 # ── Market Data ──────────────────────────────────────────────────────────────
 
-def list_sectors():
-    sql = f"""
-        SELECT Sector,
-               COUNT(*) AS stock_count,
-               ROUND(AVG(LTP), 2) AS avg_ltp,
-               ROUND(AVG(__Change), 2) AS avg_change,
-               SUM(Volume_Qty_) AS total_volume,
-               ROUND(SUM(Value_Turnover_), 2) AS total_turnover
-        FROM {_full_id('lankabd_datamatrix')}
-        WHERE Sector IS NOT NULL AND Sector != ''
-        GROUP BY Sector
-        ORDER BY Sector
-    """
-    return [dict(r) for r in bq.query(sql).result()]
 
 
 def list_stocks(sector: str = None, search: str = None, limit: int = 500):
@@ -185,24 +158,6 @@ def add_to_watchlist(user_id: str, symbol: str):
     return {"id": wid, "symbol": symbol.upper()}
 
 
-def remove_from_watchlist(user_id: str, symbol: str):
-    rows = list(bq.query(
-        f"SELECT * FROM {_full_id('watchlists')} WHERE user_id = @uid",
-        job_config=bigquery.QueryJobConfig(query_parameters=[
-            bigquery.ScalarQueryParameter("uid", "STRING", user_id),
-        ])
-    ).result())
-    remaining = []
-    now = datetime.now(timezone.utc)
-    for r in rows:
-        d = dict(r)
-        d["is_deleted"] = True if (d["symbol"] == symbol.upper() and not d.get("is_deleted")) else d.get("is_deleted", False)
-        d["updated_at"] = now
-        remaining.append(d)
-    _rewrite_table("watchlists", remaining)
-    return True
-
-
 # ── Portfolios ───────────────────────────────────────────────────────────────
 
 def get_portfolio(user_id: str):
@@ -239,45 +194,6 @@ def add_to_portfolio(user_id: str, data: dict):
         "is_deleted": False,
     }])
     return {"id": pid, "symbol": data["symbol"].upper()}
-
-
-def update_portfolio(portfolio_id: str, user_id: str, data: dict):
-    rows = list(bq.query(
-        f"SELECT * FROM {_full_id('portfolios')} WHERE user_id = @uid",
-        job_config=bigquery.QueryJobConfig(query_parameters=[
-            bigquery.ScalarQueryParameter("uid", "STRING", user_id),
-        ])
-    ).result())
-    now = datetime.now(timezone.utc)
-    updated = False
-    for r in rows:
-        d = dict(r)
-        if d["id"] == portfolio_id and not d.get("is_deleted"):
-            for k, v in data.items():
-                if k in d:
-                    d[k] = v
-                d["updated_at"] = now
-            updated = True
-    if updated:
-        _rewrite_table("portfolios", [dict(r) for r in rows])
-    return updated
-
-
-def delete_portfolio(portfolio_id: str, user_id: str):
-    rows = list(bq.query(
-        f"SELECT * FROM {_full_id('portfolios')} WHERE user_id = @uid",
-        job_config=bigquery.QueryJobConfig(query_parameters=[
-            bigquery.ScalarQueryParameter("uid", "STRING", user_id),
-        ])
-    ).result())
-    now = datetime.now(timezone.utc)
-    for r in rows:
-        d = dict(r)
-        if d["id"] == portfolio_id:
-            d["is_deleted"] = True
-            d["updated_at"] = now
-    _rewrite_table("portfolios", [dict(r) for r in rows])
-    return True
 
 
 def portfolio_summary(user_id: str):
@@ -328,28 +244,175 @@ def create_alert(user_id: str, data: dict):
     return {"id": aid, "symbol": data["symbol"].upper()}
 
 
-def delete_alert(alert_id: str, user_id: str):
-    rows = list(bq.query(
-        f"SELECT * FROM {_full_id('price_alerts')} WHERE user_id = @uid",
+
+# ── Market Summary ───────────────────────────────────────────────────────────
+
+# ── Subscriptions ────────────────────────────────────────────────────────────
+
+def create_subscription(user_id: str, data: dict) -> dict:
+    sid = str(uuid.uuid4())
+    now = datetime.now(timezone.utc)
+    row = {
+        "id": sid,
+        "user_id": user_id,
+        "medium": data["medium"],
+        "alert_channel": data["alert_channel"],
+        "digest_channel": data["digest_channel"],
+        "alert_cap": data["alert_cap"],
+        "digest_cadence": data["digest_cadence"],
+        "status": "pending",
+        "transaction_id": None,
+        "submitted_at": None,
+        "decided_at": None,
+        "decided_by": None,
+        "created_at": now,
+    }
+    _insert_rows("subscription_packages", [row])
+    return {"id": sid, "status": "pending", "user_id": user_id}
+
+
+def get_subscription(subscription_id: str) -> dict | None:
+    sql = f"""
+        SELECT * FROM {_full_id('subscription_packages')}
+        WHERE id = @sid LIMIT 1
+    """
+    params = [bigquery.ScalarQueryParameter("sid", "STRING", subscription_id)]
+    rows = list(bq.query(sql, job_config=bigquery.QueryJobConfig(query_parameters=params)).result())
+    return dict(rows[0]) if rows else None
+
+
+def attach_transaction_id(subscription_id: str, transaction_id: str) -> dict:
+    now = datetime.now(timezone.utc)
+    sql = f"""
+        UPDATE {_full_id('subscription_packages')}
+        SET transaction_id = @txn, submitted_at = @now
+        WHERE id = @sid
+    """
+    params = [
+        bigquery.ScalarQueryParameter("txn", "STRING", transaction_id),
+        bigquery.ScalarQueryParameter("now", "TIMESTAMP", now),
+        bigquery.ScalarQueryParameter("sid", "STRING", subscription_id),
+    ]
+    bq.query(sql, job_config=bigquery.QueryJobConfig(query_parameters=params)).result()
+    return {"id": subscription_id, "transaction_id": transaction_id, "status": "pending"}
+
+
+def decide_subscription(subscription_id: str, admin_id: str, approved: bool) -> dict:
+    now = datetime.now(timezone.utc)
+    new_status = "active" if approved else "rejected"
+    sql = f"""
+        UPDATE {_full_id('subscription_packages')}
+        SET status = @status, decided_at = @now, decided_by = @admin
+        WHERE id = @sid
+    """
+    params = [
+        bigquery.ScalarQueryParameter("status", "STRING", new_status),
+        bigquery.ScalarQueryParameter("now", "TIMESTAMP", now),
+        bigquery.ScalarQueryParameter("admin", "STRING", admin_id),
+        bigquery.ScalarQueryParameter("sid", "STRING", subscription_id),
+    ]
+    bq.query(sql, job_config=bigquery.QueryJobConfig(query_parameters=params)).result()
+    return {"id": subscription_id, "status": new_status}
+
+
+def list_subscriptions() -> list[dict]:
+    sql = f"""
+        SELECT * FROM {_full_id('subscription_packages')}
+        ORDER BY created_at DESC
+    """
+    return [dict(r) for r in bq.query(sql).result()]
+
+
+def get_pricing() -> dict:
+    weights_sql = f"SELECT * FROM {_full_id('pricing_weights')}"
+    bundles_sql = f"SELECT * FROM {_full_id('admin_bundles')} WHERE is_active = TRUE"
+    weights = [dict(r) for r in bq.query(weights_sql).result()]
+    bundles = [dict(r) for r in bq.query(bundles_sql).result()]
+    return {"weights": weights, "bundles": bundles}
+
+
+def market_summary():
+    sql = f"""
+        SELECT total_stocks, total_sectors, avg_price, total_turnover, last_updated
+        FROM {_full_id('lankabd_market_summary_cache')}
+        LIMIT 1
+    """
+    rows = list(bq.query(sql).result())
+    return dict(rows[0]) if rows else {}
+
+
+def list_sectors():
+    sql = f"""
+        SELECT Sector, stock_count, avg_ltp, avg_change, total_volume, total_turnover
+        FROM {_full_id('lankabd_sectors_cache')}
+        ORDER BY Sector
+    """
+    return [dict(r) for r in bq.query(sql).result()]
+
+
+# ── Notification Preferences ──────────────────────────────────────────────────
+
+def get_notification_preferences(user_id: str) -> dict:
+    sql = f"""
+        SELECT telegram_chat_id, whatsapp_number, email,
+               web_push_subscription, channels_enabled
+        FROM {_full_id('notification_preferences')}
+        WHERE user_id = @uid LIMIT 1
+    """
+    params = [bigquery.ScalarQueryParameter("uid", "STRING", user_id)]
+    rows = list(bq.query(sql, job_config=bigquery.QueryJobConfig(query_parameters=params)).result())
+    if rows:
+        row = dict(rows[0])
+        if isinstance(row.get("channels_enabled"), str):
+            import json
+            row["channels_enabled"] = json.loads(row["channels_enabled"])
+        return row
+    return {
+        "telegram_chat_id": None,
+        "whatsapp_number": None,
+        "email": None,
+        "web_push_subscription": None,
+        "channels_enabled": [],
+    }
+
+
+def update_notification_preferences(user_id: str, data: dict) -> dict:
+    import json
+    channels = json.dumps(data.get("channels_enabled", []))
+    now = datetime.now(timezone.utc)
+    rows_exist = list(bq.query(
+        f"SELECT user_id FROM {_full_id('notification_preferences')} WHERE user_id = @uid LIMIT 1",
         job_config=bigquery.QueryJobConfig(query_parameters=[
             bigquery.ScalarQueryParameter("uid", "STRING", user_id),
         ])
     ).result())
-    remaining = [dict(r) for r in rows if r["id"] != alert_id]
-    _rewrite_table("price_alerts", remaining)
-    return True
+    if rows_exist:
+        sql = f"""
+            UPDATE {_full_id('notification_preferences')}
+            SET telegram_chat_id = @tg, whatsapp_number = @wa, email = @em,
+                web_push_subscription = @wp, channels_enabled = @ch, updated_at = @now
+            WHERE user_id = @uid
+        """
+    else:
+        _insert_rows("notification_preferences", [{
+            "user_id": user_id,
+            "telegram_chat_id": data.get("telegram_chat_id"),
+            "whatsapp_number": data.get("whatsapp_number"),
+            "email": data.get("email"),
+            "web_push_subscription": data.get("web_push_subscription"),
+            "channels_enabled": channels,
+            "updated_at": now,
+        }])
+        return {**data, "channels_enabled": data.get("channels_enabled", [])}
 
-
-# ── Market Summary ───────────────────────────────────────────────────────────
-
-def market_summary():
-    sql = f"""
-        SELECT COUNT(*) AS total_stocks,
-               COUNT(DISTINCT Sector) AS total_sectors,
-               ROUND(AVG(LTP), 2) AS avg_price,
-               ROUND(SUM(Value_Turnover_), 2) AS total_turnover,
-               MAX(updated_at) AS last_updated
-        FROM {_full_id('lankabd_datamatrix')}
-    """
-    rows = list(bq.query(sql).result())
-    return dict(rows[0]) if rows else {}
+    params = [
+        bigquery.ScalarQueryParameter("tg", "STRING", data.get("telegram_chat_id")),
+        bigquery.ScalarQueryParameter("wa", "STRING", data.get("whatsapp_number")),
+        bigquery.ScalarQueryParameter("em", "STRING", data.get("email")),
+        bigquery.ScalarQueryParameter("wp", "STRING", data.get("web_push_subscription")),
+        bigquery.ScalarQueryParameter("ch", "STRING", channels),
+        bigquery.ScalarQueryParameter("now", "TIMESTAMP", now),
+        bigquery.ScalarQueryParameter("uid", "STRING", user_id),
+    ]
+    bq.query(sql, job_config=bigquery.QueryJobConfig(query_parameters=params)).result()
+    return {**data, "channels_enabled": data.get("channels_enabled", [])}

@@ -1,38 +1,55 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { ChevronDown } from 'lucide-react';
+import { LogOut, Sun, Moon } from 'lucide-react';
+import { colors } from '../design';
+import { StockDrawer } from './StockDrawer';
+import { SymbolSearch } from './SymbolSearch';
+import { useTheme } from '../context/ThemeContext';
 
 export const Topbar = () => {
   const { user, logout } = useAuth();
+  const { theme, toggleTheme } = useTheme();
+  const [query, setQuery] = useState('');
+  const [drawerSymbol, setDrawerSymbol] = useState(null);
+
+  const openSymbol = (sym) => {
+    const symbol = (sym || '').trim().toUpperCase();
+    if (!symbol) return;
+    setDrawerSymbol(symbol);
+    setQuery('');
+  };
 
   return (
-    <header className="flex items-center justify-between h-16 bg-white shadow-md px-6">
-      <div className="flex-1 flex justify-center">
-        <form className="relative w-full max-w-xl">
-          <input
-            type="text"
-            placeholder="Search symbols..."
-            className="w-full p-3 pr-10 rounded-lg border focus:outline-none focus:ring-2 focus:ring-blue-500"
+    <>
+      <header style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', height: 48, background: colors.surface, borderBottom: `1px solid ${colors.border}`, padding: '0 16px', flexShrink: 0, zIndex: 50 }}>
+        <div style={{ flex: 1, maxWidth: 340 }}>
+          <SymbolSearch
+            value={query}
+            onChange={setQuery}
+            onSelect={(row) => openSymbol(row.Symbol)}
+            onSubmitRaw={(q) => openSymbol(q)}
+            placeholder="Search symbol…"
           />
-          <svg className="absolute inset-y-0 right-3 h-5 w-5 text-gray-400 pointer-events-none" viewBox="0 0 24 24">
-            <path d="M15.5 14h-.79l-.28-.27a6.47 6.47 0 001.48-5.34c0-3.59-2.91-6.5-6.5-6.5s-6.5 2.91-6.5 6.5A6.47 6.47 0 004.79 11l-.28.27A8.2 8.2 0 009 18.21V20h2v-1.79a8.2 8.2 0 004.21-5.81zM9 18c4.97 0 9-4.03 9-9s-4.03-9-9-9-9 4.03-9 9 4.03 9 9 9z" fill="currentColor" />
-          </svg>
-        </form>
-      </div>
-      <div className="flex items-center gap-4">
-        {user && (
-          <div className="relative">
-            <img src="https://ui-avatars.com/api/?name=${user.full_name}&background=random" alt="Avatar" className="h-10 w-10 rounded-full border-2 border-white" />
-            <div className="absolute -right-2 -bottom-2 w-3 h-3 bg-green-500 rounded-full border-2 border-white"></div>
-            <span className="ml-3 cursor-pointer">{user.full_name}</span>
-          </div>
-        )}
-        {user && (
-          <button onClick={logout} className="px-4 py-2 bg-red-500 text-white rounded hover:bg-red-600">
-            Logout
+        </div>
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          {user && (
+            <span style={{ color: colors.textSecondary, fontSize: 13 }}>{user.full_name}</span>
+          )}
+          <button
+            onClick={toggleTheme}
+            aria-label={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`}
+            title={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`}
+            style={{ background: 'none', border: 'none', color: colors.textSecondary, cursor: 'pointer', display: 'flex', alignItems: 'center', padding: '6px 8px', borderRadius: 3 }}
+          >
+            {theme === 'dark' ? <Sun size={15} aria-hidden="true" /> : <Moon size={15} aria-hidden="true" />}
           </button>
-        )}
-      </div>
-    </header>
+          <button onClick={logout} aria-label="Sign out" title="Sign out" style={{ background: 'none', border: 'none', color: colors.textSecondary, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4, fontSize: 13, padding: '6px 8px', borderRadius: 3 }}>
+            <LogOut size={15} aria-hidden="true" />
+          </button>
+        </div>
+      </header>
+      {drawerSymbol && <StockDrawer symbol={drawerSymbol} onClose={() => setDrawerSymbol(null)} />}
+    </>
   );
 };

@@ -4,6 +4,7 @@ import pandas as pd
 from datetime import datetime, timezone
 from google.cloud import bigquery
 from dotenv import load_dotenv
+from .utils import bigquery_helper  # noqa: F401 — bootstraps GOOGLE_APPLICATION_CREDENTIALS from GCP_SERVICE_ACCOUNT_JSON
 
 load_dotenv()
 

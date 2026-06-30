@@ -4,6 +4,7 @@ from datetime import datetime, timezone
 from typing import Optional
 from google.cloud import bigquery
 from dotenv import load_dotenv
+from .utils import bigquery_helper  # noqa: F401 — bootstraps GOOGLE_APPLICATION_CREDENTIALS from GCP_SERVICE_ACCOUNT_JSON
 from .models import UserResponse
 
 load_dotenv()

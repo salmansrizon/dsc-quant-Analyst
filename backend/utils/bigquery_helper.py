@@ -36,10 +36,11 @@ else:
                 service_account_project = service_account_info.get("project_id")
         except Exception:
             service_account_project = None
-    else:
-        raise RuntimeError(
-            "Missing GCP credentials. Set GCP_SERVICE_ACCOUNT_JSON in Vercel or place a local credentials file at backend/utils/dbt-test-420614-6c3337b4e737.json"
-        )
+    # else: no credentials configured here. Leave GOOGLE_APPLICATION_CREDENTIALS
+    # unset and defer to google.auth.default()'s own DefaultCredentialsError —
+    # this module is imported just for its bootstrap side effect by request-path
+    # modules (user_service.py, bq_service.py, repositories.py), and tests for
+    # those modules mock bigquery.Client entirely, so they never need real creds.
 
 env_project = os.environ.get("BIGQUERY_PROJECT_ID")
 if env_project and service_account_project and env_project != service_account_project:

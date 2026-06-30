@@ -129,17 +129,9 @@ def scrape_lankabd(sector=None):
         
         # Create a DataFrame
         df = pd.DataFrame(data, columns=headers_list)
-        
-        # Standardize column naming and drop unnamed columns
-        df.rename(columns={
-            'Symbol': 'Symbol',
-            'Sector': 'Sector',
-            'LTP': 'LTP',
-            'Volume(Qty)': 'Volume(Qty)',
-            'Value(Turnover)': 'Value(Turnover)',
-        }, inplace=True, errors='ignore')
 
-        # Drop truly empty or "Unnamed" columns that confuse SQL importers
+        # Drop truly empty or "Unnamed" columns (e.g. the Buy/Sell action-button
+        # column, which has no header text) that confuse SQL importers
         df = df.loc[:, ~df.columns.astype(str).str.contains('^Unnamed|^$', case=False, na=False)]
         df = df.loc[:, df.columns.astype(str) != ""] # Extra check for literally empty names
 
@@ -147,17 +139,30 @@ def scrape_lankabd(sector=None):
         import numpy as np
         df = df.replace(['-', 'N/A', 'n/a', 'nan', 'inf', '-inf'], np.nan)
 
+        # Non-numeric columns: identifiers, category labels, and date strings
+        NON_NUMERIC_COLUMNS = {
+            'Symbol', 'Sector', 'Market Category',
+            'Last Dividend Declaration Date', 'Last AGM Date',
+            'Date', 'captured_at_timestamp',
+        }
+
         # Convert numeric columns to match BigQuery schema
         for col in df.columns:
-            if col not in ['Symbol', 'Sector', 'Trade', 'Market Category', 'Last Dividend Declaration Date', 'Last AGM Date', 'Date', 'captured_at_timestamp']:
+            if col not in NON_NUMERIC_COLUMNS:
                 df[col] = pd.to_numeric(df[col].astype(str).str.replace(',', ''), errors='coerce')
 
-        # Explicitly keep only common columns that exist in the database schema
+        # Keep all real data columns the site exposes (the "FILTERS" checkboxes
+        # on the page are a client-side display toggle only — the full set is
+        # always present in the page HTML, all checked by default).
         allowed_columns = [
-            "Symbol", "Sector", "LTP", "Open", "High", "Low", "Close", "YCP", 
-            "Change", "% Change", "Volume(Qty)", "Value(Turnover)", "Trade", 
-            "Market_Cap", "PE", "EPS", "Div_Yield", "ROE", "Net_Asset", 
-            "SMA_20", "SMA_50", "RSI_14", "Bollinger_Upper", "Bollinger_Lower", "Volatility_20d"
+            "Symbol", "Sector", "LTP", "Open", "High", "Low", "Close", "YCP",
+            "Change", "% Change", "Volume(Qty)", "Value(Turnover)",
+            "Market Category", "Audited PE", "Forward PE", "Free Float",
+            "Director Holdings", "Govt. Holdings", "Institute Holdings",
+            "Foreign Holdings", "Public Holdings", "Market Capitalization (mn)",
+            "Paid Up Capital (mn)", "Last Dividend Declaration Date", "Last AGM Date",
+            "Dividend Yield(%)", "Cash Dividend", "Stock Dividend", "EPS",
+            "NAV(Quarter End)", "RSI(14)", "Turnover Velocity(22)", "Beta(5)",
         ]
         df = df[[col for col in allowed_columns if col in df.columns]]
 

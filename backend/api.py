@@ -45,6 +45,12 @@ app.add_middleware(CacheControlMiddleware)
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login")
 
+
+@app.get("/api/health")
+def health():
+    return {"status": "ok"}
+
+
 # ── Auth ─────────────────────────────────────────────────────────────────────
 
 @app.post("/api/auth/signup", response_model=TokenResponse)

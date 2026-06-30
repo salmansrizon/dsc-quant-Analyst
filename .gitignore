@@ -43,3 +43,4 @@ gcp-key.json
 !vercel.json
 !filters.json
 !pyproject.toml
+.env*

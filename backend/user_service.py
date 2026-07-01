@@ -83,7 +83,7 @@ def get_user_by_email(email: str) -> Optional[UserResponse]:
     return UserResponse(
         id=r["id"],
         email=r["email"],
-        phone=r.get("phone", ""),
+        phone=str(r.get("phone") or ""),
         full_name=r.get("full_name", ""),
         role=r.get("role", "user"),
         created_at=str(r["created_at"]) if r.get("created_at") else None,
@@ -105,7 +105,7 @@ def get_user_by_id(user_id: str) -> Optional[UserResponse]:
     return UserResponse(
         id=r["id"],
         email=r["email"],
-        phone=r.get("phone", ""),
+        phone=str(r.get("phone") or ""),
         full_name=r.get("full_name", ""),
         role=r.get("role", "user"),
         created_at=str(r["created_at"]) if r.get("created_at") else None,

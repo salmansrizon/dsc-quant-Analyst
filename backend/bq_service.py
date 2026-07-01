@@ -5,6 +5,8 @@ from datetime import datetime, timezone
 from google.cloud import bigquery
 from dotenv import load_dotenv
 from .utils import bigquery_helper  # noqa: F401 — bootstraps GOOGLE_APPLICATION_CREDENTIALS from GCP_SERVICE_ACCOUNT_JSON
+from itertools import groupby
+from .indicators import add_emas, compute_macd, compute_stochastic
 
 load_dotenv()
 
@@ -29,6 +31,20 @@ def _insert_rows(table: str, rows: list[dict]):
             write_disposition=bigquery.WriteDisposition.WRITE_APPEND,
             schema_update_options=[bigquery.SchemaUpdateOption.ALLOW_FIELD_ADDITION],
         )
+    )
+    job.result()
+
+
+def _replace_table(table: str, rows: list[dict]):
+    """Rewrite a full table via load job (free tier eligible) — used in place of
+    a DML UPDATE, which requires a billing account on the BigQuery project."""
+    if not rows:
+        return
+    df = pd.DataFrame(rows)
+    full = f"{PROJECT}.{DATASET}.{table}"
+    job = bq.load_table_from_dataframe(
+        df, full,
+        job_config=bigquery.LoadJobConfig(write_disposition=bigquery.WriteDisposition.WRITE_TRUNCATE)
     )
     job.result()
 
@@ -67,7 +83,8 @@ def get_stock(symbol: str):
     sql = f"""
         SELECT Symbol, Sector, LTP, Open, High, Low, Close, YCP,
                ROUND(Change, 2) AS Change, ROUND(__Change, 2) AS ChangePct,
-               Volume_Qty_, Value_Turnover_, EPS
+               Volume_Qty_, Value_Turnover_, EPS,
+               Audited_PE, Forward_PE, Director_Holdings, NAV_Quarter_End_
         FROM {_full_id('lankabd_datamatrix')}
         WHERE Symbol = @symbol
         LIMIT 1
@@ -75,6 +92,49 @@ def get_stock(symbol: str):
     params = [bigquery.ScalarQueryParameter("symbol", "STRING", symbol.upper())]
     rows = list(bq.query(sql, job_config=bigquery.QueryJobConfig(query_parameters=params)).result())
     return dict(rows[0]) if rows else None
+
+
+_LEADERBOARD_COLUMNS = {
+    "value": ("Value_Turnover_", "DESC"),
+    "gainer": ("__Change", "DESC"),
+    "loser": ("__Change", "ASC"),
+    "volume": ("Volume_Qty_", "DESC"),
+}
+
+
+def leaderboard(metric: str, limit: int = 10):
+    if metric == "trade":
+        return top_trade(limit)
+    column, direction = _LEADERBOARD_COLUMNS[metric]
+    sql = f"""
+        SELECT Symbol, Sector, LTP, ROUND(__Change, 2) AS ChangePct,
+               Volume_Qty_ AS Volume, Value_Turnover_ AS Value
+        FROM {_full_id('lankabd_datamatrix')}
+        ORDER BY {column} {direction}
+        LIMIT {int(limit)}
+    """
+    return [dict(r) for r in bq.query(sql).result()]
+
+
+def top_trade(limit: int = 10):
+    sql = f"""
+        WITH latest_trade AS (
+            SELECT Symbol, Trade FROM (
+                SELECT Symbol, SAFE_CAST(Trade AS INT64) AS Trade,
+                       ROW_NUMBER() OVER (PARTITION BY Symbol ORDER BY Date DESC) AS rn
+                FROM {_full_id('lankabd_price_archive')}
+                WHERE SAFE_CAST(Trade AS INT64) IS NOT NULL
+            )
+            WHERE rn = 1
+        )
+        SELECT d.Symbol, d.Sector, d.LTP, ROUND(d.__Change, 2) AS ChangePct,
+               d.Volume_Qty_ AS Volume, d.Value_Turnover_ AS Value, lt.Trade
+        FROM {_full_id('lankabd_datamatrix')} d
+        JOIN latest_trade lt ON d.Symbol = lt.Symbol
+        ORDER BY lt.Trade DESC
+        LIMIT {int(limit)}
+    """
+    return [dict(r) for r in bq.query(sql).result()]
 
 
 def top_movers(limit: int = 10):
@@ -108,7 +168,9 @@ def price_history(symbol: str, days: int = 365):
         LIMIT {int(days)}
     """
     params = [bigquery.ScalarQueryParameter("symbol", "STRING", symbol.upper())]
-    return [dict(r) for r in bq.query(sql, job_config=bigquery.QueryJobConfig(query_parameters=params)).result()]
+    rows = [dict(r) for r in bq.query(sql, job_config=bigquery.QueryJobConfig(query_parameters=params)).result()]
+    rows.reverse()  # chronological ascending — required by add_emas, and natural for charting
+    return add_emas(rows)
 
 
 def list_announcements(symbol: str = None, limit: int = 50):
@@ -261,6 +323,7 @@ def create_subscription(user_id: str, data: dict) -> dict:
         "digest_channel": data["digest_channel"],
         "alert_cap": data["alert_cap"],
         "digest_cadence": data["digest_cadence"],
+        "bundle_id": data.get("bundle_id"),
         "status": "pending",
         "transaction_id": None,
         "submitted_at": None,
@@ -324,6 +387,59 @@ def list_subscriptions() -> list[dict]:
     return [dict(r) for r in bq.query(sql).result()]
 
 
+def create_bundle(admin_id: str, data: dict) -> dict:
+    bid = str(uuid.uuid4())
+    now = datetime.now(timezone.utc)
+    row = {
+        "id": bid,
+        "name": data["name"],
+        "medium": data["medium"],
+        "alert_channel": data["alert_channel"],
+        "digest_channel": data["digest_channel"],
+        "alert_cap": data["alert_cap"],
+        "digest_cadence": data["digest_cadence"],
+        "price": data["price"],
+        "is_active": True,
+        "created_at": now,
+        "created_by": admin_id,
+    }
+    _insert_rows("admin_bundles", [row])
+    return row
+
+
+def update_bundle(bundle_id: str, data: dict) -> dict:
+    rows = [dict(r) for r in bq.query(f"SELECT * FROM {_full_id('admin_bundles')}").result()]
+    for row in rows:
+        if row["id"] == bundle_id:
+            row.update({
+                "name": data["name"], "medium": data["medium"],
+                "alert_channel": data["alert_channel"], "digest_channel": data["digest_channel"],
+                "alert_cap": data["alert_cap"], "digest_cadence": data["digest_cadence"],
+                "price": data["price"],
+            })
+            break
+    _replace_table("admin_bundles", rows)
+    return {"id": bundle_id, **data}
+
+
+def list_bundles() -> list[dict]:
+    sql = f"""
+        SELECT * FROM {_full_id('admin_bundles')}
+        ORDER BY created_at DESC
+    """
+    return [dict(r) for r in bq.query(sql).result()]
+
+
+def deactivate_bundle(bundle_id: str) -> dict:
+    rows = [dict(r) for r in bq.query(f"SELECT * FROM {_full_id('admin_bundles')}").result()]
+    for row in rows:
+        if row["id"] == bundle_id:
+            row["is_active"] = False
+            break
+    _replace_table("admin_bundles", rows)
+    return {"id": bundle_id, "is_active": False}
+
+
 def get_pricing() -> dict:
     weights_sql = f"SELECT * FROM {_full_id('pricing_weights')}"
     bundles_sql = f"SELECT * FROM {_full_id('admin_bundles')} WHERE is_active = TRUE"
@@ -349,6 +465,126 @@ def list_sectors():
         ORDER BY Sector
     """
     return [dict(r) for r in bq.query(sql).result()]
+
+
+_EXTREMES_COLUMNS = {
+    "pe_low": ("Audited_PE", "ASC"),
+    "pe_high": ("Audited_PE", "DESC"),
+    "director_holding_low": ("Director_Holdings", "ASC"),
+    "director_holding_high": ("Director_Holdings", "DESC"),
+}
+
+
+def extremes_leaderboard(metric: str, limit: int = 10):
+    if metric in ("nav_price_low", "nav_price_high"):
+        direction = "ASC" if metric == "nav_price_low" else "DESC"
+        sql = f"""
+            SELECT Symbol, Sector, LTP,
+                   ROUND(SAFE_DIVIDE(NAV_Quarter_End_, LTP), 2) AS MetricValue
+            FROM {_full_id('lankabd_datamatrix')}
+            WHERE NAV_Quarter_End_ IS NOT NULL AND LTP IS NOT NULL AND LTP != 0
+            ORDER BY MetricValue {direction}
+            LIMIT {int(limit)}
+        """
+        return [dict(r) for r in bq.query(sql).result()]
+    column, direction = _EXTREMES_COLUMNS[metric]
+    sql = f"""
+        SELECT Symbol, Sector, LTP, {column} AS MetricValue
+        FROM {_full_id('lankabd_datamatrix')}
+        WHERE {column} IS NOT NULL
+        ORDER BY {column} {direction}
+        LIMIT {int(limit)}
+    """
+    return [dict(r) for r in bq.query(sql).result()]
+
+
+def market_strength():
+    sql = f"""
+        SELECT
+            COUNTIF(__Change > 0) AS Gainers,
+            COUNTIF(__Change < 0) AS Losers,
+            COUNTIF(__Change = 0) AS Unchanged
+        FROM {_full_id('lankabd_datamatrix')}
+    """
+    rows = list(bq.query(sql).result())
+    return dict(rows[0]) if rows else {}
+
+
+def sector_breakdown():
+    sql = f"""
+        SELECT
+            Sector,
+            ROUND(AVG(Audited_PE), 2) AS AvgPE,
+            ROUND(SUM(Value_Turnover_), 2) AS TotalTradeValue,
+            COUNTIF(__Change > 0) AS GainersCount,
+            COUNTIF(__Change < 0) AS LosersCount,
+            ROUND(AVG(__Change), 2) AS AvgChange
+        FROM {_full_id('lankabd_datamatrix')}
+        WHERE Sector IS NOT NULL AND Sector != ''
+        GROUP BY Sector
+        ORDER BY Sector
+    """
+    return [dict(r) for r in bq.query(sql).result()]
+
+
+_TECHNICAL_COMPUTED_METRICS = {
+    "macd_low": ("macd", "ASC"),
+    "macd_high": ("macd", "DESC"),
+    "stochastic_low": ("stochastic", "ASC"),
+    "stochastic_high": ("stochastic", "DESC"),
+}
+
+
+def technical_extremes(metric: str, limit: int = 10):
+    if metric in ("rsi_low", "rsi_high"):
+        direction = "ASC" if metric == "rsi_low" else "DESC"
+        sql = f"""
+            SELECT Symbol, Sector, LTP, RSI_14_ AS MetricValue
+            FROM {_full_id('lankabd_datamatrix')}
+            WHERE RSI_14_ IS NOT NULL
+            ORDER BY RSI_14_ {direction}
+            LIMIT {int(limit)}
+        """
+        return [dict(r) for r in bq.query(sql).result()]
+
+    indicator, direction = _TECHNICAL_COMPUTED_METRICS[metric]
+    sql = f"""
+        WITH ranked AS (
+            SELECT Symbol, Sector, Date, High, Low, Close, LTP,
+                   ROW_NUMBER() OVER (PARTITION BY Symbol ORDER BY Date DESC) AS rn
+            FROM {_full_id('lankabd_price_archive')}
+            WHERE Close IS NOT NULL AND High IS NOT NULL AND Low IS NOT NULL
+        )
+        SELECT Symbol, Sector, Date, High, Low, Close, LTP
+        FROM ranked
+        WHERE rn <= 50
+        ORDER BY Symbol, Date ASC
+    """
+    rows = [dict(r) for r in bq.query(sql).result()]
+
+    results = []
+    for symbol, group_iter in groupby(rows, key=lambda r: r["Symbol"]):
+        group = list(group_iter)
+        closes = [r["Close"] for r in group]
+        if indicator == "macd":
+            values = compute_macd(closes)
+        else:
+            highs = [r["High"] for r in group]
+            lows = [r["Low"] for r in group]
+            values = compute_stochastic(highs, lows, closes)
+        latest = next((v for v in reversed(values) if v is not None), None)
+        if latest is None:
+            continue
+        last_row = group[-1]
+        results.append({
+            "Symbol": symbol,
+            "Sector": last_row["Sector"],
+            "LTP": last_row["LTP"],
+            "MetricValue": round(latest, 2),
+        })
+
+    results.sort(key=lambda r: r["MetricValue"], reverse=(direction == "DESC"))
+    return results[:limit]
 
 
 # ── Notification Preferences ──────────────────────────────────────────────────

@@ -53,6 +53,7 @@ const PaymentModal = ({ pkg, pricing, onClose, onDone }) => {
   useEffect(() => { firstFocusRef.current?.focus(); }, []);
 
   const price = (() => {
+    if (pkg.bundle_id) return pkg.price;
     const w = pricing?.weights ?? [];
     let total = 0;
     for (const m of pkg.medium) {
@@ -108,7 +109,7 @@ const PaymentModal = ({ pkg, pricing, onClose, onDone }) => {
         {step === 'confirm' && (
           <>
             <div style={{ background: colors.surface2, borderRadius: 4, padding: 14, marginBottom: 16 }}>
-              <div style={{ color: colors.textSecondary, fontSize: 12, marginBottom: 8 }}>Package Summary</div>
+              <div style={{ color: colors.textSecondary, fontSize: 12, marginBottom: 8 }}>{pkg.bundleName ? `${pkg.bundleName} Package` : 'Package Summary'}</div>
               <div style={{ color: colors.textPrimary, fontSize: 13 }}>Channels: {pkg.medium.join(', ')}</div>
               {pkg.alert_channel && <div style={{ color: colors.textPrimary, fontSize: 13 }}>Price Alerts: up to {pkg.alert_cap}/day</div>}
               {pkg.digest_channel && <div style={{ color: colors.textPrimary, fontSize: 13 }}>Daily Digest: {pkg.digest_cadence}</div>}
@@ -152,7 +153,7 @@ const PaymentModal = ({ pkg, pricing, onClose, onDone }) => {
 
 export const SettingsPage = () => {
   const [prefs, setPrefs] = useState({ telegram_chat_id: '', whatsapp_number: '', email: '', web_push_subscription: null, channels_enabled: [] });
-  const [pkg, setPkg] = useState({ medium: [], alert_channel: true, digest_channel: true, alert_cap: 10, digest_cadence: 'daily' });
+  const [pkg, setPkg] = useState({ medium: [], alert_channel: true, digest_channel: true, alert_cap: 10, digest_cadence: 'daily', bundle_id: null });
   const [pricing, setPricing] = useState(null);
   const [saving, setSaving] = useState(false);
   const [showPayment, setShowPayment] = useState(false);
@@ -173,7 +174,15 @@ export const SettingsPage = () => {
     } finally { setSaving(false); }
   };
 
-  const toggleMedium = (m) => setPkg(p => ({ ...p, medium: p.medium.includes(m) ? p.medium.filter(x => x !== m) : [...p.medium, m] }));
+  const toggleMedium = (m) => setPkg(p => ({ ...p, medium: p.medium.includes(m) ? p.medium.filter(x => x !== m) : [...p.medium, m], bundle_id: null }));
+
+  const selectBundle = (b) => {
+    setPkg({
+      medium: b.medium ?? [], alert_channel: b.alert_channel, digest_channel: b.digest_channel,
+      alert_cap: b.alert_cap, digest_cadence: b.digest_cadence, bundle_id: b.id, price: b.price, bundleName: b.name,
+    });
+    setShowPayment(true);
+  };
   const toggleChannel = (m) => setPrefs(p => ({ ...p, channels_enabled: p.channels_enabled.includes(m) ? p.channels_enabled.filter(x => x !== m) : [...p.channels_enabled, m] }));
 
   return (
@@ -212,22 +221,22 @@ export const SettingsPage = () => {
 
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, marginBottom: 14 }}>
           <div>
-            <Toggle label="Price Alerts" checked={pkg.alert_channel} onChange={v => setPkg(p => ({ ...p, alert_channel: v }))} />
+            <Toggle label="Price Alerts" checked={pkg.alert_channel} onChange={v => setPkg(p => ({ ...p, alert_channel: v, bundle_id: null }))} />
             {pkg.alert_channel && (
               <div style={{ marginTop: 8 }}>
                 <div style={{ color: colors.textSecondary, fontSize: 11, marginBottom: 4 }}>Max alerts/day</div>
-                <input type="range" min={1} max={100} value={pkg.alert_cap} onChange={e => setPkg(p => ({ ...p, alert_cap: parseInt(e.target.value) }))}
+                <input type="range" min={1} max={100} value={pkg.alert_cap} onChange={e => setPkg(p => ({ ...p, alert_cap: parseInt(e.target.value), bundle_id: null }))}
                   style={{ width: '100%', accentColor: colors.accent }} />
                 <span style={{ color: colors.textPrimary, fontSize: 13 }}>{pkg.alert_cap}</span>
               </div>
             )}
           </div>
           <div>
-            <Toggle label="Daily Digest" checked={pkg.digest_channel} onChange={v => setPkg(p => ({ ...p, digest_channel: v }))} />
+            <Toggle label="Daily Digest" checked={pkg.digest_channel} onChange={v => setPkg(p => ({ ...p, digest_channel: v, bundle_id: null }))} />
             {pkg.digest_channel && (
               <div style={{ marginTop: 8 }}>
                 <div style={{ color: colors.textSecondary, fontSize: 11, marginBottom: 4 }}>Frequency</div>
-                <select value={pkg.digest_cadence} onChange={e => setPkg(p => ({ ...p, digest_cadence: e.target.value }))}
+                <select value={pkg.digest_cadence} onChange={e => setPkg(p => ({ ...p, digest_cadence: e.target.value, bundle_id: null }))}
                   style={{ background: colors.surface2, border: `1px solid ${colors.border}`, borderRadius: 3, color: colors.textPrimary, padding: '6px 10px', fontSize: 13 }}>
                   <option value="daily">Daily</option>
                   <option value="alternate">Every 2 days</option>
@@ -258,10 +267,11 @@ export const SettingsPage = () => {
             <div style={{ color: colors.textSecondary, fontSize: 12, marginBottom: 8 }}>Or choose a bundle</div>
             <div style={{ display: 'flex', gap: 8 }}>
               {pricing.bundles.map(b => (
-                <div key={b.name} style={{ background: colors.surface2, border: `1px solid ${colors.border}`, borderRadius: 4, padding: '10px 14px', minWidth: 120 }}>
+                <button key={b.id} onClick={() => selectBundle(b)}
+                  style={{ background: colors.surface2, border: `1px solid ${colors.border}`, borderRadius: 4, padding: '10px 14px', minWidth: 120, cursor: 'pointer', textAlign: 'left' }}>
                   <div style={{ color: colors.textPrimary, fontSize: 13, fontWeight: 600 }}>{b.name}</div>
                   <div style={{ color: colors.accent, fontSize: 16, fontWeight: 700, marginTop: 4 }}>৳{b.price}/mo</div>
-                </div>
+                </button>
               ))}
             </div>
           </div>

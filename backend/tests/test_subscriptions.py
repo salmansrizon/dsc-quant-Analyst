@@ -1,4 +1,4 @@
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch, MagicMock, ANY
 import pytest
 from fastapi.testclient import TestClient
 from backend.api import app
@@ -64,6 +64,21 @@ def test_create_subscription_returns_pending_status(client, user_token, mock_use
     data = resp.json()
     assert data["status"] == "pending"
     assert "id" in data
+
+
+# ── Behavior 1b: a subscription created from a Package records its origin ─────
+
+def test_create_subscription_forwards_bundle_id(client, user_token, mock_user):
+    fake_sub = {"id": "sub-123", "status": "pending", "user_id": USER_ID}
+    with patch("backend.user_service.get_user_by_id", return_value=mock_user), \
+         patch("backend.bq_service.create_subscription", return_value=fake_sub) as mock_create:
+        resp = client.post(
+            "/api/subscriptions",
+            json={**PACKAGE, "bundle_id": "bundle-1"},
+            headers={"Authorization": f"Bearer {user_token}"},
+        )
+    assert resp.status_code == 200
+    mock_create.assert_called_once_with(ANY, {**PACKAGE, "bundle_id": "bundle-1"})
 
 
 # ── Behavior 2: attach transaction ID ────────────────────────────────────────

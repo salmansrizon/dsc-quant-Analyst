@@ -8,7 +8,7 @@ from .auth import create_access_token, verify_password, get_current_user, requir
 from .models import (
     UserCreate, UserLogin, UserResponse, TokenResponse,
     WatchlistAdd, PortfolioAdd, PortfolioUpdate, AlertCreate,
-    SubscriptionCreate, NotificationPreferences,
+    SubscriptionCreate, NotificationPreferences, BundleCreate,
 )
 from .user_service import (
     create_user, get_user_by_email, get_user_credentials,
@@ -92,6 +92,32 @@ def sectors():
     return bq_service.list_sectors()
 
 
+@app.get("/api/market/sectors/breakdown")
+def sectors_breakdown():
+    return bq_service.sector_breakdown()
+
+
+@app.get("/api/market/strength")
+def market_strength():
+    return bq_service.market_strength()
+
+
+@app.get("/api/market/extremes")
+def extremes(
+    metric: str = Query(pattern="^(pe_low|pe_high|director_holding_low|director_holding_high|nav_price_low|nav_price_high)$"),
+    limit: int = Query(default=10, le=50),
+):
+    return bq_service.extremes_leaderboard(metric=metric, limit=limit)
+
+
+@app.get("/api/market/technical-extremes")
+def technical_extremes(
+    metric: str = Query(pattern="^(rsi_low|rsi_high|macd_low|macd_high|stochastic_low|stochastic_high)$"),
+    limit: int = Query(default=10, le=50),
+):
+    return bq_service.technical_extremes(metric=metric, limit=limit)
+
+
 @app.get("/api/market/stocks")
 def stocks(sector: str = None, search: str = None, limit: int = Query(default=500, le=5000)):
     return bq_service.list_stocks(sector=sector, search=search, limit=limit)
@@ -108,6 +134,11 @@ def stock_detail(symbol: str):
 @app.get("/api/market/top-movers")
 def top_movers(limit: int = Query(default=10, le=50)):
     return bq_service.top_movers(limit=limit)
+
+
+@app.get("/api/market/leaderboard")
+def leaderboard(metric: str = Query(pattern="^(value|gainer|loser|volume|trade)$"), limit: int = Query(default=10, le=50)):
+    return bq_service.leaderboard(metric=metric, limit=limit)
 
 
 @app.get("/api/market/price-history/{symbol}")
@@ -209,6 +240,26 @@ def subscription_pricing():
 @app.get("/api/admin/subscriptions")
 def admin_subscriptions_list(admin: UserResponse = Depends(require_admin)):
     return bq_service.list_subscriptions()
+
+
+@app.post("/api/admin/bundles")
+def admin_create_bundle(payload: BundleCreate, admin: UserResponse = Depends(require_admin)):
+    return bq_service.create_bundle(admin.id, payload.model_dump())
+
+
+@app.get("/api/admin/bundles")
+def admin_list_bundles(admin: UserResponse = Depends(require_admin)):
+    return bq_service.list_bundles()
+
+
+@app.put("/api/admin/bundles/{bundle_id}")
+def admin_update_bundle(bundle_id: str, payload: BundleCreate, admin: UserResponse = Depends(require_admin)):
+    return bq_service.update_bundle(bundle_id, payload.model_dump())
+
+
+@app.post("/api/admin/bundles/{bundle_id}/deactivate")
+def admin_deactivate_bundle(bundle_id: str, admin: UserResponse = Depends(require_admin)):
+    return bq_service.deactivate_bundle(bundle_id)
 
 
 @app.post("/api/admin/subscriptions/{subscription_id}/approve")

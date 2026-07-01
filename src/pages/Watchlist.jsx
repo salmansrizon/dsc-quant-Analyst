@@ -1,8 +1,8 @@
 import React, { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import apiClient from '../api/client';
 import { colors } from '../design';
 import { Plus, Trash2, Bell } from 'lucide-react';
-import { StockDrawer } from '../components/StockDrawer';
 import { useToast } from '../components/Toast';
 import { SymbolSearch, useMarketPrice } from '../components/SymbolSearch';
 
@@ -78,7 +78,7 @@ export const WatchlistPage = () => {
   const [newSymbol, setNewSymbol] = useState('');
   const [adding, setAdding] = useState(false);
   const [alertFor, setAlertFor] = useState(null);
-  const [drawerSymbol, setDrawerSymbol] = useState(null);
+  const navigate = useNavigate();
   const toast = useToast();
 
   const load = () => apiClient.get('/watchlist').then(d => setItems(Array.isArray(d) ? d : [])).catch(() => {});
@@ -143,7 +143,7 @@ export const WatchlistPage = () => {
           <div key={item.symbol}>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr auto', padding: '10px 16px', borderBottom: `1px solid ${colors.border}`, alignItems: 'center' }}>
               <button
-                onClick={() => setDrawerSymbol(item.symbol)}
+                onClick={() => navigate(`/stocks/${item.symbol}`)}
                 style={{ color: colors.accent, fontSize: 14, fontWeight: 600, background: 'none', border: 'none', cursor: 'pointer', textAlign: 'left', padding: 0 }}
               >
                 {item.symbol}
@@ -166,8 +166,6 @@ export const WatchlistPage = () => {
           </div>
         ))}
       </div>
-
-      {drawerSymbol && <StockDrawer symbol={drawerSymbol} onClose={() => setDrawerSymbol(null)} />}
     </div>
   );
 };

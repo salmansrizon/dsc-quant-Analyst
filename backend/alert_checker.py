@@ -1,12 +1,12 @@
 """
 Checks price alerts against latest market data and triggers notifications.
 """
-from utils.bigquery_helper import BigQueryHelper
 import pandas as pd
 from datetime import datetime, timezone
 
-from backend.notifications.messages import build_alert_message
-from backend.notifications.channels import send_telegram, send_whatsapp, send_web_push
+from .utils.bigquery_helper import BigQueryHelper
+from .notifications.messages import build_alert_message
+from .notifications.channels import send_telegram, send_whatsapp, send_web_push
 
 
 def _deliver_alert(row, ltp: float, prefs: dict):
@@ -21,6 +21,15 @@ def _deliver_alert(row, ltp: float, prefs: dict):
         send_whatsapp(prefs["whatsapp_number"], msg)
     if "web_push" in channels and prefs.get("web_push_subscription"):
         send_web_push(prefs["web_push_subscription"], {"title": f"Alert: {symbol}", "body": msg})
+
+
+def _fetch_alert_caps(bq) -> dict:
+    """Maps user_id -> alert_cap for users with an active subscription.
+    Users with no active subscription are absent (uncapped)."""
+    subs_table = bq._get_full_table_id("subscription_packages")
+    sql = f"SELECT user_id, alert_cap FROM `{subs_table}` WHERE status = 'active'"
+    rows = bq.client.query(sql).result()
+    return {row["user_id"]: row["alert_cap"] for row in rows}
 
 
 def check_alerts():
@@ -71,14 +80,20 @@ def check_alerts():
         print(f"Updated {len(triggered_ids)} alerts as triggered.")
 
         prefs_table = bq._get_full_table_id("notification_preferences")
+        alert_caps = _fetch_alert_caps(bq)
+        delivered_count = {}
         for row, ltp in triggered_rows:
             user_id = row.get("user_id", "")
+            cap = alert_caps.get(user_id)
+            if cap is not None and delivered_count.get(user_id, 0) >= cap:
+                continue
             try:
                 prefs_rows = list(bq.client.query(
                     f"SELECT * FROM `{prefs_table}` WHERE user_id = '{user_id}' LIMIT 1"
                 ).result())
                 prefs = dict(prefs_rows[0]) if prefs_rows else {}
                 _deliver_alert(row, ltp, prefs)
+                delivered_count[user_id] = delivered_count.get(user_id, 0) + 1
             except Exception as e:
                 print(f"Notification failed for user {user_id}: {e}")
 

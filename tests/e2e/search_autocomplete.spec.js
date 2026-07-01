@@ -15,22 +15,24 @@ test.describe('Topbar symbol search autocomplete', () => {
     await expect(page.getByRole('button', { name: /BRACBANK/ })).toBeVisible({ timeout: 8000 });
   });
 
-  test('clicking a suggestion opens the stock drawer', async ({ page }) => {
+  test('clicking a suggestion navigates to the Stock Profile page', async ({ page }) => {
     const searchInput = page.locator('input[placeholder*="Search"]');
     await expect(searchInput).toBeVisible({ timeout: 10000 });
     await searchInput.fill('brac');
     const suggestion = page.getByRole('button', { name: /BRACBANK/ });
     await expect(suggestion).toBeVisible({ timeout: 8000 });
     await suggestion.click();
+    await expect(page).toHaveURL(/\/stocks\/BRACBANK/i);
     await expect(page.getByText('Set Price Alert')).toBeVisible({ timeout: 10000 });
   });
 
-  test('Enter on a matched query opens the first match', async ({ page }) => {
+  test('Enter on a matched query navigates to the first match', async ({ page }) => {
     const searchInput = page.locator('input[placeholder*="Search"]');
     await expect(searchInput).toBeVisible({ timeout: 10000 });
     await searchInput.fill('bracbank');
     await expect(page.getByRole('button', { name: /BRACBANK/ })).toBeVisible({ timeout: 8000 });
     await searchInput.press('Enter');
+    await expect(page).toHaveURL(/\/stocks\/BRACBANK/i);
     await expect(page.getByText('Set Price Alert')).toBeVisible({ timeout: 10000 });
   });
 

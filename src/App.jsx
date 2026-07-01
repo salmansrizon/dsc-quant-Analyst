@@ -14,6 +14,7 @@ import { WatchlistPage } from './pages/Watchlist';
 import { PortfolioPage } from './pages/Portfolio';
 import { AlertsPage } from './pages/Alerts';
 import { SettingsPage } from './pages/Settings';
+import { StockProfilePage } from './pages/StockProfile';
 import { colors } from './design';
 
 const Shell = ({ children }) => (
@@ -47,6 +48,7 @@ export default function App() {
                     <Route path="/watchlist" element={<WatchlistPage />} />
                     <Route path="/portfolio" element={<PortfolioPage />} />
                     <Route path="/alerts" element={<AlertsPage />} />
+                    <Route path="/stocks/:symbol" element={<StockProfilePage />} />
                     <Route path="/settings" element={<SettingsPage />} />
                     <Route
                       path="/admin/*"

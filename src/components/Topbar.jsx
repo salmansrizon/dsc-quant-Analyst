@@ -1,21 +1,21 @@
 import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { LogOut, Sun, Moon } from 'lucide-react';
 import { colors } from '../design';
-import { StockDrawer } from './StockDrawer';
 import { SymbolSearch } from './SymbolSearch';
 import { useTheme } from '../context/ThemeContext';
 
 export const Topbar = () => {
   const { user, logout } = useAuth();
   const { theme, toggleTheme } = useTheme();
+  const navigate = useNavigate();
   const [query, setQuery] = useState('');
-  const [drawerSymbol, setDrawerSymbol] = useState(null);
 
   const openSymbol = (sym) => {
     const symbol = (sym || '').trim().toUpperCase();
     if (!symbol) return;
-    setDrawerSymbol(symbol);
+    navigate(`/stocks/${symbol}`);
     setQuery('');
   };
 
@@ -49,7 +49,6 @@ export const Topbar = () => {
           </button>
         </div>
       </header>
-      {drawerSymbol && <StockDrawer symbol={drawerSymbol} onClose={() => setDrawerSymbol(null)} />}
     </>
   );
 };

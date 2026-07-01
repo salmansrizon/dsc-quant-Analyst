@@ -1,5 +1,5 @@
 from unittest.mock import patch, MagicMock
-from backend.notifications.messages import build_alert_message
+from backend.notifications.messages import build_alert_message, build_digest_message
 from backend.notifications.channels import send_telegram
 
 
@@ -35,6 +35,21 @@ def test_send_telegram_posts_to_correct_url():
     payload = call_kwargs[1]["json"]
     assert payload["chat_id"] == "99999"
     assert payload["text"] == "Test alert"
+
+
+# ── Behavior 7: build_digest_message produces a non-empty summary ─────────────
+
+def test_digest_message_contains_portfolio_pnl_and_gainer_loser_symbols():
+    msg = build_digest_message(
+        portfolio_pnl=1250.75,
+        top_gainers=[{"Symbol": "ACI", "ChangePct": 8.2}],
+        top_losers=[{"Symbol": "BRAC", "ChangePct": -5.1}],
+    )
+    assert isinstance(msg, str)
+    assert len(msg) > 0
+    assert "1250.75" in msg
+    assert "ACI" in msg
+    assert "BRAC" in msg
 
 
 def test_send_telegram_returns_false_without_token():

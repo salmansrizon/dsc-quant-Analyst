@@ -1,8 +1,381 @@
 import React, { useEffect, useState } from 'react';
-import { BarChart, Bar, XAxis, YAxis, Tooltip, Cell, ResponsiveContainer } from 'recharts';
-import { TrendingUp, TrendingDown } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { BarChart, Bar, XAxis, YAxis, Tooltip, Cell, ResponsiveContainer, PieChart as RechartsPieChart, Pie } from 'recharts';
+import { TrendingUp, TrendingDown, Clock } from 'lucide-react';
 import apiClient from '../api/client';
 import { colors } from '../design';
+
+const SymbolButton = ({ symbol, style }) => {
+  const navigate = useNavigate();
+  return (
+    <button
+      onClick={() => navigate(`/stocks/${symbol}`)}
+      style={{ color: colors.textPrimary, fontWeight: 600, background: 'none', border: 'none', cursor: 'pointer', padding: 0, textAlign: 'left', ...style }}
+    >
+      {symbol}
+    </button>
+  );
+};
+
+const LEADERBOARD_TABS = [
+  { key: 'value', label: 'Top Value' },
+  { key: 'gainer', label: 'Top Gainer' },
+  { key: 'loser', label: 'Top Loser' },
+  { key: 'volume', label: 'Top Volume' },
+  { key: 'trade', label: 'Top Trade' },
+];
+
+const Tab = ({ active, ...props }) => (
+  <button style={{
+    padding: '8px 16px', fontSize: 13, fontWeight: 500, cursor: 'pointer', border: 'none', borderRadius: '3px 3px 0 0',
+    background: active ? colors.surface : 'transparent',
+    color: active ? colors.textPrimary : colors.textSecondary,
+    borderBottom: active ? `2px solid ${colors.accent}` : '2px solid transparent',
+  }} {...props} />
+);
+
+const LeaderboardRow = ({ row }) => {
+  const changePct = row.ChangePct != null ? parseFloat(row.ChangePct) : null;
+  const positive = changePct != null && changePct >= 0;
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 0', borderBottom: `1px solid ${colors.border}`, fontSize: 13 }}>
+      <SymbolButton symbol={row.Symbol} style={{ fontSize: 13, flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} />
+      <span style={{ color: colors.textSecondary, fontSize: 12, flexShrink: 0 }}>{row.Sector}</span>
+      <span style={{ color: colors.textPrimary, fontVariantNumeric: 'tabular-nums', flexShrink: 0 }}>
+        {row.LTP != null ? `৳${parseFloat(row.LTP).toFixed(2)}` : '—'}
+      </span>
+      {changePct != null && (
+        <span className={`ds-badge ${positive ? 'ds-badge-green' : 'ds-badge-red'}`}>
+          {positive ? '+' : ''}{changePct.toFixed(2)}%
+        </span>
+      )}
+    </div>
+  );
+};
+
+const LeaderboardWidget = () => {
+  const [tab, setTab] = useState('value');
+  const [rows, setRows] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    setLoading(true);
+    apiClient.get(`/market/leaderboard?metric=${tab}&limit=10`)
+      .then(d => setRows(Array.isArray(d) ? d : []))
+      .catch(() => setRows([]))
+      .finally(() => setLoading(false));
+  }, [tab]);
+
+  return (
+    <div className="ds-card" style={{ padding: 20, display: 'flex', flexDirection: 'column' }}>
+      <div style={{ display: 'flex', gap: 4, borderBottom: `1px solid ${colors.border}`, marginBottom: 4 }}>
+        {LEADERBOARD_TABS.map(t => (
+          <Tab key={t.key} active={tab === t.key} onClick={() => setTab(t.key)}>{t.label}</Tab>
+        ))}
+      </div>
+      <div data-testid="leaderboard-list">
+        {loading ? (
+          <div className="skeleton" style={{ height: 160, marginTop: 12 }} />
+        ) : rows.length === 0 ? (
+          <div style={{ color: colors.textSecondary, fontSize: 13, padding: 24, textAlign: 'center' }}>No data</div>
+        ) : (
+          rows.map(r => <LeaderboardRow key={r.Symbol} row={r} />)
+        )}
+      </div>
+    </div>
+  );
+};
+
+const EXTREMES_TABS = [
+  { key: 'pe_low', label: 'Lowest PE' },
+  { key: 'pe_high', label: 'Highest PE' },
+  { key: 'director_holding_low', label: 'Lowest Director Hold.' },
+  { key: 'director_holding_high', label: 'Highest Director Hold.' },
+  { key: 'nav_price_low', label: 'Lowest NAV/Price' },
+  { key: 'nav_price_high', label: 'Highest NAV/Price' },
+];
+
+const ExtremesRow = ({ row }) => (
+  <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 0', borderBottom: `1px solid ${colors.border}`, fontSize: 13 }}>
+    <SymbolButton symbol={row.Symbol} style={{ fontSize: 13, flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} />
+    <span style={{ color: colors.textSecondary, fontSize: 12, flexShrink: 0 }}>{row.Sector}</span>
+    <span style={{ color: colors.textPrimary, fontVariantNumeric: 'tabular-nums', flexShrink: 0 }}>
+      {row.LTP != null ? `৳${parseFloat(row.LTP).toFixed(2)}` : '—'}
+    </span>
+    <span style={{ color: colors.textPrimary, fontVariantNumeric: 'tabular-nums', flexShrink: 0, fontWeight: 600 }}>
+      {row.MetricValue != null ? parseFloat(row.MetricValue).toFixed(2) : '—'}
+    </span>
+  </div>
+);
+
+const FundamentalExtremesWidget = () => {
+  const [tab, setTab] = useState('pe_low');
+  const [rows, setRows] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    setLoading(true);
+    apiClient.get(`/market/extremes?metric=${tab}&limit=10`)
+      .then(d => setRows(Array.isArray(d) ? d : []))
+      .catch(() => setRows([]))
+      .finally(() => setLoading(false));
+  }, [tab]);
+
+  return (
+    <div className="ds-card" style={{ padding: 20, display: 'flex', flexDirection: 'column' }}>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, borderBottom: `1px solid ${colors.border}`, marginBottom: 4 }}>
+        {EXTREMES_TABS.map(t => (
+          <Tab key={t.key} active={tab === t.key} onClick={() => setTab(t.key)}>{t.label}</Tab>
+        ))}
+      </div>
+      <div data-testid="extremes-list">
+        {loading ? (
+          <div className="skeleton" style={{ height: 160, marginTop: 12 }} />
+        ) : rows.length === 0 ? (
+          <div style={{ color: colors.textSecondary, fontSize: 13, padding: 24, textAlign: 'center' }}>No data</div>
+        ) : (
+          rows.map(r => <ExtremesRow key={r.Symbol} row={r} />)
+        )}
+      </div>
+    </div>
+  );
+};
+
+const TECHNICAL_EXTREMES_TABS = [
+  { key: 'rsi_low', label: 'Lowest RSI' },
+  { key: 'rsi_high', label: 'Highest RSI' },
+  { key: 'macd_low', label: 'Lowest MACD' },
+  { key: 'macd_high', label: 'Highest MACD' },
+  { key: 'stochastic_low', label: 'Lowest Stochastic' },
+  { key: 'stochastic_high', label: 'Highest Stochastic' },
+];
+
+const TechnicalExtremesWidget = () => {
+  const [tab, setTab] = useState('rsi_low');
+  const [rows, setRows] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    setLoading(true);
+    apiClient.get(`/market/technical-extremes?metric=${tab}&limit=10`)
+      .then(d => setRows(Array.isArray(d) ? d : []))
+      .catch(() => setRows([]))
+      .finally(() => setLoading(false));
+  }, [tab]);
+
+  return (
+    <div className="ds-card" style={{ padding: 20, display: 'flex', flexDirection: 'column' }}>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, borderBottom: `1px solid ${colors.border}`, marginBottom: 4 }}>
+        {TECHNICAL_EXTREMES_TABS.map(t => (
+          <Tab key={t.key} active={tab === t.key} onClick={() => setTab(t.key)}>{t.label}</Tab>
+        ))}
+      </div>
+      <div data-testid="technical-extremes-list">
+        {loading ? (
+          <div className="skeleton" style={{ height: 160, marginTop: 12 }} />
+        ) : rows.length === 0 ? (
+          <div style={{ color: colors.textSecondary, fontSize: 13, padding: 24, textAlign: 'center' }}>No data</div>
+        ) : (
+          rows.map(r => <ExtremesRow key={r.Symbol} row={r} />)
+        )}
+      </div>
+    </div>
+  );
+};
+
+const SENTIMENT_BADGE_CLASS = {
+  Positive: 'ds-badge-green',
+  Negative: 'ds-badge-red',
+};
+
+const AnnouncementRow = ({ row }) => (
+  <div style={{ padding: '10px 0', borderBottom: `1px solid ${colors.border}` }}>
+    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+      <SymbolButton symbol={row.Symbol} style={{ fontSize: 13 }} />
+      <span style={{ color: colors.textSecondary, fontSize: 11 }}>{row.Announcement_Type}</span>
+      {row.Sentiment && (
+        <span className={`ds-badge ${SENTIMENT_BADGE_CLASS[row.Sentiment] || ''}`}>{row.Sentiment}</span>
+      )}
+      <span style={{ color: colors.textSecondary, fontSize: 11, marginLeft: 'auto' }}>{row.Date}</span>
+    </div>
+    <div style={{ color: colors.textSecondary, fontSize: 13 }}>{row.Details}</div>
+  </div>
+);
+
+const AnnouncementsWidget = () => {
+  const [rows, setRows] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    apiClient.get('/market/announcements?limit=20')
+      .then(d => setRows(Array.isArray(d) ? d : []))
+      .catch(() => setRows([]))
+      .finally(() => setLoading(false));
+  }, []);
+
+  return (
+    <div className="ds-card" style={{ padding: 20, display: 'flex', flexDirection: 'column' }}>
+      <div style={{ color: colors.textPrimary, fontSize: 14, fontWeight: 600, marginBottom: 8 }}>News & Announcements</div>
+      <div data-testid="announcements-feed" style={{ maxHeight: 360, overflowY: 'auto' }}>
+        {loading ? (
+          <div className="skeleton" style={{ height: 160 }} />
+        ) : rows.length === 0 ? (
+          <div style={{ color: colors.textSecondary, fontSize: 13, padding: 24, textAlign: 'center' }}>No announcements</div>
+        ) : (
+          rows.map((r, i) => <AnnouncementRow key={`${r.Symbol}-${r.Date}-${i}`} row={r} />)
+        )}
+      </div>
+    </div>
+  );
+};
+
+const SECTOR_TABS = [
+  { key: 'pe', label: 'Sector PE' },
+  { key: 'trade_value', label: 'Trade Value' },
+  { key: 'gainer_loser', label: 'Gainer / Loser' },
+];
+
+const SectorTooltip = ({ active, payload, label }) => {
+  if (!active || !payload?.length) return null;
+  return (
+    <div style={{
+      background: colors.surface2, border: `1px solid ${colors.border}`,
+      borderRadius: 8, padding: '10px 14px', fontSize: 12, boxShadow: 'var(--shadow-md)',
+    }}>
+      <div style={{ color: colors.textSecondary, marginBottom: 4 }}>{label}</div>
+      {payload.map(p => (
+        <div key={p.dataKey} style={{ color: p.fill, fontWeight: 600 }}>
+          {p.name}: {Number(p.value).toLocaleString()}
+        </div>
+      ))}
+    </div>
+  );
+};
+
+const SectorInsightsWidget = () => {
+  const [tab, setTab] = useState('pe');
+  const [sectors, setSectors] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    apiClient.get('/market/sectors/breakdown')
+      .then(d => setSectors(Array.isArray(d) ? d : []))
+      .catch(() => setSectors([]))
+      .finally(() => setLoading(false));
+  }, []);
+
+  return (
+    <div className="ds-card" style={{ padding: 20, display: 'flex', flexDirection: 'column' }}>
+      <div style={{ display: 'flex', gap: 4, borderBottom: `1px solid ${colors.border}`, marginBottom: 4 }}>
+        {SECTOR_TABS.map(t => (
+          <Tab key={t.key} active={tab === t.key} onClick={() => setTab(t.key)}>{t.label}</Tab>
+        ))}
+      </div>
+      <div data-testid="sector-insights-chart" style={{ height: 220, marginTop: 8 }}>
+        {loading ? (
+          <div className="skeleton" style={{ height: '100%' }} />
+        ) : sectors.length === 0 ? (
+          <div style={{ color: colors.textSecondary, fontSize: 13, padding: 24, textAlign: 'center' }}>No data</div>
+        ) : (
+          <ResponsiveContainer width="100%" height="100%">
+            <BarChart data={sectors} barCategoryGap="28%">
+              <XAxis dataKey="Sector" tick={{ fill: 'var(--color-text-secondary)', fontSize: 10 }} axisLine={false} tickLine={false} interval={0} angle={-35} textAnchor="end" height={56} />
+              <YAxis tick={{ fill: 'var(--color-text-secondary)', fontSize: 11 }} axisLine={false} tickLine={false} width={44} />
+              <Tooltip content={<SectorTooltip />} cursor={{ fill: 'var(--color-accent-subtle)' }} />
+              {tab === 'pe' && <Bar dataKey="AvgPE" name="Avg PE" radius={[5, 5, 0, 0]} fill="var(--color-accent)" />}
+              {tab === 'trade_value' && <Bar dataKey="TotalTradeValue" name="Trade Value" radius={[5, 5, 0, 0]} fill="var(--color-accent)" />}
+              {tab === 'gainer_loser' && (
+                <>
+                  <Bar dataKey="GainersCount" name="Gainers" stackId="gl" fill="var(--color-green)" />
+                  <Bar dataKey="LosersCount" name="Losers" stackId="gl" radius={[5, 5, 0, 0]} fill="var(--color-red)" />
+                </>
+              )}
+            </BarChart>
+          </ResponsiveContainer>
+        )}
+      </div>
+    </div>
+  );
+};
+
+const StrengthMeter = ({ gainers, losers, unchanged }) => {
+  const total = gainers + losers + unchanged || 1;
+  const gPct = (gainers / total) * 100;
+  const lPct = (losers / total) * 100;
+  const uPct = (unchanged / total) * 100;
+  return (
+    <div data-testid="strength-meter">
+      <div style={{ display: 'flex', height: 14, borderRadius: 7, overflow: 'hidden' }}>
+        <div style={{ width: `${gPct}%`, background: 'var(--color-green)' }} />
+        <div style={{ width: `${uPct}%`, background: 'var(--color-yellow)' }} />
+        <div style={{ width: `${lPct}%`, background: 'var(--color-red)' }} />
+      </div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 10, fontSize: 12 }}>
+        <span style={{ color: 'var(--color-green)' }}>{gainers} Gainers</span>
+        <span style={{ color: colors.textSecondary }}>{unchanged} Unchanged</span>
+        <span style={{ color: 'var(--color-red)' }}>{losers} Losers</span>
+      </div>
+    </div>
+  );
+};
+
+const STRENGTH_PIE_DATA = (gainers, losers, unchanged) => ([
+  { name: 'Gainers', value: gainers, fill: 'var(--color-green)' },
+  { name: 'Losers', value: losers, fill: 'var(--color-red)' },
+  { name: 'Unchanged', value: unchanged, fill: 'var(--color-yellow)' },
+]);
+
+const StrengthPie = ({ gainers, losers, unchanged }) => {
+  const data = STRENGTH_PIE_DATA(gainers, losers, unchanged);
+  return (
+    <div data-testid="strength-pie" style={{ height: 180 }}>
+      <ResponsiveContainer width="100%" height="100%">
+        <RechartsPieChart>
+          <Pie data={data} dataKey="value" nameKey="name" innerRadius={40} outerRadius={70} paddingAngle={2}>
+            {data.map((d, i) => <Cell key={i} fill={d.fill} />)}
+          </Pie>
+          <Tooltip />
+        </RechartsPieChart>
+      </ResponsiveContainer>
+    </div>
+  );
+};
+
+const MarketStrengthWidget = () => {
+  const [view, setView] = useState('meter');
+  const [composition, setComposition] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    apiClient.get('/market/strength')
+      .then(d => setComposition(d))
+      .catch(() => setComposition(null))
+      .finally(() => setLoading(false));
+  }, []);
+
+  const gainers = composition?.Gainers ?? 0;
+  const losers = composition?.Losers ?? 0;
+  const unchanged = composition?.Unchanged ?? 0;
+
+  return (
+    <div className="ds-card" data-testid="market-strength-widget" style={{ padding: 20, display: 'flex', flexDirection: 'column' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
+        <div style={{ color: colors.textPrimary, fontSize: 14, fontWeight: 600 }}>Market Strength</div>
+        <div style={{ display: 'flex', gap: 4 }}>
+          <Tab active={view === 'meter'} onClick={() => setView('meter')}>Meter</Tab>
+          <Tab active={view === 'pie'} onClick={() => setView('pie')}>Pie</Tab>
+        </div>
+      </div>
+      {loading ? (
+        <div className="skeleton" style={{ height: 60 }} />
+      ) : view === 'meter' ? (
+        <StrengthMeter gainers={gainers} losers={losers} unchanged={unchanged} />
+      ) : (
+        <StrengthPie gainers={gainers} losers={losers} unchanged={unchanged} />
+      )}
+    </div>
+  );
+};
 
 const StatCard = ({ label, value, sub }) => (
   <div className="stat-card" style={{ flex: 1 }}>
@@ -121,9 +494,33 @@ export const DashboardPage = () => {
           <StatCard
             label="Turnover"
             value={summary?.total_turnover != null ? `৳${(parseFloat(summary.total_turnover) / 1e7).toFixed(1)}Cr` : '—'}
-            sub={summary?.last_updated ? `Updated ${summary.last_updated}` : null}
           />
         </div>
+
+        {summary?.last_updated && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: colors.textSecondary, fontSize: 12 }}>
+            <Clock size={12} aria-hidden="true" />
+            Market data last refreshed {summary.last_updated}
+          </div>
+        )}
+
+        {/* Market strength */}
+        <MarketStrengthWidget />
+
+        {/* Leaderboard */}
+        <LeaderboardWidget />
+
+        {/* Sector insights */}
+        <SectorInsightsWidget />
+
+        {/* Fundamental extremes */}
+        <FundamentalExtremesWidget />
+
+        {/* Technical extremes */}
+        <TechnicalExtremesWidget />
+
+        {/* News & announcements */}
+        <AnnouncementsWidget />
 
         {/* Holdings chart */}
         <div className="ds-card" style={{ flex: 1, padding: 20, display: 'flex', flexDirection: 'column' }}>

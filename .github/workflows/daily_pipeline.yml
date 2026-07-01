@@ -55,12 +55,3 @@ jobs:
           BIGQUERY_DATASET_ID: ${{ secrets.BIGQUERY_DATASET_ID }}
         run: python refresh_cache.py
         continue-on-error: true
-
-      - name: Check price alerts
-        working-directory: backend
-        env:
-          GOOGLE_APPLICATION_CREDENTIALS: ${{ secrets.GOOGLE_APPLICATION_CREDENTIALS }}
-          BIGQUERY_PROJECT_ID: ${{ secrets.BIGQUERY_PROJECT_ID }}
-          BIGQUERY_DATASET_ID: ${{ secrets.BIGQUERY_DATASET_ID }}
-        run: python alert_checker.py
-        continue-on-error: true

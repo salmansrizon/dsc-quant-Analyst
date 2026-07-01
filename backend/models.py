@@ -112,6 +112,17 @@ class SubscriptionCreate(BaseModel):
     digest_channel: bool
     alert_cap: int
     digest_cadence: str = Field(..., pattern="^(daily|alternate|weekly)$")
+    bundle_id: Optional[str] = None
+
+
+class BundleCreate(BaseModel):
+    name: str
+    medium: list[str]
+    alert_channel: bool
+    digest_channel: bool
+    alert_cap: int
+    digest_cadence: str = Field(..., pattern="^(daily|alternate|weekly)$")
+    price: float
 
 
 # ─── Notification Preferences ─────────────────────────────────────────────────

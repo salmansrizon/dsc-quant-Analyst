@@ -1,6 +1,5 @@
 import os
 import uuid
-import pandas as pd
 from datetime import datetime, timezone
 from google.cloud import bigquery
 from dotenv import load_dotenv
@@ -19,20 +18,22 @@ def _full_id(table: str) -> str:
     return f"`{PROJECT}.{DATASET}.{table}`"
 
 
+def _to_json_row(row: dict) -> dict:
+    return {k: v.isoformat() if hasattr(v, "isoformat") else v for k, v in row.items()}
+
+
 def _insert_rows(table: str, rows: list[dict]):
     """Insert rows via load job (free tier eligible)."""
     if not rows:
         return
-    df = pd.DataFrame(rows)
     full = f"{PROJECT}.{DATASET}.{table}"
-    job = bq.load_table_from_dataframe(
-        df, full,
+    bq.load_table_from_json(
+        [_to_json_row(r) for r in rows], full,
         job_config=bigquery.LoadJobConfig(
             write_disposition=bigquery.WriteDisposition.WRITE_APPEND,
             schema_update_options=[bigquery.SchemaUpdateOption.ALLOW_FIELD_ADDITION],
         )
-    )
-    job.result()
+    ).result()
 
 
 def _replace_table(table: str, rows: list[dict]):
@@ -40,13 +41,11 @@ def _replace_table(table: str, rows: list[dict]):
     a DML UPDATE, which requires a billing account on the BigQuery project."""
     if not rows:
         return
-    df = pd.DataFrame(rows)
     full = f"{PROJECT}.{DATASET}.{table}"
-    job = bq.load_table_from_dataframe(
-        df, full,
+    bq.load_table_from_json(
+        [_to_json_row(r) for r in rows], full,
         job_config=bigquery.LoadJobConfig(write_disposition=bigquery.WriteDisposition.WRITE_TRUNCATE)
-    )
-    job.result()
+    ).result()
 
 
 # ── Market Data ──────────────────────────────────────────────────────────────

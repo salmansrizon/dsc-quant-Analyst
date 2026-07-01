@@ -1,5 +1,4 @@
 import uuid
-import pandas as pd
 from datetime import datetime, timezone
 from typing import Optional
 from google.cloud import bigquery
@@ -18,13 +17,19 @@ def _uid(table: str) -> str:
     return f"`{PROJECT}.{DATASET}.{table}`"
 
 
+def _row_to_json(row: dict) -> dict:
+    return {k: v.isoformat() if hasattr(v, "isoformat") else v for k, v in row.items()}
+
+
 def _insert_user_row(row: dict):
-    df = pd.DataFrame([row])
     full = f"{PROJECT}.{DATASET}.users"
-    bq.load_table_from_dataframe(df, full, job_config=bigquery.LoadJobConfig(
-        write_disposition=bigquery.WriteDisposition.WRITE_APPEND,
-        schema_update_options=[bigquery.SchemaUpdateOption.ALLOW_FIELD_ADDITION],
-    )).result()
+    bq.load_table_from_json(
+        [_row_to_json(row)], full,
+        job_config=bigquery.LoadJobConfig(
+            write_disposition=bigquery.WriteDisposition.WRITE_APPEND,
+            schema_update_options=[bigquery.SchemaUpdateOption.ALLOW_FIELD_ADDITION],
+        )
+    ).result()
 
 
 def create_user(payload) -> UserResponse:
@@ -142,6 +147,7 @@ def list_users():
 def update_user(user_id: str, updates: dict):
     rows = list(bq.query(f"SELECT * FROM {_uid('users')}").result())
     now = datetime.now(timezone.utc)
+    updated = []
     for r in rows:
         d = dict(r)
         if d["id"] == user_id:
@@ -149,18 +155,20 @@ def update_user(user_id: str, updates: dict):
                 if col in updates:
                     d[col] = updates[col]
             d["updated_at"] = now
-    df = pd.DataFrame([dict(r) for r in rows])
+        updated.append(_row_to_json(d))
     full = f"{PROJECT}.{DATASET}.users"
-    bq.load_table_from_dataframe(df, full, job_config=bigquery.LoadJobConfig(
-        write_disposition=bigquery.WriteDisposition.WRITE_TRUNCATE,
-    )).result()
+    bq.load_table_from_json(
+        updated, full,
+        job_config=bigquery.LoadJobConfig(write_disposition=bigquery.WriteDisposition.WRITE_TRUNCATE)
+    ).result()
 
 
 def delete_user(user_id: str):
     rows = list(bq.query(f"SELECT * FROM {_uid('users')}").result())
-    remaining = [dict(r) for r in rows if r["id"] != user_id]
-    df = pd.DataFrame(remaining) if remaining else pd.DataFrame()
+    remaining = [_row_to_json(dict(r)) for r in rows if r["id"] != user_id]
     full = f"{PROJECT}.{DATASET}.users"
-    bq.load_table_from_dataframe(df, full, job_config=bigquery.LoadJobConfig(
-        write_disposition=bigquery.WriteDisposition.WRITE_TRUNCATE,
-    )).result()
+    if remaining:
+        bq.load_table_from_json(
+            remaining, full,
+            job_config=bigquery.LoadJobConfig(write_disposition=bigquery.WriteDisposition.WRITE_TRUNCATE)
+        ).result()

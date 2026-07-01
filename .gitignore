@@ -16,6 +16,11 @@ env/
 __pycache__/
 *.pyc
 
+# Python test coverage
+.coverage
+.coverage.*
+htmlcov/
+
 # Logs
 logs/
 *.log

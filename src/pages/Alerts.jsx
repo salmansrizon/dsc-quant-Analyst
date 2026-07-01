@@ -3,6 +3,7 @@ import apiClient from '../api/client';
 import { colors } from '../design';
 import { Plus, Trash2, CheckCircle, Clock } from 'lucide-react';
 import { useToast } from '../components/Toast';
+import { SymbolSearch, useMarketPrice } from '../components/SymbolSearch';
 
 const Input = ({ style, ...props }) => (
   <input style={{ background: colors.surface2, border: `1px solid ${colors.border}`, borderRadius: 3, color: colors.textPrimary, padding: '6px 10px', fontSize: 13, outline: 'none', ...style }} {...props} />
@@ -55,6 +56,7 @@ export const AlertsPage = () => {
   const [form, setForm] = useState({ symbol: '', target_price: '', direction: 'above' });
   const [adding, setAdding] = useState(false);
   const toast = useToast();
+  const marketPrice = useMarketPrice(form.symbol);
 
   const load = () => apiClient.get('/alerts').then(d => setAlerts(Array.isArray(d) ? d : [])).catch(() => {});
   useEffect(() => { load(); }, []);
@@ -82,14 +84,30 @@ export const AlertsPage = () => {
       </div>
 
       {/* Create form */}
-      <div style={{ background: colors.surface, border: `1px solid ${colors.border}`, borderRadius: 4, padding: 14, marginBottom: 16, display: 'flex', gap: 8, alignItems: 'flex-end' }}>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+      <div style={{ background: colors.surface, border: `1px solid ${colors.border}`, borderRadius: 4, padding: 14, marginBottom: 16, display: 'flex', gap: 8, alignItems: 'flex-end', flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 4, minWidth: 160 }}>
           <label style={{ color: colors.textSecondary, fontSize: 11 }}>Symbol</label>
-          <Input placeholder="ABBANK" value={form.symbol} onChange={e => setForm(f => ({ ...f, symbol: e.target.value }))} style={{ width: 120 }} />
+          <SymbolSearch
+            value={form.symbol}
+            onChange={v => setForm(f => ({ ...f, symbol: v }))}
+            onSelect={row => setForm(f => ({
+              ...f,
+              symbol: row.Symbol,
+              target_price: f.target_price || (row.LTP != null ? String(parseFloat(row.LTP)) : f.target_price),
+            }))}
+            placeholder="e.g. ABBANK"
+            showIcon
+          />
         </div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
           <label style={{ color: colors.textSecondary, fontSize: 11 }}>Target Price (৳)</label>
           <Input type="number" placeholder="50.00" value={form.target_price} onChange={e => setForm(f => ({ ...f, target_price: e.target.value }))} style={{ width: 120 }} />
+          {marketPrice != null && (
+            <button type="button" onClick={() => setForm(f => ({ ...f, target_price: String(marketPrice) }))}
+              style={{ alignSelf: 'flex-start', background: 'none', border: 'none', cursor: 'pointer', color: colors.accent, fontSize: 11, padding: 0 }}>
+              Use market price ৳{marketPrice.toFixed(2)}
+            </button>
+          )}
         </div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
           <label style={{ color: colors.textSecondary, fontSize: 11 }}>Direction</label>

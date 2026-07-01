@@ -308,6 +308,21 @@ def admin_delete_user(user_id: str, admin: UserResponse = Depends(require_admin)
     return {"status": "deleted"}
 
 
+# ── Bootstrap ────────────────────────────────────────────────────────────────
+
+@app.post("/api/admin/bootstrap-admin")
+def bootstrap_admin(email: str, secret: str):
+    import os
+    expected = os.environ.get("ADMIN_BOOTSTRAP_SECRET", "")
+    if not expected or secret != expected:
+        raise HTTPException(status_code=403, detail="Forbidden")
+    user = get_user_by_email(email)
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    update_user(user.id, {"role": "admin"})
+    return {"status": "promoted", "email": email}
+
+
 # ── Health ───────────────────────────────────────────────────────────────────
 
 @app.get("/health")

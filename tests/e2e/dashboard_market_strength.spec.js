@@ -1,10 +1,10 @@
-import { test, expect } from '@playwright/test';
+﻿import { test, expect } from '@playwright/test';
 import { ensureAccount } from './helpers.js';
 
 test.describe('Dashboard market strength widget', () => {
   test.beforeEach(async ({ page }) => {
     await ensureAccount(page);
-    await page.goto('http://localhost:5173/');
+    await page.goto('/');
   });
 
   test('shows a Strength Meter view by default', async ({ page }) => {

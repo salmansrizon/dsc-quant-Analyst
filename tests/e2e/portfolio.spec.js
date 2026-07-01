@@ -1,10 +1,10 @@
-import { test, expect } from '@playwright/test';
+﻿import { test, expect } from '@playwright/test';
 import { ensureAccount } from './helpers.js';
 
 test.describe('Portfolio page', () => {
   test.beforeEach(async ({ page }) => {
     await ensureAccount(page);
-    await page.goto('http://localhost:5173/portfolio');
+    await page.goto('/portfolio');
     await page.waitForTimeout(1500);
   });
 
@@ -47,7 +47,7 @@ test.describe('Portfolio page', () => {
     await inputs.nth(2).fill('100');      // quantity
     await page.locator('div[style*="fixed"] button').filter({ hasText: 'Add' }).click();
     await page.waitForTimeout(2000);
-    // Modal should close — verify by checking fixed overlay is gone
+    // Modal should close â€” verify by checking fixed overlay is gone
     await expect(page.locator('div[style*="fixed"][style*="rgba"]')).not.toBeVisible({ timeout: 5000 }).catch(() => {});
   });
 

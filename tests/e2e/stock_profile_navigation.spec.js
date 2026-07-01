@@ -1,10 +1,10 @@
-import { test, expect } from '@playwright/test';
+﻿import { test, expect } from '@playwright/test';
 import { ensureAccount } from './helpers.js';
 
 test.describe('Stock Profile navigation', () => {
   test.beforeEach(async ({ page }) => {
     await ensureAccount(page);
-    await page.goto('http://localhost:5173/watchlist');
+    await page.goto('/watchlist');
     // Add ABBANK to watchlist if not there
     await page.fill('input[placeholder*="Symbol"]', 'ABBANK');
     await page.getByRole('button', { name: /Add/ }).click();

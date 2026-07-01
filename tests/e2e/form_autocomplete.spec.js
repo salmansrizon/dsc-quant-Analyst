@@ -1,10 +1,10 @@
-import { test, expect } from '@playwright/test';
+﻿import { test, expect } from '@playwright/test';
 import { ensureAccount } from './helpers.js';
 
 test.describe('Watchlist add-form autocomplete', () => {
   test.beforeEach(async ({ page }) => {
     await ensureAccount(page);
-    await page.goto('http://localhost:5173/watchlist');
+    await page.goto('/watchlist');
   });
 
   test('typing in the add field shows symbol suggestions', async ({ page }) => {
@@ -36,14 +36,14 @@ test.describe('Watchlist add-form autocomplete', () => {
     await expect(bell).toBeVisible({ timeout: 8000 });
     await bell.click();
     // The market-price suggestion appears (LTP came from the API)
-    await expect(page.getByText(/Current market price ৳/).first()).toBeVisible({ timeout: 8000 });
+    await expect(page.getByText(/Current market price à§³/).first()).toBeVisible({ timeout: 8000 });
   });
 });
 
 test.describe('Portfolio add-position autocomplete & price suggestion', () => {
   test.beforeEach(async ({ page }) => {
     await ensureAccount(page);
-    await page.goto('http://localhost:5173/portfolio');
+    await page.goto('/portfolio');
     await page.waitForTimeout(1000);
     await page.getByRole('button', { name: /Add Position/ }).click();
     await expect(page.getByText('Add Position').first()).toBeVisible({ timeout: 5000 });
@@ -69,6 +69,6 @@ test.describe('Portfolio add-position autocomplete & price suggestion', () => {
   test('a "use market price" suggestion is offered for the buy price', async ({ page }) => {
     const modalInput = page.locator('div[role="dialog"] input').first();
     await modalInput.fill('ABBANK');
-    await expect(page.getByRole('button', { name: /Use market price ৳/ })).toBeVisible({ timeout: 8000 });
+    await expect(page.getByRole('button', { name: /Use market price à§³/ })).toBeVisible({ timeout: 8000 });
   });
 });

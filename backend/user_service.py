@@ -3,6 +3,7 @@ import pandas as pd
 from datetime import datetime, timezone
 from typing import Optional
 from google.cloud import bigquery
+from google.api_core.exceptions import NotFound
 from dotenv import load_dotenv
 from .utils import bigquery_helper  # noqa: F401 — bootstraps GOOGLE_APPLICATION_CREDENTIALS from GCP_SERVICE_ACCOUNT_JSON
 from .models import UserResponse
@@ -67,7 +68,10 @@ def get_user_by_email(email: str) -> Optional[UserResponse]:
         LIMIT 1
     """
     params = [bigquery.ScalarQueryParameter("email", "STRING", email.strip().lower())]
-    rows = list(bq.query(sql, job_config=bigquery.QueryJobConfig(query_parameters=params)).result())
+    try:
+        rows = list(bq.query(sql, job_config=bigquery.QueryJobConfig(query_parameters=params)).result())
+    except NotFound:
+        return None
     if not rows:
         return None
     r = dict(rows[0])
@@ -111,7 +115,10 @@ def get_user_credentials(email: str) -> Optional[dict]:
         LIMIT 1
     """
     params = [bigquery.ScalarQueryParameter("email", "STRING", email.strip().lower())]
-    rows = list(bq.query(sql, job_config=bigquery.QueryJobConfig(query_parameters=params)).result())
+    try:
+        rows = list(bq.query(sql, job_config=bigquery.QueryJobConfig(query_parameters=params)).result())
+    except NotFound:
+        return None
     if not rows:
         return None
     r = dict(rows[0])

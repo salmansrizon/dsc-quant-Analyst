@@ -1,10 +1,10 @@
-import { test, expect } from '@playwright/test';
+﻿import { test, expect } from '@playwright/test';
 import { ensureAccount } from './helpers.js';
 
 test.describe('Alerts page', () => {
   test.beforeEach(async ({ page }) => {
     await ensureAccount(page);
-    await page.goto('http://localhost:5173/alerts');
+    await page.goto('/alerts');
   });
 
   test('renders alerts page with create form and tabs', async ({ page }) => {
@@ -27,7 +27,7 @@ test.describe('Alerts page', () => {
   test('active tab shows content or empty state', async ({ page }) => {
     await page.getByRole('button', { name: /Active/ }).click();
     const empty = page.getByText('No active alerts');
-    const hasRows = await page.getByText('▲ Above').count() > 0 || await page.getByText('▼ Below').count() > 0;
+    const hasRows = await page.getByText('â–² Above').count() > 0 || await page.getByText('â–¼ Below').count() > 0;
     const hasEmpty = await empty.count() > 0;
     expect(hasRows || hasEmpty).toBe(true);
   });

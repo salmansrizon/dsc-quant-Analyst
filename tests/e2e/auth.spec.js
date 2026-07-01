@@ -1,6 +1,6 @@
-import { test, expect } from '@playwright/test';
+﻿import { test, expect } from '@playwright/test';
 
-const BASE = 'http://localhost:5173';
+const BASE = '';
 
 const TEST_EMAIL = `e2e_${Date.now()}@test.com`;
 const TEST_PASS = 'testpass123';
@@ -12,7 +12,7 @@ test.describe('Auth flow', () => {
     await page.goto(`${BASE}/login`);
     await expect(page).toHaveURL(/\/login/);
     await expect(page.locator('text=DSC Quant')).toBeVisible();
-    // heading is the div, button is the submit — check heading only
+    // heading is the div, button is the submit â€” check heading only
     await expect(page.locator('div:has-text("Sign In")').first()).toBeVisible();
     await expect(page.locator('button[type="submit"]')).toBeVisible();
   });
@@ -24,7 +24,7 @@ test.describe('Auth flow', () => {
     await page.fill('input[type="tel"]', TEST_PHONE);
     await page.fill('input[type="password"]', TEST_PASS);
     await page.click('button[type="submit"]');
-    await page.waitForURL(`${BASE}/`, { timeout: 15000 });
+    await page.waitForURL('**/', { timeout: 15000 });
     // Sidebar should be visible
     await expect(page.locator('text=DSC Quant').first()).toBeVisible({ timeout: 6000 });
   });
@@ -39,7 +39,7 @@ test.describe('Auth flow', () => {
     await page.fill('input[type="tel"]', '01700000097');
     await page.fill('input[type="password"]', TEST_PASS);
     await page.click('button[type="submit"]');
-    await page.waitForURL(`${BASE}/`, { timeout: 15000 });
+    await page.waitForURL('**/', { timeout: 15000 });
     // Now logout
     await page.locator('button').filter({ has: page.locator('svg') }).last().click();
     await page.waitForURL(/\/login/, { timeout: 8000 });
@@ -47,7 +47,7 @@ test.describe('Auth flow', () => {
     await page.fill('input[type="email"]', email2);
     await page.fill('input[type="password"]', TEST_PASS);
     await page.click('button[type="submit"]');
-    await page.waitForURL(`${BASE}/`, { timeout: 15000 });
+    await page.waitForURL('**/', { timeout: 15000 });
     await expect(page.locator('text=DSC Quant').first()).toBeVisible({ timeout: 6000 });
   });
 

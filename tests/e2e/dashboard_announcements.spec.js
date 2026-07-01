@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+﻿import { test, expect } from '@playwright/test';
 import { ensureAccount } from './helpers.js';
 
 const FAKE_ANNOUNCEMENTS = [
@@ -12,7 +12,7 @@ test.describe('Dashboard announcements widget', () => {
       route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(FAKE_ANNOUNCEMENTS) });
     });
     await ensureAccount(page);
-    await page.goto('http://localhost:5173/');
+    await page.goto('/');
   });
 
   test('shows a recency-ordered announcements feed', async ({ page }) => {

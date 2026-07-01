@@ -1,10 +1,10 @@
-import { test, expect } from '@playwright/test';
+﻿import { test, expect } from '@playwright/test';
 import { ensureAccount } from './helpers.js';
 
 test.describe('Watchlist page', () => {
   test.beforeEach(async ({ page }) => {
     await ensureAccount(page);
-    await page.goto('http://localhost:5173/watchlist');
+    await page.goto('/watchlist');
   });
 
   test('renders watchlist heading and add form', async ({ page }) => {
@@ -16,7 +16,7 @@ test.describe('Watchlist page', () => {
   test('can add a symbol to watchlist', async ({ page }) => {
     await page.fill('input[placeholder*="Symbol"]', 'ABBANK');
     await page.getByRole('button', { name: /Add/ }).click();
-    // There will be 1+ ABBANK buttons — just verify at least one is visible
+    // There will be 1+ ABBANK buttons â€” just verify at least one is visible
     await expect(page.getByRole('main').getByRole('button', { name: 'ABBANK' }).first()).toBeVisible({ timeout: 8000 });
   });
 
@@ -27,7 +27,7 @@ test.describe('Watchlist page', () => {
     // Click bell icon on the first BRAC row
     const firstRow = page.getByRole('main').getByRole('button', { name: 'BRAC' }).first();
     await expect(firstRow).toBeVisible({ timeout: 8000 });
-    // Bell button is the next sibling button — click the bell (first small button after the row)
+    // Bell button is the next sibling button â€” click the bell (first small button after the row)
     const bellBtn = page.getByRole('main').locator('button').filter({ has: page.locator('svg') }).first();
     await bellBtn.click();
     await page.waitForTimeout(500);

@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+﻿import { test, expect } from '@playwright/test';
 import { ensureAccount } from './helpers.js';
 
 // The watchlist/portfolio mutations persist via BigQuery load jobs, which take
@@ -12,8 +12,8 @@ test.describe('Deletion persists', () => {
 
   test('removing a watchlist symbol persists across reload', async ({ page }) => {
     test.setTimeout(120000);
-    await page.goto('http://localhost:5173/watchlist');
-    // Unique symbol per run → no accumulation, and waiting for count==1 below
+    await page.goto('/watchlist');
+    // Unique symbol per run â†’ no accumulation, and waiting for count==1 below
     // guarantees the (slow) add committed before we delete, avoiding a race.
     const sym = `WL${Date.now() % 100000}`;
     const rows = () => page.getByRole('main').getByRole('button', { name: sym, exact: true });
@@ -34,16 +34,16 @@ test.describe('Deletion persists', () => {
     await delResp;
     await expect.poll(() => rows().count(), { timeout: 25000 }).toBe(0);
 
-    // Reload — the deletion must have persisted
+    // Reload â€” the deletion must have persisted
     await page.reload();
     await expect.poll(() => rows().count(), { timeout: 15000 }).toBe(0);
   });
 
   test('removing a portfolio position persists across reload', async ({ page }) => {
     test.setTimeout(120000);
-    await page.goto('http://localhost:5173/portfolio');
+    await page.goto('/portfolio');
     await page.waitForTimeout(1000);
-    // Unique symbol per run → baseline is deterministically 0 even if the slow
+    // Unique symbol per run â†’ baseline is deterministically 0 even if the slow
     // GET /portfolio hasn't rendered yet, and add/delete deltas are exact.
     const sym = `DEL${Date.now() % 100000}`;
     const rows = () => page.getByRole('main').getByText(sym, { exact: true });
@@ -63,7 +63,7 @@ test.describe('Deletion persists', () => {
     await page.getByRole('button', { name: 'Remove', exact: true }).first().click();
     await expect.poll(() => rows().count(), { timeout: 25000 }).toBe(0);
 
-    // Reload — the deletion must have persisted
+    // Reload â€” the deletion must have persisted
     await page.reload();
     await expect.poll(() => rows().count(), { timeout: 15000 }).toBe(0);
   });

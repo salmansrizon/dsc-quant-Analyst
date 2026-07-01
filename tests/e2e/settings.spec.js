@@ -1,10 +1,10 @@
-import { test, expect } from '@playwright/test';
+﻿import { test, expect } from '@playwright/test';
 import { ensureAccount } from './helpers.js';
 
 test.describe('Settings page', () => {
   test.beforeEach(async ({ page }) => {
     await ensureAccount(page);
-    await page.goto('http://localhost:5173/settings');
+    await page.goto('/settings');
     await page.waitForTimeout(1000);
   });
 
@@ -16,7 +16,7 @@ test.describe('Settings page', () => {
   });
 
   test('notification channel toggles are visible', async ({ page }) => {
-    // Toggles are <label> elements — use exact match to avoid matching input labels
+    // Toggles are <label> elements â€” use exact match to avoid matching input labels
     await expect(page.locator('label').filter({ hasText: /^telegram$/ })).toBeVisible();
     await expect(page.locator('label').filter({ hasText: /^whatsapp$/ })).toBeVisible();
     await expect(page.locator('label').filter({ hasText: /^email$/ })).toBeVisible();

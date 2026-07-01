@@ -1,10 +1,10 @@
-import { test, expect } from '@playwright/test';
+﻿import { test, expect } from '@playwright/test';
 import { ensureAccount } from './helpers.js';
 
 test.describe('Topbar symbol search autocomplete', () => {
   test.beforeEach(async ({ page }) => {
     await ensureAccount(page);
-    await page.goto('http://localhost:5173/watchlist');
+    await page.goto('/watchlist');
   });
 
   test('typing shows a dropdown of matching symbols', async ({ page }) => {

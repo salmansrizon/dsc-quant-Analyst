@@ -1,10 +1,10 @@
-import { test, expect } from '@playwright/test';
+﻿import { test, expect } from '@playwright/test';
 import { ensureAccount } from './helpers.js';
 
 test.describe('Dashboard symbol-click navigation', () => {
   test.beforeEach(async ({ page }) => {
     await ensureAccount(page);
-    await page.goto('http://localhost:5173/');
+    await page.goto('/');
   });
 
   test('clicking a leaderboard symbol navigates to its Stock Profile page', async ({ page }) => {

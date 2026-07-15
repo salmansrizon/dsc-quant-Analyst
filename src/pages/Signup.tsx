@@ -3,6 +3,7 @@ import type { FormEvent } from 'react';
 import type { AxiosInstance } from 'axios';
 import { Link, useNavigate } from 'react-router-dom';
 import { AuthContext } from '../context/AuthContext';
+import { errorMessage } from '../api/errorMessage';
 
 export default function Signup({ client }: { client: AxiosInstance }) {
   const { login } = useContext(AuthContext);
@@ -24,12 +25,7 @@ export default function Signup({ client }: { client: AxiosInstance }) {
       await login(form.email, form.password);
       navigate('/', { replace: true });
     } catch (err) {
-      const message =
-        (err as { response?: { data?: { detail?: string } }; message?: string })
-          ?.response?.data?.detail ??
-        (err as Error)?.message ??
-        'Signup failed';
-      setError(message);
+      setError(errorMessage(err, 'Signup failed'));
     } finally {
       setSubmitting(false);
     }

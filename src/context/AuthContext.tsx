@@ -1,8 +1,16 @@
 import React, { createContext, useState, useEffect } from 'react';
 import type { AxiosInstance } from 'axios';
 
+export interface User {
+  id: string;
+  email: string;
+  full_name?: string;
+  phone?: string;
+  role: string;
+}
+
 interface AuthContextProps {
-  user: any;
+  user: User | null;
   token: string | null;
   login: (email: string, password: string) => Promise<void>;
   logout: () => void;
@@ -17,7 +25,7 @@ export const AuthContext = createContext<AuthContextProps>({
 
 export function AuthProvider({ client, children }: { client: AxiosInstance; children: React.ReactNode }) {
   const [token, setToken] = useState<string | null>(localStorage.getItem('token'));
-  const [user, setUser] = useState<any>(null);
+  const [user, setUser] = useState<User | null>(null);
 
   useEffect(() => {
     if (token) {

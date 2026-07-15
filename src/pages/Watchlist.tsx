@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import type { AxiosInstance } from 'axios';
-import PriceChart from '../components/PriceChart/PriceChart';
+import PriceChart, { type Candle } from '../components/PriceChart/PriceChart';
 
 interface WatchlistItem {
   id: string;
@@ -12,20 +12,26 @@ interface WatchlistItem {
 
 export default function Watchlist({ client }: { client: AxiosInstance }) {
   const [items, setItems] = useState<WatchlistItem[]>([]);
-  const [candles, setCandles] = useState<unknown[]>([]);
+  const [candles, setCandles] = useState<Candle[]>([]);
   const [selected, setSelected] = useState<string>('');
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     client
       .get('/watchlist')
       .then((res) => setItems(res.data))
+      .catch(() => setError('Failed to load watchlist'))
       .finally(() => setLoading(false));
   }, [client]);
 
   const handleSelect = (symbol: string) => {
     setSelected(symbol);
-    client.get(`/market/price-history/${symbol}`).then((res) => setCandles(res.data));
+    setCandles([]);
+    client
+      .get(`/market/price-history/${symbol}`)
+      .then((res) => setCandles(res.data))
+      .catch(() => setError(`Failed to load history for ${symbol}`));
   };
 
   if (loading) return <div className="text-center py-8">Loading watchlist…</div>;
@@ -33,6 +39,7 @@ export default function Watchlist({ client }: { client: AxiosInstance }) {
   return (
     <div className="space-y-6">
       <h1 className="text-2xl font-semibold">My Watchlist</h1>
+      {error && <p className="text-red-500 text-sm">{error}</p>}
 
       {items.length === 0 ? (
         <p className="text-gray-500">Your watchlist is empty.</p>
@@ -78,7 +85,7 @@ export default function Watchlist({ client }: { client: AxiosInstance }) {
       )}
 
       {selected && candles.length > 0 && (
-        <PriceChart candles={candles as never[]} symbol={selected} />
+        <PriceChart candles={candles} symbol={selected} />
       )}
     </div>
   );

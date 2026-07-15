@@ -36,7 +36,17 @@ function App({ client = defaultClient }: AppProps) {
             <Route path="/portfolio" element={<Portfolio client={client} />} />
             <Route path="/watchlist" element={<Watchlist client={client} />} />
             <Route path="/alerts" element={<AlertsPage client={client} />} />
-            <Route path="/admin" element={<AdminPanel client={client} />} />
+          </Route>
+
+          <Route
+            path="/admin"
+            element={
+              <PrivateRoute adminOnly>
+                <Layout />
+              </PrivateRoute>
+            }
+          >
+            <Route index element={<AdminPanel client={client} />} />
           </Route>
         </Routes>
       </BrowserRouter>

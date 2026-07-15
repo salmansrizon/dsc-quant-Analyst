@@ -2,6 +2,7 @@ import { useContext, useState } from 'react';
 import type { FormEvent } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { AuthContext } from '../../context/AuthContext';
+import { errorMessage } from '../../api/errorMessage';
 
 function Login() {
   const { login } = useContext(AuthContext);
@@ -19,12 +20,7 @@ function Login() {
       await login(email, password);
       navigate('/', { replace: true });
     } catch (err) {
-      const message =
-        (err as { response?: { data?: { detail?: string } }; message?: string })
-          ?.response?.data?.detail ??
-        (err as Error)?.message ??
-        'Login failed';
-      setError(message);
+      setError(errorMessage(err, 'Login failed'));
     } finally {
       setSubmitting(false);
     }

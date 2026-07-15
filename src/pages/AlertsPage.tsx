@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import type { AxiosInstance } from 'axios';
 import { AlertCircle, Bell, CheckCircle, XCircle } from 'lucide-react';
+import { errorMessage } from '../api/errorMessage';
 
 interface Alert {
   id: string;
@@ -25,9 +26,14 @@ export default function AlertsPage({ client }: { client: AxiosInstance }) {
   }, []);
 
   const fetchAlerts = async () => {
-    const res = await client.get('/alerts');
-    setAlerts(res.data);
-    setLoading(false);
+    try {
+      const res = await client.get('/alerts');
+      setAlerts(res.data);
+    } catch (err) {
+      setFormError(errorMessage(err, 'Failed to load alerts'));
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleCreate = async () => {
@@ -36,14 +42,22 @@ export default function AlertsPage({ client }: { client: AxiosInstance }) {
       return;
     }
     setFormError(null);
-    const res = await client.post('/alerts', newAlert);
-    setAlerts(prev => [...prev, res.data]);
-    setNewAlert({ symbol: '', target_price: 0, direction: 'above' });
+    try {
+      const res = await client.post('/alerts', newAlert);
+      setAlerts(prev => [...prev, res.data]);
+      setNewAlert({ symbol: '', target_price: 0, direction: 'above' });
+    } catch (err) {
+      setFormError(errorMessage(err, 'Failed to create alert'));
+    }
   };
 
   const handleDelete = async (id: string) => {
-    await client.delete(`/alerts/${id}`);
-    setAlerts(prev => prev.filter(a => a.id !== id));
+    try {
+      await client.delete(`/alerts/${id}`);
+      setAlerts(prev => prev.filter(a => a.id !== id));
+    } catch (err) {
+      setFormError(errorMessage(err, 'Failed to delete alert'));
+    }
   };
 
   if (loading) return <div className="text-center py-8">Loading alerts...</div>;
@@ -73,7 +87,7 @@ export default function AlertsPage({ client }: { client: AxiosInstance }) {
           />
           <select
             value={newAlert.direction}
-            onChange={e => setNewAlert({ ...newAlert, direction: e.target.value as any })}
+            onChange={e => setNewAlert({ ...newAlert, direction: e.target.value as 'above' | 'below' })}
             className="border p-2 rounded"
           >
             <option value="above">Above</option>

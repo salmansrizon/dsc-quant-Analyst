@@ -33,8 +33,12 @@ export default function AdminPanel({ client }: { client: AxiosInstance }) {
   };
 
   const handleDeleteUser = async (userId: string) => {
-    await client.delete(`/admin/users/${userId}`);
-    setUsers((prev) => prev.filter((u) => u.id !== userId));
+    try {
+      await client.delete(`/admin/users/${userId}`);
+      setUsers((prev) => prev.filter((u) => u.id !== userId));
+    } catch {
+      setError('Failed to delete user');
+    }
   };
 
   const handleEditUser = async (userId: string) => {

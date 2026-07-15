@@ -43,8 +43,9 @@ export default function MarketSummary({ client }: { client: AxiosInstance }) {
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
         {(data.sectors ?? []).map((sector) => {
-          const bgClass = `bg-${sector.change >= 0 ? 'green-100' : 'red-100'}`;
-          const textColor = sector.change >= 0 ? 'text-green-800' : 'text-red-800';
+          const up = sector.change >= 0;
+          const bgClass = up ? 'bg-green-100' : 'bg-red-100';
+          const textColor = up ? 'text-green-800' : 'text-red-800';
           return (
             <div key={sector.name} className={`p-4 rounded-sm ${bgClass} border border-gray-200`}>
               <p className={`${textColor} font-medium text-sm`}>{sector.name}</p>

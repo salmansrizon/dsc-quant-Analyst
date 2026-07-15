@@ -34,18 +34,16 @@ def _insert_rows(table: str, rows: list[dict]):
     job.result()
 
 
-def _rewrite_table(table: str, rows: list[dict]):
-    """Replace all rows in a table via load job (free tier eligible)."""
-    df = pd.DataFrame(rows) if rows else pd.DataFrame()
-    full = f"{PROJECT}.{DATASET}.{table}"
-    job = bq.load_table_from_dataframe(
-        df, full,
-        job_config=bigquery.LoadJobConfig(
-            write_disposition=bigquery.WriteDisposition.WRITE_TRUNCATE,
-            schema_update_options=[bigquery.SchemaUpdateOption.ALLOW_FIELD_ADDITION],
-        )
-    )
+def _execute_dml(sql: str, params: list) -> int:
+    """Run a parameterized UPDATE/DELETE and return affected row count.
+
+    Row-level DML replaces the old read-all + WRITE_TRUNCATE pattern, which
+    replaced the whole table with one user's rows and destroyed every other
+    user's data on each mutation (see ticket #40).
+    """
+    job = bq.query(sql, job_config=bigquery.QueryJobConfig(query_parameters=params))
     job.result()
+    return job.num_dml_affected_rows or 0
 
 # ── Market Data ──────────────────────────────────────────────────────────────
 
@@ -240,20 +238,18 @@ def add_to_watchlist(user_id: str, symbol: str):
 
 
 def remove_from_watchlist(user_id: str, symbol: str):
-    rows = list(bq.query(
-        f"SELECT * FROM {_full_id('watchlists')} WHERE user_id = @uid",
-        job_config=bigquery.QueryJobConfig(query_parameters=[
+    _execute_dml(
+        f"""
+        UPDATE {_full_id('watchlists')}
+        SET is_deleted = TRUE, updated_at = @now
+        WHERE user_id = @uid AND symbol = @symbol AND is_deleted = FALSE
+        """,
+        [
+            bigquery.ScalarQueryParameter("now", "TIMESTAMP", datetime.now(timezone.utc)),
             bigquery.ScalarQueryParameter("uid", "STRING", user_id),
-        ])
-    ).result())
-    remaining = []
-    now = datetime.now(timezone.utc)
-    for r in rows:
-        d = dict(r)
-        d["is_deleted"] = True if (d["symbol"] == symbol.upper() and not d.get("is_deleted")) else d.get("is_deleted", False)
-        d["updated_at"] = now
-        remaining.append(d)
-    _rewrite_table("watchlists", remaining)
+            bigquery.ScalarQueryParameter("symbol", "STRING", symbol.upper()),
+        ],
+    )
     return True
 
 
@@ -295,42 +291,55 @@ def add_to_portfolio(user_id: str, data: dict):
     return {"id": pid, "symbol": data["symbol"].upper()}
 
 
+# Whitelist of updatable portfolio columns and their BigQuery param types.
+_PORTFOLIO_UPDATE_TYPES = {
+    "buy_price": "FLOAT64",
+    "quantity": "INT64",
+    "price_target": "FLOAT64",
+    "stop_loss": "FLOAT64",
+    "notes": "STRING",
+}
+
+
 def update_portfolio(portfolio_id: str, user_id: str, data: dict):
-    rows = list(bq.query(
-        f"SELECT * FROM {_full_id('portfolios')} WHERE user_id = @uid",
-        job_config=bigquery.QueryJobConfig(query_parameters=[
-            bigquery.ScalarQueryParameter("uid", "STRING", user_id),
-        ])
-    ).result())
-    now = datetime.now(timezone.utc)
-    updated = False
-    for r in rows:
-        d = dict(r)
-        if d["id"] == portfolio_id and not d.get("is_deleted"):
-            for k, v in data.items():
-                if k in d:
-                    d[k] = v
-                d["updated_at"] = now
-            updated = True
-    if updated:
-        _rewrite_table("portfolios", [dict(r) for r in rows])
-    return updated
+    updates = {k: v for k, v in data.items() if k in _PORTFOLIO_UPDATE_TYPES and v is not None}
+    if not updates:
+        return False
+
+    set_clauses = ["updated_at = @now"]
+    params = [
+        bigquery.ScalarQueryParameter("now", "TIMESTAMP", datetime.now(timezone.utc)),
+        bigquery.ScalarQueryParameter("id", "STRING", portfolio_id),
+        bigquery.ScalarQueryParameter("uid", "STRING", user_id),
+    ]
+    for col, val in updates.items():
+        set_clauses.append(f"{col} = @{col}")
+        params.append(bigquery.ScalarQueryParameter(col, _PORTFOLIO_UPDATE_TYPES[col], val))
+
+    affected = _execute_dml(
+        f"""
+        UPDATE {_full_id('portfolios')}
+        SET {', '.join(set_clauses)}
+        WHERE id = @id AND user_id = @uid AND is_deleted = FALSE
+        """,
+        params,
+    )
+    return affected > 0
 
 
 def delete_portfolio(portfolio_id: str, user_id: str):
-    rows = list(bq.query(
-        f"SELECT * FROM {_full_id('portfolios')} WHERE user_id = @uid",
-        job_config=bigquery.QueryJobConfig(query_parameters=[
+    _execute_dml(
+        f"""
+        UPDATE {_full_id('portfolios')}
+        SET is_deleted = TRUE, updated_at = @now
+        WHERE id = @id AND user_id = @uid AND is_deleted = FALSE
+        """,
+        [
+            bigquery.ScalarQueryParameter("now", "TIMESTAMP", datetime.now(timezone.utc)),
+            bigquery.ScalarQueryParameter("id", "STRING", portfolio_id),
             bigquery.ScalarQueryParameter("uid", "STRING", user_id),
-        ])
-    ).result())
-    now = datetime.now(timezone.utc)
-    for r in rows:
-        d = dict(r)
-        if d["id"] == portfolio_id:
-            d["is_deleted"] = True
-            d["updated_at"] = now
-    _rewrite_table("portfolios", [dict(r) for r in rows])
+        ],
+    )
     return True
 
 
@@ -383,14 +392,13 @@ def create_alert(user_id: str, data: dict):
 
 
 def delete_alert(alert_id: str, user_id: str):
-    rows = list(bq.query(
-        f"SELECT * FROM {_full_id('price_alerts')} WHERE user_id = @uid",
-        job_config=bigquery.QueryJobConfig(query_parameters=[
+    _execute_dml(
+        f"DELETE FROM {_full_id('price_alerts')} WHERE id = @id AND user_id = @uid",
+        [
+            bigquery.ScalarQueryParameter("id", "STRING", alert_id),
             bigquery.ScalarQueryParameter("uid", "STRING", user_id),
-        ])
-    ).result())
-    remaining = [dict(r) for r in rows if r["id"] != alert_id]
-    _rewrite_table("price_alerts", remaining)
+        ],
+    )
     return True
 
 

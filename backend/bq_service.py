@@ -34,7 +34,7 @@ def _insert_rows(table: str, rows: list[dict]):
     job.result()
 
 
-def _execute_dml(sql: str, params: list) -> int:
+def _execute_dml(sql: str, params: list["bigquery.ScalarQueryParameter"]) -> int:
     """Run a parameterized UPDATE/DELETE and return affected row count.
 
     Row-level DML replaces the old read-all + WRITE_TRUNCATE pattern, which

@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Depends, HTTPException, status, Query
+from fastapi import FastAPI, Depends, HTTPException, status, Query, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import OAuth2PasswordBearer
 
@@ -87,6 +87,11 @@ def top_movers(limit: int = Query(default=10, le=50)):
 @app.get("/api/market/price-history/{symbol}")
 def price_history(symbol: str, days: int = Query(default=365, le=1095)):
     return bq_service.price_history(symbol.upper(), days=days)
+
+
+@app.get("/api/market/technical/{symbol}")
+def technical_indicators(symbol: str, days: int = Query(default=365, le=1095)):
+    return bq_service.technical_indicators(symbol.upper(), days=days)
 
 
 @app.get("/api/market/announcements")
@@ -182,6 +187,27 @@ def admin_update_user(user_id: str, payload: dict, admin: UserResponse = Depends
 def admin_delete_user(user_id: str, admin: UserResponse = Depends(require_admin)):
     delete_user(user_id)
     return {"status": "deleted"}
+
+
+@app.get("/api/admin/export/announcements")
+def admin_export_announcements(admin: UserResponse = Depends(require_admin)):
+    from .exports import export_announcements
+    content, media_type = export_announcements()
+    return Response(content, media_type=media_type, headers={"Content-Disposition": "attachment; filename=announcements.csv"})
+
+
+@app.get("/api/admin/export/price_archive")
+def admin_export_prices(admin: UserResponse = Depends(require_admin)):
+    from .exports import export_price_archive
+    content, media_type = export_price_archive()
+    return Response(content, media_type=media_type, headers={"Content-Disposition": "attachment; filename=price_archive.csv"})
+
+
+@app.get("/api/admin/export/data_grid")
+def admin_export_full(admin: UserResponse = Depends(require_admin)):
+    from .exports import export_master_dataset
+    content, media_type = export_master_dataset()
+    return Response(content, media_type=media_type, headers={"Content-Disposition": "attachment; filename=full_dataset.json"})
 
 
 # ── Health ───────────────────────────────────────────────────────────────────

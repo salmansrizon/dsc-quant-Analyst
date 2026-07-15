@@ -5,6 +5,8 @@ from datetime import datetime, timezone
 from google.cloud import bigquery
 from dotenv import load_dotenv
 
+from . import indicators
+
 load_dotenv()
 
 PROJECT = os.environ.get("BIGQUERY_PROJECT_ID") or "dbt-test-420614"
@@ -135,6 +137,58 @@ def price_history(symbol: str, days: int = 365):
     """
     params = [bigquery.ScalarQueryParameter("symbol", "STRING", symbol.upper())]
     return [dict(r) for r in bq.query(sql, job_config=bigquery.QueryJobConfig(query_parameters=params)).result()]
+
+
+def technical_indicators(symbol: str, days: int = 365):
+    """Compute the v1 technical-indicator bundle (spec 4) from price history.
+
+    Indicators are computed on-read in Python rather than stored in a
+    precomputed BigQuery table — see ticket "Decide technical-indicator compute
+    & storage architecture on BigQuery" (#31). This is the canonical indicator
+    source; the raw SMA_20/RSI columns in lankabd_price_archive are left as
+    scraped passthrough on price_history and are not reconciled here.
+    """
+    rows = price_history(symbol, days=days)
+    if not rows:
+        return {"symbol": symbol.upper(), "indicators": None, "points": 0}
+
+    # price_history returns newest-first; indicators need oldest-first.
+    rows = list(reversed(rows))
+
+    def _num(v):
+        try:
+            return float(v)
+        except (TypeError, ValueError):
+            return None
+
+    def _series(*keys):
+        out = []
+        for r in rows:
+            val = None
+            for k in keys:
+                val = _num(r.get(k))
+                if val is not None:
+                    break
+            out.append(val)
+        return out
+
+    closes = _series("Close", "LTP")
+    highs = _series("High")
+    lows = _series("Low")
+    volumes = _series("Volume")
+
+    # Drop rows with no usable close; keep parallel arrays aligned. Note this
+    # collapses calendar gaps into adjacent bars (v1 accepts the distortion).
+    clean = [(c, h, l, v) for c, h, l, v in zip(closes, highs, lows, volumes) if c is not None]
+    if not clean:
+        return {"symbol": symbol.upper(), "indicators": None, "points": 0}
+    closes = [c for c, _, _, _ in clean]
+    highs = [h if h is not None else c for c, h, _, _ in clean]
+    lows = [l if l is not None else c for c, _, l, _ in clean]
+    volumes = [v if v is not None else 0.0 for *_, v in clean]
+
+    bundle = indicators.compute_all(closes, highs, lows, volumes)
+    return {"symbol": symbol.upper(), "points": len(closes), "indicators": bundle}
 
 
 def list_announcements(symbol: str = None, limit: int = 50):

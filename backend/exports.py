@@ -26,9 +26,9 @@ def _list_tables() -> List[str]:
 def export_announcements() -> tuple[bytes, str]:
     """Export announcements as CSV."""
     client = _get_bigquery_client()
-    sql = """
+    sql = f"""
         SELECT Symbol, Date, Announcement_Type, Details, LTP
-        FROM `dbt-test-420614.lankabd_dataset.announcements`
+        FROM {db.table_id('announcements')}
         ORDER BY Date DESC
     """
     
@@ -52,9 +52,9 @@ def export_announcements() -> tuple[bytes, str]:
 def export_price_archive() -> tuple[bytes, str]:
     """Export price archive as CSV."""
     client = _get_bigquery_client()
-    sql = """
+    sql = f"""
         SELECT Date, Symbol, LTP, Close, Volume_Qty_
-        FROM `dbt-test-420614.lankabd_dataset.price_archive`
+        FROM {db.table_id('price_archive')}
         ORDER BY Date DESC
     """
     
@@ -73,9 +73,9 @@ def export_price_archive() -> tuple[bytes, str]:
 def export_master_dataset() -> tuple[str, str]:
     """Export master dataset as JSON with full structure."""
     client = _get_bigquery_client()
-    sql = """
-        SELECT Symbol, LTP, Change, Sector, Volume_Qty_ 
-        FROM `dbt-test-420614.lankabd_dataset.lankabd_datamatrix`
+    sql = f"""
+        SELECT Symbol, LTP, Change, Sector, Volume_Qty_
+        FROM {db.table_id('lankabd_datamatrix')}
         LIMIT 1000
     """
     

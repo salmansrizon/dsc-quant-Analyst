@@ -58,7 +58,15 @@ def _resolve_credentials() -> str | None:
 
 _sa_project = _resolve_credentials()
 
-PROJECT = os.environ.get("BIGQUERY_PROJECT_ID") or _sa_project or "dbt-test-420614"
+_env_project = os.environ.get("BIGQUERY_PROJECT_ID")
+if _env_project and _sa_project and _env_project != _sa_project:
+    logger.warning(
+        "BIGQUERY_PROJECT_ID mismatch: env=%s service_account=%s. Using the "
+        "service-account project.", _env_project, _sa_project,
+    )
+# Service-account project wins (matches the prior bigquery_helper behavior),
+# then the env override, then the default.
+PROJECT = _sa_project or _env_project or "dbt-test-420614"
 DATASET = os.environ.get("BIGQUERY_DATASET_ID") or "lankabd_dataset"
 
 _client: bigquery.Client | None = None

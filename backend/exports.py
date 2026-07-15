@@ -1,25 +1,25 @@
 """Backend export functionality for Admin panel."""
 
-import csv
-import json
 import io
-from typing import List, Dict, Any
+import json
+import os
+from typing import List
 from fastapi import HTTPException
 import pandas as pd
 from google.cloud import bigquery
 
+from . import db
+
 
 def _get_bigquery_client():
-    """Initialize BigQuery client."""
-    import os
-    PROJECT = os.environ.get("BIGQUERY_PROJECT_ID") or "dbt-test-420614"
-    return bigquery.Client(project=PROJECT)
+    """The shared API-layer BigQuery client (ticket #41)."""
+    return db.client()
 
 
 def _list_tables() -> List[str]:
     """List all tables in the dataset."""
     client = _get_bigquery_client()
-    dataset = client.dataset(os.environ.get("BIGQUERY_DATASET_ID") or "lankabd_dataset")
+    dataset = client.dataset(os.environ.get("BIGQUERY_DATASET_ID") or db.DATASET)
     return [table.name for table in dataset.tables()]
 
 
@@ -89,23 +89,13 @@ def export_master_dataset() -> tuple[str, str]:
 def export_table(table_name: str) -> bytes:
     """Export a specific table as CSV."""
     client = _get_bigquery_client()
-    sql = f"""
-        SELECT * FROM `{_get_full_table_id(table_name)}`
-    """
-    
-    job_config = bigquery.QueryJobConfig()
-    query = client.query(sql, job_config=job_config)
+    # db.table_id already returns a backtick-quoted id — do not re-wrap it.
+    sql = f"SELECT * FROM {db.table_id(table_name)}"
+
+    query = client.query(sql, job_config=bigquery.QueryJobConfig())
     results = [dict(r) for r in query.result()]
-    
+
     df = pd.DataFrame(results)
     csv_buffer = io.StringIO()
     df.to_csv(csv_buffer, index=False)
     return csv_buffer.getvalue().encode('utf-8')
-
-
-def _get_full_table_id(table_name: str) -> str:
-    """Create full table ID."""
-    import os
-    project = os.environ.get('BIGQUERY_PROJECT_ID') or 'dbt-test-420614'
-    dataset = os.environ.get('BIGQUERY_DATASET_ID') or 'lankabd_dataset'
-    return f"'{project}.{dataset}.{table_name}'"

@@ -3,17 +3,15 @@ import pandas as pd
 from datetime import datetime, timezone
 from typing import Optional
 from google.cloud import bigquery
-from dotenv import load_dotenv
 from .models import UserResponse
+from . import db
 
-load_dotenv()
-
-PROJECT = "dbt-test-420614"
-DATASET = "lankabd_dataset"
-bq = bigquery.Client(project=PROJECT)
-
-def _uid(table: str) -> str:
-    return f"`{PROJECT}.{DATASET}.{table}`"
+# Single shared client + table-name helper (ticket #41). Previously this module
+# hardcoded PROJECT/DATASET, diverging from the env-driven config elsewhere.
+PROJECT = db.PROJECT
+DATASET = db.DATASET
+bq = db.client()
+_uid = db.table_id
 
 
 def _insert_user_row(row: dict):

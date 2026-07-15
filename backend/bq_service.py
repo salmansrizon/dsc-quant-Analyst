@@ -1,21 +1,16 @@
-import os
 import uuid
 import pandas as pd
 from datetime import datetime, timezone
 from google.cloud import bigquery
-from dotenv import load_dotenv
 
 from . import indicators
+from . import db
 
-load_dotenv()
-
-PROJECT = os.environ.get("BIGQUERY_PROJECT_ID") or "dbt-test-420614"
-DATASET = os.environ.get("BIGQUERY_DATASET_ID") or "lankabd_dataset"
-
-bq = bigquery.Client(project=PROJECT)
-
-def _full_id(table: str) -> str:
-    return f"`{PROJECT}.{DATASET}.{table}`"
+# Single shared client + table-name helper (ticket #41).
+PROJECT = db.PROJECT
+DATASET = db.DATASET
+bq = db.client()
+_full_id = db.table_id
 
 
 def _insert_rows(table: str, rows: list[dict]):

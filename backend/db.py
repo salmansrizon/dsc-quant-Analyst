@@ -23,6 +23,37 @@ load_dotenv()
 logger = logging.getLogger(__name__)
 
 
+_REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+
+def _absolutize_adc_path() -> bool:
+    """Make a relative GOOGLE_APPLICATION_CREDENTIALS survive the working directory.
+
+    `.env` carries a repo-root-relative path. The API is launched from the repo
+    root so it resolves; the ETL scripts run with cwd=backend, where the same
+    path does not exist and the client library raises DefaultCredentialsError.
+    Rewrite it to an absolute path so both entry points agree.
+
+    Returns whether usable credentials are now configured — a path that points
+    at nothing is not "configured", so the caller falls through to the local key.
+    """
+    path = os.environ.get("GOOGLE_APPLICATION_CREDENTIALS")
+    if not path:
+        return False
+    if os.path.isabs(path):
+        return os.path.exists(path)
+    for base in (os.getcwd(), _REPO_ROOT):
+        candidate = os.path.join(base, path)
+        if os.path.exists(candidate):
+            os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = candidate
+            return True
+    logger.warning(
+        "GOOGLE_APPLICATION_CREDENTIALS=%s does not resolve from cwd or the repo "
+        "root; ignoring it and looking for a local key.", path,
+    )
+    return False
+
+
 def _resolve_credentials() -> str | None:
     """Best-effort credential setup. Returns the service-account project_id if
     one was found. Never raises — falls through to ambient ADC so callers can
@@ -32,7 +63,7 @@ def _resolve_credentials() -> str | None:
     PROJECT even when GOOGLE_APPLICATION_CREDENTIALS is already exported; only
     the pointing-at-a-file step is skipped in that case.
     """
-    already_configured = bool(os.environ.get("GOOGLE_APPLICATION_CREDENTIALS"))
+    already_configured = _absolutize_adc_path()
 
     raw = os.environ.get("GCP_SERVICE_ACCOUNT_JSON")
     if raw:

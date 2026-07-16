@@ -1,13 +1,16 @@
 """
-Offline regression tests for the row-level DML mutation layer (ticket #40).
+Offline regression tests for the row-level DML mutation layer (tickets #40, #43).
 
-These do NOT hit BigQuery — they stub bq_service.bq with a fake client that
-records the SQL + params each mutation issues, proving the old read-all +
-WRITE_TRUNCATE pattern (which destroyed other users' rows) is gone.
+These do NOT hit BigQuery — they stub db._client with a fake client that records
+the SQL + params each mutation issues (or, in the survival tests, actually
+applies the DML), proving the old read-all + WRITE_TRUNCATE pattern that
+destroyed other users' rows is gone. Mutations now live in the per-domain
+service modules (watchlist_service / portfolio_service / alerts_service) and go
+through db.execute_dml / db.insert_rows.
 """
 import pytest
 
-from backend import bq_service
+from backend import db, watchlist_service, portfolio_service, alerts_service
 
 
 class _FakeJob:
@@ -36,18 +39,19 @@ class _FakeClient:
 @pytest.fixture
 def fake_bq(monkeypatch):
     client = _FakeClient()
-    monkeypatch.setattr(bq_service, "bq", client)
+    monkeypatch.setattr(db, "_client", client)  # db.client() now returns the fake
     return client
 
 
 def test_rewrite_table_helper_is_gone():
-    # The whole-table truncate helper must not exist anymore.
-    assert not hasattr(bq_service, "_rewrite_table")
-    assert hasattr(bq_service, "_execute_dml")
+    # The whole-table truncate helper must not exist anywhere anymore.
+    assert hasattr(db, "execute_dml")
+    for mod in (watchlist_service, portfolio_service, alerts_service):
+        assert not hasattr(mod, "_rewrite_table")
 
 
 def test_remove_from_watchlist_issues_scoped_update(fake_bq):
-    bq_service.remove_from_watchlist("user-1", "gp")
+    watchlist_service.remove_from_watchlist("user-1", "gp")
     assert len(fake_bq.calls) == 1
     call = fake_bq.calls[0]
     assert call["sql"].startswith("UPDATE")
@@ -60,7 +64,7 @@ def test_remove_from_watchlist_issues_scoped_update(fake_bq):
 
 
 def test_delete_alert_scopes_by_id_and_user(fake_bq):
-    bq_service.delete_alert("alert-9", "user-1")
+    alerts_service.delete_alert("alert-9", "user-1")
     call = fake_bq.calls[0]
     assert call["sql"].startswith("DELETE FROM")
     assert "WHERE id = @id AND user_id = @uid" in call["sql"]
@@ -68,7 +72,7 @@ def test_delete_alert_scopes_by_id_and_user(fake_bq):
 
 
 def test_delete_portfolio_soft_deletes_scoped(fake_bq):
-    bq_service.delete_portfolio("pf-1", "user-1")
+    portfolio_service.delete_portfolio("pf-1", "user-1")
     call = fake_bq.calls[0]
     assert "UPDATE" in call["sql"] and "SET is_deleted = TRUE" in call["sql"]
     assert "WHERE id = @id AND user_id = @uid" in call["sql"]
@@ -77,7 +81,7 @@ def test_delete_portfolio_soft_deletes_scoped(fake_bq):
 
 
 def test_update_portfolio_only_whitelisted_fields(fake_bq):
-    ok = bq_service.update_portfolio(
+    ok = portfolio_service.update_portfolio(
         "pf-1", "user-1",
         {"quantity": 20, "notes": "add", "hacker_col": "DROP", "is_deleted": True},
     )
@@ -93,7 +97,7 @@ def test_update_portfolio_only_whitelisted_fields(fake_bq):
 
 
 def test_update_portfolio_no_valid_fields_is_noop(fake_bq):
-    ok = bq_service.update_portfolio("pf-1", "user-1", {"bogus": 1, "buy_price": None})
+    ok = portfolio_service.update_portfolio("pf-1", "user-1", {"bogus": 1, "buy_price": None})
     assert ok is False
     assert fake_bq.calls == []  # nothing issued
 
@@ -107,7 +111,7 @@ def test_update_portfolio_returns_false_when_no_row_affected(fake_bq, monkeypatc
         return job
 
     monkeypatch.setattr(fake_bq, "query", zero_dml)
-    ok = bq_service.update_portfolio("pf-x", "user-1", {"quantity": 5})
+    ok = portfolio_service.update_portfolio("pf-x", "user-1", {"quantity": 5})
     assert ok is False
 
 
@@ -146,7 +150,7 @@ class _SemanticFakeClient:
 
 def _semantic(monkeypatch, tables):
     client = _SemanticFakeClient(tables)
-    monkeypatch.setattr(bq_service, "bq", client)
+    monkeypatch.setattr(db, "_client", client)
     return client
 
 
@@ -157,7 +161,7 @@ def test_removing_user1_watchlist_item_leaves_user2_untouched(monkeypatch):
         {"id": "w3", "user_id": "user-2", "symbol": "BEXIMCO", "is_deleted": False},
     ]}
     _semantic(monkeypatch, tables)
-    bq_service.remove_from_watchlist("user-1", "GP")
+    watchlist_service.remove_from_watchlist("user-1", "GP")
 
     by_id = {r["id"]: r for r in tables["watchlists"]}
     assert by_id["w1"]["is_deleted"] is True          # user-1's row soft-deleted
@@ -174,7 +178,7 @@ def test_deleting_user1_alert_leaves_user2_alerts(monkeypatch):
         {"id": "a3", "user_id": "user-2"},
     ]}
     _semantic(monkeypatch, tables)
-    bq_service.delete_alert("a1", "user-1")
+    alerts_service.delete_alert("a1", "user-1")
 
     remaining_ids = {r["id"] for r in tables["price_alerts"]}
     assert remaining_ids == {"a2", "a3"}  # user-2's alerts survive
@@ -186,7 +190,7 @@ def test_deleting_user1_portfolio_leaves_user2_holdings(monkeypatch):
         {"id": "p2", "user_id": "user-2", "is_deleted": False},
     ]}
     _semantic(monkeypatch, tables)
-    bq_service.delete_portfolio("p1", "user-1")
+    portfolio_service.delete_portfolio("p1", "user-1")
 
     by_id = {r["id"]: r for r in tables["portfolios"]}
     assert by_id["p1"]["is_deleted"] is True

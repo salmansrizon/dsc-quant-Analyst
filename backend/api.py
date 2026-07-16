@@ -11,7 +11,7 @@ from .user_service import (
     create_user, get_user_by_email, get_user_credentials,
     get_user_by_id, list_users, update_user, delete_user,
 )
-from . import bq_service
+from . import market_service, watchlist_service, portfolio_service, alerts_service
 
 app = FastAPI(title="DSC Quant Analyst API", version="1.0.0")
 
@@ -58,22 +58,22 @@ def read_me(current_user: UserResponse = Depends(get_current_user)):
 
 @app.get("/api/market/summary")
 def market_summary():
-    return bq_service.market_summary()
+    return market_service.market_summary()
 
 
 @app.get("/api/market/sectors")
 def sectors():
-    return bq_service.list_sectors()
+    return market_service.list_sectors()
 
 
 @app.get("/api/market/stocks")
 def stocks(sector: str = None, search: str = None, limit: int = Query(default=500, le=5000)):
-    return bq_service.list_stocks(sector=sector, search=search, limit=limit)
+    return market_service.list_stocks(sector=sector, search=search, limit=limit)
 
 
 @app.get("/api/market/stocks/{symbol}")
 def stock_detail(symbol: str):
-    result = bq_service.get_stock(symbol.upper())
+    result = market_service.get_stock(symbol.upper())
     if not result:
         raise HTTPException(status_code=404, detail="Symbol not found")
     return result
@@ -81,39 +81,39 @@ def stock_detail(symbol: str):
 
 @app.get("/api/market/top-movers")
 def top_movers(limit: int = Query(default=10, le=50)):
-    return bq_service.top_movers(limit=limit)
+    return market_service.top_movers(limit=limit)
 
 
 @app.get("/api/market/price-history/{symbol}")
 def price_history(symbol: str, days: int = Query(default=365, le=1095)):
-    return bq_service.price_history(symbol.upper(), days=days)
+    return market_service.price_history(symbol.upper(), days=days)
 
 
 @app.get("/api/market/technical/{symbol}")
 def technical_indicators(symbol: str, days: int = Query(default=365, le=1095)):
-    return bq_service.technical_indicators(symbol.upper(), days=days)
+    return market_service.technical_indicators(symbol.upper(), days=days)
 
 
 @app.get("/api/market/announcements")
 def announcements(symbol: str = None, limit: int = Query(default=50, le=200)):
-    return bq_service.list_announcements(symbol=symbol, limit=limit)
+    return market_service.list_announcements(symbol=symbol, limit=limit)
 
 
 # ── Watchlist ────────────────────────────────────────────────────────────────
 
 @app.get("/api/watchlist")
 def watchlist_list(current_user: UserResponse = Depends(get_current_user)):
-    return bq_service.get_watchlist(current_user.id)
+    return watchlist_service.get_watchlist(current_user.id)
 
 
 @app.post("/api/watchlist")
 def watchlist_add(payload: WatchlistAdd, current_user: UserResponse = Depends(get_current_user)):
-    return bq_service.add_to_watchlist(current_user.id, payload.symbol)
+    return watchlist_service.add_to_watchlist(current_user.id, payload.symbol)
 
 
 @app.delete("/api/watchlist/{symbol}")
 def watchlist_remove(symbol: str, current_user: UserResponse = Depends(get_current_user)):
-    bq_service.remove_from_watchlist(current_user.id, symbol.upper())
+    watchlist_service.remove_from_watchlist(current_user.id, symbol.upper())
     return {"status": "removed"}
 
 
@@ -121,29 +121,29 @@ def watchlist_remove(symbol: str, current_user: UserResponse = Depends(get_curre
 
 @app.get("/api/portfolio")
 def portfolio_list(current_user: UserResponse = Depends(get_current_user)):
-    return bq_service.get_portfolio(current_user.id)
+    return portfolio_service.get_portfolio(current_user.id)
 
 
 @app.get("/api/portfolio/summary")
 def portfolio_summary(current_user: UserResponse = Depends(get_current_user)):
-    return bq_service.portfolio_summary(current_user.id)
+    return portfolio_service.portfolio_summary(current_user.id)
 
 
 @app.post("/api/portfolio")
 def portfolio_add(payload: PortfolioAdd, current_user: UserResponse = Depends(get_current_user)):
-    return bq_service.add_to_portfolio(current_user.id, payload.model_dump())
+    return portfolio_service.add_to_portfolio(current_user.id, payload.model_dump())
 
 
 @app.put("/api/portfolio/{portfolio_id}")
 def portfolio_update(portfolio_id: str, payload: PortfolioUpdate, current_user: UserResponse = Depends(get_current_user)):
     data = {k: v for k, v in payload.model_dump().items() if v is not None}
-    bq_service.update_portfolio(portfolio_id, current_user.id, data)
+    portfolio_service.update_portfolio(portfolio_id, current_user.id, data)
     return {"status": "updated"}
 
 
 @app.delete("/api/portfolio/{portfolio_id}")
 def portfolio_delete(portfolio_id: str, current_user: UserResponse = Depends(get_current_user)):
-    bq_service.delete_portfolio(portfolio_id, current_user.id)
+    portfolio_service.delete_portfolio(portfolio_id, current_user.id)
     return {"status": "deleted"}
 
 
@@ -151,17 +151,17 @@ def portfolio_delete(portfolio_id: str, current_user: UserResponse = Depends(get
 
 @app.get("/api/alerts")
 def alerts_list(current_user: UserResponse = Depends(get_current_user)):
-    return bq_service.get_alerts(current_user.id)
+    return alerts_service.get_alerts(current_user.id)
 
 
 @app.post("/api/alerts")
 def alerts_create(payload: AlertCreate, current_user: UserResponse = Depends(get_current_user)):
-    return bq_service.create_alert(current_user.id, payload.model_dump())
+    return alerts_service.create_alert(current_user.id, payload.model_dump())
 
 
 @app.delete("/api/alerts/{alert_id}")
 def alerts_delete(alert_id: str, current_user: UserResponse = Depends(get_current_user)):
-    bq_service.delete_alert(alert_id, current_user.id)
+    alerts_service.delete_alert(alert_id, current_user.id)
     return {"status": "deleted"}
 
 

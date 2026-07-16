@@ -16,6 +16,7 @@ import logging
 import os
 import tempfile
 
+import pandas as pd
 from google.cloud import bigquery
 from dotenv import load_dotenv
 
@@ -84,3 +85,31 @@ def client() -> bigquery.Client:
 def table_id(name: str) -> str:
     """Backtick-quoted fully-qualified table id: `project.dataset.name`."""
     return f"`{PROJECT}.{DATASET}.{name}`"
+
+
+def insert_rows(table: str, rows: list[dict]) -> None:
+    """Append rows via a load job (WRITE_APPEND, free-tier eligible)."""
+    if not rows:
+        return
+    df = pd.DataFrame(rows)
+    full = f"{PROJECT}.{DATASET}.{table}"
+    job = client().load_table_from_dataframe(
+        df, full,
+        job_config=bigquery.LoadJobConfig(
+            write_disposition=bigquery.WriteDisposition.WRITE_APPEND,
+            schema_update_options=[bigquery.SchemaUpdateOption.ALLOW_FIELD_ADDITION],
+        ),
+    )
+    job.result()
+
+
+def execute_dml(sql: str, params: list["bigquery.ScalarQueryParameter"]) -> int:
+    """Run a parameterized UPDATE/DELETE and return affected row count.
+
+    Row-level DML replaces the old read-all + WRITE_TRUNCATE pattern, which
+    replaced the whole table with one user's rows and destroyed every other
+    user's data on each mutation (see ticket #40).
+    """
+    job = client().query(sql, job_config=bigquery.QueryJobConfig(query_parameters=params))
+    job.result()
+    return job.num_dml_affected_rows or 0

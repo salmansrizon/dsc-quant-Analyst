@@ -13,13 +13,17 @@ def test_client_is_a_singleton():
 
 
 def test_api_modules_share_the_single_client():
-    from backend import bq_service, user_service, exports
-    assert bq_service.bq is db.client()
-    assert user_service.bq is db.client()
+    from backend import (
+        market_service, watchlist_service, portfolio_service, alerts_service,
+        user_service, exports,
+    )
+    for mod in (market_service, watchlist_service, portfolio_service, alerts_service, user_service):
+        assert mod.bq is db.client()
     assert exports._get_bigquery_client() is db.client()
 
 
 def test_table_helpers_delegate_to_db():
-    from backend import bq_service, user_service
-    assert bq_service._full_id is db.table_id
+    from backend import market_service, watchlist_service, portfolio_service, alerts_service, user_service
+    for mod in (market_service, watchlist_service, portfolio_service, alerts_service):
+        assert mod._full_id is db.table_id
     assert user_service._uid is db.table_id

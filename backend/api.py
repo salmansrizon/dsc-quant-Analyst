@@ -33,7 +33,10 @@ def signup(payload: UserCreate):
         user = create_user(payload)
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
-    token = create_access_token(user.id, user.role)
+    token = create_access_token(
+        user.id, user.role, email=user.email, phone=user.phone,
+        full_name=user.full_name, created_at=user.created_at,
+    )
     return TokenResponse(access_token=token, user=user)
 
 
@@ -45,7 +48,10 @@ def login(payload: UserLogin):
     cred = get_user_credentials(payload.email)
     if not cred or not verify_password(payload.password, cred.get("password_hash", "")):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
-    token = create_access_token(cred["id"], cred.get("role", "user"))
+    token = create_access_token(
+        cred["id"], cred.get("role", "user"), email=user.email, phone=user.phone,
+        full_name=user.full_name, created_at=user.created_at,
+    )
     return TokenResponse(access_token=token, user=user)
 
 

@@ -25,11 +25,14 @@ logger = logging.getLogger(__name__)
 
 def _resolve_credentials() -> str | None:
     """Best-effort credential setup. Returns the service-account project_id if
-    one was found. Never raises — falls through to ambient ADC so the API can
+    one was found. Never raises — falls through to ambient ADC so callers can
     still start in an environment that provides credentials another way.
+
+    An explicit service-account key names its own project, so it decides
+    PROJECT even when GOOGLE_APPLICATION_CREDENTIALS is already exported; only
+    the pointing-at-a-file step is skipped in that case.
     """
-    if os.environ.get("GOOGLE_APPLICATION_CREDENTIALS"):
-        return None  # already configured by the environment
+    already_configured = bool(os.environ.get("GOOGLE_APPLICATION_CREDENTIALS"))
 
     raw = os.environ.get("GCP_SERVICE_ACCOUNT_JSON")
     if raw:
@@ -38,15 +41,18 @@ def _resolve_credentials() -> str | None:
         except json.JSONDecodeError as e:
             logger.warning("Invalid GCP_SERVICE_ACCOUNT_JSON, ignoring: %s", e)
             return None
-        temp_key = os.path.join(tempfile.gettempdir(), "gcp-key.json")
-        with open(temp_key, "w", encoding="utf-8") as f:
-            f.write(raw)
-        os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = temp_key
+        if not already_configured:
+            # On serverless (Vercel/Actions) the key arrives as an env var; the
+            # client library only reads it from a file.
+            temp_key = os.path.join(tempfile.gettempdir(), "gcp-key.json")
+            with open(temp_key, "w", encoding="utf-8") as f:
+                f.write(raw)
+            os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = temp_key
         return info.get("project_id")
 
     # Local fallback: a service-account key checked out under backend/utils/.
     local = os.path.join(os.path.dirname(__file__), "utils", "dbt-test-420614-6c3337b4e737.json")
-    if os.path.exists(local):
+    if not already_configured and os.path.exists(local):
         os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = local
         try:
             with open(local, "r", encoding="utf-8") as f:

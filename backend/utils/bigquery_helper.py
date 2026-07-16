@@ -22,10 +22,6 @@ except ImportError:  # standalone scripts: cwd=backend, so backend/ is sys.path[
 
 logger = logging.getLogger(__name__)
 
-# Kept as module-level names because the ETL scripts import them directly.
-BIGQUERY_PROJECT_ID = db.PROJECT
-BIGQUERY_DATASET_ID = db.DATASET
-
 
 class BigQueryHelper:
     def __init__(self):
@@ -39,7 +35,7 @@ class BigQueryHelper:
             self.client.get_dataset(dataset_ref)
             return
         except Exception:
-            logger.info("Dataset %s not found, creating it.", dataset_ref)
+            print(f"Dataset {dataset_ref} not found. Creating...")
         dataset = bigquery.Dataset(dataset_ref)
         dataset.location = "US"
         try:
@@ -69,10 +65,10 @@ class BigQueryHelper:
                 return str(row[date_column])
             return None
         except Exception as e:
-            logger.warning("Error fetching last date from %s: %s", full_table_id, e)
+            print(f"Error fetching last date from {full_table_id}: {e}")
             return None
 
-    def upload_dataframe(self, df, table_name, chunk_size=None, truncate=False):
+    def upload_dataframe(self, df, table_name, truncate=False):
         """Uploads a pandas DataFrame to a BigQuery table."""
         if df.empty:
             return
@@ -89,11 +85,12 @@ class BigQueryHelper:
         if not truncate:
             job_config.schema_update_options = [bigquery.SchemaUpdateOption.ALLOW_FIELD_ADDITION]
 
-        logger.info("Uploading %d records to BigQuery %s...", len(df), full_table_id)
+        print(f"Uploading {len(df)} records to BigQuery {full_table_id}...")
         try:
             job = self.client.load_table_from_dataframe(df, full_table_id, job_config=job_config)
             job.result()
-            logger.info("Loaded %d rows into %s.", len(df), full_table_id)
-        except Exception:
+            print(f"  Successfully loaded {len(df)} rows into {full_table_id}.")
+        except Exception as e:
             logger.exception("Error uploading to %s", full_table_id)
+            print(f"  Error uploading to {full_table_id}: {e}")
             raise

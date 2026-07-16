@@ -1,5 +1,35 @@
 """Tests for the unified BigQuery access point (tickets #41, #44)."""
+import json
+import os
+
 from backend import db
+
+_KEY = json.dumps({"project_id": "sa-project", "type": "service_account"})
+
+
+def test_service_account_json_names_the_project_even_when_adc_is_exported(monkeypatch, tmp_path):
+    # #44: the ETL used to take its project from GCP_SERVICE_ACCOUNT_JSON
+    # unconditionally. If an exported GOOGLE_APPLICATION_CREDENTIALS suppressed
+    # that, the scrapers would silently write to the default project instead.
+    monkeypatch.setenv("GOOGLE_APPLICATION_CREDENTIALS", str(tmp_path / "other.json"))
+    monkeypatch.setenv("GCP_SERVICE_ACCOUNT_JSON", _KEY)
+    assert db._resolve_credentials() == "sa-project"
+    # ...but it must not repoint an already-configured environment at a temp file.
+    assert os.environ["GOOGLE_APPLICATION_CREDENTIALS"] == str(tmp_path / "other.json")
+
+
+def test_service_account_json_is_written_to_a_file_when_adc_is_absent(monkeypatch):
+    monkeypatch.delenv("GOOGLE_APPLICATION_CREDENTIALS", raising=False)
+    monkeypatch.setenv("GCP_SERVICE_ACCOUNT_JSON", _KEY)
+    assert db._resolve_credentials() == "sa-project"
+    written = os.environ["GOOGLE_APPLICATION_CREDENTIALS"]
+    assert json.loads(open(written, encoding="utf-8").read())["project_id"] == "sa-project"
+
+
+def test_invalid_service_account_json_does_not_raise(monkeypatch):
+    monkeypatch.delenv("GOOGLE_APPLICATION_CREDENTIALS", raising=False)
+    monkeypatch.setenv("GCP_SERVICE_ACCOUNT_JSON", "{not json")
+    assert db._resolve_credentials() is None
 
 
 def test_table_id_is_backtick_qualified():

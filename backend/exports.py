@@ -26,18 +26,15 @@ def _list_tables() -> List[str]:
 def export_announcements() -> tuple[bytes, str]:
     """Export announcements as CSV."""
     client = _get_bigquery_client()
+    # The table is `lankabd_announcements`; `announcements` has never existed.
+    # It carries no LTP column either — the price lives in the price archive.
     sql = f"""
-        SELECT Symbol, Date, Announcement_Type, Details, LTP
-        FROM {db.table_id('announcements')}
+        SELECT Symbol, Date, Announcement_Type, Details, Sector, Importance
+        FROM {db.table_id('lankabd_announcements')}
         ORDER BY Date DESC
     """
-    
-    job_config = bigquery.QueryJobConfig(
-        query_parameters=[
-            bigquery.ScalarQueryParameter("symbol", "STRING", ""),
-        ]
-    )
-    query = client.query(sql, job_config=job_config)
+
+    query = client.query(sql, job_config=bigquery.QueryJobConfig())
     results = [dict(r) for r in query.result()]
     
     if not results:
@@ -54,14 +51,11 @@ def export_price_archive() -> tuple[bytes, str]:
     client = _get_bigquery_client()
     sql = f"""
         SELECT Date, Symbol, LTP, Close, Volume_Qty_
-        FROM {db.table_id('price_archive')}
+        FROM {db.table_id('lankabd_price_archive')}
         ORDER BY Date DESC
     """
-    
-    job_config = bigquery.QueryJobConfig(
-        query_parameters=[]
-    )
-    query = client.query(sql, job_config=job_config)
+
+    query = client.query(sql, job_config=bigquery.QueryJobConfig())
     results = [dict(r) for r in query.result()]
     
     df = pd.DataFrame(results)

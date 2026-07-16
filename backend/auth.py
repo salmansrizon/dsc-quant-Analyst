@@ -25,27 +25,18 @@ def verify_password(password: str, hashed: str) -> bool:
     return bcrypt.checkpw(password.encode("utf-8"), hashed.encode("utf-8"))
 
 
-def create_access_token(
-    user_id: str,
-    role: str,
-    email: str | None = None,
-    phone: str | None = None,
-    full_name: str | None = None,
-    created_at: str | None = None,
-) -> str:
-    """Create a JWT access token.
+def create_access_token(user: UserResponse) -> str:
+    """Create a JWT access token from a user record.
 
-    Identity fields (email/phone/full_name) are embedded as claims so that
-    get_current_user can reconstruct the user from the token without a
-    per-request BigQuery lookup (ticket #42).
+    Only id/role/email are embedded — enough for get_current_user to authorize
+    a request without a per-request BigQuery lookup (ticket #42). Phone/full_name
+    are deliberately NOT in the token (they'd be base64-readable PII); endpoints
+    that need the full, fresh record re-read it (see read_me / require_admin).
     """
     payload = {
-        "sub": user_id,
-        "role": role,
-        "email": email,
-        "phone": phone,
-        "full_name": full_name,
-        "created_at": created_at,
+        "sub": user.id,
+        "role": user.role,
+        "email": user.email,
         "exp": datetime.now(timezone.utc) + timedelta(hours=ACCESS_TOKEN_EXPIRE_HOURS),
         "iat": datetime.now(timezone.utc),
     }
@@ -71,26 +62,42 @@ def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(securit
     to a one-time DB lookup so existing sessions keep working.
     """
     payload = decode_token(credentials.credentials)
+    sub = payload.get("sub")
+    if not sub:
+        raise HTTPException(status_code=401, detail="Invalid token")
+
     if payload.get("email"):
+        # Lightweight identity from claims — enough to authorize the request
+        # without a DB hit. Phone/full_name aren't in the token; endpoints that
+        # need them re-read the record.
         return UserResponse(
-            id=payload.get("sub"),
+            id=sub,
             email=payload["email"],
-            phone=payload.get("phone") or "",
-            full_name=payload.get("full_name") or "",
+            phone="",
+            full_name="",
             role=payload.get("role", "user"),
-            created_at=payload.get("created_at"),
+            created_at=None,
         )
 
     # Legacy token without identity claims — one-time DB lookup.
     from .user_service import get_user_by_id  # local import to avoid circular deps
-    user = get_user_by_id(payload.get("sub"))
+    user = get_user_by_id(sub)
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
     return user
 
 
-def require_admin(current_user = Depends(get_current_user)):
-    """FastAPI dependency: require admin role."""
-    if current_user.role != "admin":
+def require_admin(current_user: UserResponse = Depends(get_current_user)):
+    """Require admin role, re-verified against the DB.
+
+    Admin authorization must not trust a possibly-stale 24h token claim — a
+    demoted admin should lose access immediately. This costs one DB read, but
+    only on admin-gated endpoints, so the non-admin hot path stays DB-free
+    (ticket #42 review).
+    """
+    from .user_service import get_user_by_id
+    fresh = get_user_by_id(current_user.id)
+    role = fresh.role if fresh else current_user.role
+    if role != "admin":
         raise HTTPException(status_code=403, detail="Admin access required")
-    return current_user
+    return fresh or current_user

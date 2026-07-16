@@ -33,10 +33,7 @@ def signup(payload: UserCreate):
         user = create_user(payload)
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
-    token = create_access_token(
-        user.id, user.role, email=user.email, phone=user.phone,
-        full_name=user.full_name, created_at=user.created_at,
-    )
+    token = create_access_token(user)
     return TokenResponse(access_token=token, user=user)
 
 
@@ -48,16 +45,17 @@ def login(payload: UserLogin):
     cred = get_user_credentials(payload.email)
     if not cred or not verify_password(payload.password, cred.get("password_hash", "")):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
-    token = create_access_token(
-        cred["id"], cred.get("role", "user"), email=user.email, phone=user.phone,
-        full_name=user.full_name, created_at=user.created_at,
-    )
+    token = create_access_token(user)
     return TokenResponse(access_token=token, user=user)
 
 
 @app.get("/api/auth/me", response_model=UserResponse)
 def read_me(current_user: UserResponse = Depends(get_current_user)):
-    return current_user
+    # /auth/me returns the full, fresh record (the token carries only a
+    # lightweight identity) — the frontend loads this on mount, so a demoted
+    # role or edited profile is reflected here without waiting for token expiry.
+    fresh = get_user_by_id(current_user.id)
+    return fresh or current_user
 
 
 # ── Market Data ──────────────────────────────────────────────────────────────

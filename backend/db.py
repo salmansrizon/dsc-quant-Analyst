@@ -1,13 +1,12 @@
-"""Single BigQuery access point for the API layer (ticket #41).
+"""Single BigQuery access point (tickets #41, #44).
 
 Consolidates what used to be four independent client bootstraps (bq_service,
 user_service, exports, utils/bigquery_helper) into one credential-resolution +
-client + table-name helper. The API modules import from here so they all share
-one auth path instead of depending on whichever module set ambient ADC first.
+client + table-name helper. Every caller imports from here so they all share one
+auth path instead of depending on whichever module set ambient ADC first.
 
-Note: backend/utils/bigquery_helper.py (the ETL/scraper layer, run standalone
-with a different import context) is intentionally NOT migrated here yet — see
-the follow-up note on ticket #41.
+The ETL/scraper layer reaches this through `utils.bigquery_helper.BigQueryHelper`,
+now a thin shim over `client()` (#44).
 """
 from __future__ import annotations
 
@@ -82,9 +81,18 @@ def client() -> bigquery.Client:
     return _client
 
 
+def qualified_name(name: str) -> str:
+    """Bare fully-qualified table name: project.dataset.name (no backticks).
+
+    This is the form the client library's table-reference arguments want; SQL
+    text wants `table_id` instead.
+    """
+    return f"{PROJECT}.{DATASET}.{name}"
+
+
 def table_id(name: str) -> str:
     """Backtick-quoted fully-qualified table id: `project.dataset.name`."""
-    return f"`{PROJECT}.{DATASET}.{name}`"
+    return f"`{qualified_name(name)}`"
 
 
 def insert_rows(table: str, rows: list[dict]) -> None:
@@ -92,9 +100,8 @@ def insert_rows(table: str, rows: list[dict]) -> None:
     if not rows:
         return
     df = pd.DataFrame(rows)
-    full = f"{PROJECT}.{DATASET}.{table}"
     job = client().load_table_from_dataframe(
-        df, full,
+        df, qualified_name(table),
         job_config=bigquery.LoadJobConfig(
             write_disposition=bigquery.WriteDisposition.WRITE_APPEND,
             schema_update_options=[bigquery.SchemaUpdateOption.ALLOW_FIELD_ADDITION],

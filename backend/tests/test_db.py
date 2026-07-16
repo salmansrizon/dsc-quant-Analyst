@@ -1,4 +1,4 @@
-"""Tests for the unified BigQuery access point (ticket #41)."""
+"""Tests for the unified BigQuery access point (tickets #41, #44)."""
 from backend import db
 
 
@@ -6,6 +6,10 @@ def test_table_id_is_backtick_qualified():
     tid = db.table_id("watchlists")
     assert tid == f"`{db.PROJECT}.{db.DATASET}.watchlists`"
     assert tid.startswith("`") and tid.endswith("`")
+
+
+def test_qualified_name_has_no_backticks():
+    assert db.qualified_name("watchlists") == f"{db.PROJECT}.{db.DATASET}.watchlists"
 
 
 def test_client_is_a_singleton():

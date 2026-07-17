@@ -1,21 +1,21 @@
 import uuid
-import pandas as pd
 from datetime import datetime, timezone
 from typing import Optional
 from google.cloud import bigquery
 from .models import UserResponse
 from . import db
 
-# Single shared client + table-name helper (ticket #41). Previously this module
-# hardcoded PROJECT/DATASET, diverging from the env-driven config elsewhere.
-# No module-level client: reads go through db.query_rows and writes through
-# db.insert_rows, so the read path is stubbable via db._client (ticket #46).
-PROJECT = db.PROJECT
-DATASET = db.DATASET
+# All BigQuery access goes through db (tickets #41/#46/#52): reads via
+# db.query_rows against the `users_current` view, writes via db.append_version.
+# No module-level client and no hardcoded project/dataset.
+
+# Whitelist of admin-editable user columns. Anything outside this (id, email,
+# password_hash, created_at) is not editable through the admin endpoint.
+_USER_UPDATE_FIELDS = frozenset({"full_name", "phone", "role"})
 
 
 def _insert_user_row(row: dict):
-    db.insert_rows("users", [row])
+    db.append_version("users", [row])
 
 
 def create_user(payload) -> UserResponse:
@@ -54,7 +54,7 @@ def create_user(payload) -> UserResponse:
 def get_user_by_email(email: str) -> Optional[UserResponse]:
     sql = f"""
         SELECT id, email, phone, full_name, role, created_at
-        FROM {db.table_id('users')}
+        FROM {db.current_view('users')}
         WHERE LOWER(email) = @email
         LIMIT 1
     """
@@ -66,9 +66,9 @@ def get_user_by_email(email: str) -> Optional[UserResponse]:
     return UserResponse(
         id=r["id"],
         email=r["email"],
-        phone=r.get("phone", ""),
-        full_name=r.get("full_name", ""),
-        role=r.get("role", "user"),
+        phone=r.get("phone") or "",
+        full_name=r.get("full_name") or "",
+        role=r.get("role") or "user",
         created_at=str(r["created_at"]) if r.get("created_at") else None,
     )
 
@@ -76,7 +76,7 @@ def get_user_by_email(email: str) -> Optional[UserResponse]:
 def get_user_by_id(user_id: str) -> Optional[UserResponse]:
     sql = f"""
         SELECT id, email, phone, full_name, role, created_at
-        FROM {db.table_id('users')}
+        FROM {db.current_view('users')}
         WHERE id = @uid
         LIMIT 1
     """
@@ -88,9 +88,9 @@ def get_user_by_id(user_id: str) -> Optional[UserResponse]:
     return UserResponse(
         id=r["id"],
         email=r["email"],
-        phone=r.get("phone", ""),
-        full_name=r.get("full_name", ""),
-        role=r.get("role", "user"),
+        phone=r.get("phone") or "",
+        full_name=r.get("full_name") or "",
+        role=r.get("role") or "user",
         created_at=str(r["created_at"]) if r.get("created_at") else None,
     )
 
@@ -98,7 +98,7 @@ def get_user_by_id(user_id: str) -> Optional[UserResponse]:
 def get_user_credentials(email: str) -> Optional[dict]:
     sql = f"""
         SELECT id, email, phone, password_hash, full_name, role
-        FROM {db.table_id('users')}
+        FROM {db.current_view('users')}
         WHERE LOWER(email) = @email
         LIMIT 1
     """
@@ -110,49 +110,66 @@ def get_user_credentials(email: str) -> Optional[dict]:
     return {
         "id": r["id"],
         "email": r["email"],
-        "password_hash": r.get("password_hash", ""),
-        "role": r.get("role", "user"),
+        "password_hash": r.get("password_hash") or "",
+        "role": r.get("role") or "user",
     }
 
 
 def list_users():
     sql = f"""
         SELECT id, email, phone, full_name, role, created_at
-        FROM {db.table_id('users')}
+        FROM {db.current_view('users')}
         ORDER BY created_at DESC
     """
     return db.query_rows(sql)
 
 
-def update_user(user_id: str, updates: dict):
-    # BROKEN — see ticket #50. This reads the whole table and rewrites it with
-    # WRITE_TRUNCATE (the pattern #40 removed everywhere else), and the edit
-    # itself is applied to a copy that is then discarded, so it is a no-op.
-    # Left as-is here deliberately: #46 is a read-path change, and this needs
-    # the scoped-DML rewrite plus the multi-user regression test #40 got.
-    rows = list(db.client().query(f"SELECT * FROM {db.table_id('users')}").result())
-    now = datetime.now(timezone.utc)
-    for r in rows:
-        d = dict(r)
-        if d["id"] == user_id:
-            for col in ("full_name", "phone", "role"):
-                if col in updates:
-                    d[col] = updates[col]
-            d["updated_at"] = now
-    df = pd.DataFrame([dict(r) for r in rows])
-    full = f"{PROJECT}.{DATASET}.users"
-    db.client().load_table_from_dataframe(df, full, job_config=bigquery.LoadJobConfig(
-        write_disposition=bigquery.WriteDisposition.WRITE_TRUNCATE,
-    )).result()
+def _find_user_row(user_id: str) -> dict | None:
+    """The user's full current row (including password_hash), or None."""
+    rows = db.query_rows(
+        f"SELECT * FROM {db.current_view('users')} WHERE id = @uid LIMIT 1",
+        [bigquery.ScalarQueryParameter("uid", "STRING", user_id)],
+    )
+    return rows[0] if rows else None
 
 
-def delete_user(user_id: str):
-    # BROKEN — see ticket #50. Whole-table truncate-and-reload; deleting the
-    # last user truncates with an empty DataFrame.
-    rows = list(db.client().query(f"SELECT * FROM {db.table_id('users')}").result())
-    remaining = [dict(r) for r in rows if r["id"] != user_id]
-    df = pd.DataFrame(remaining) if remaining else pd.DataFrame()
-    full = f"{PROJECT}.{DATASET}.users"
-    db.client().load_table_from_dataframe(df, full, job_config=bigquery.LoadJobConfig(
-        write_disposition=bigquery.WriteDisposition.WRITE_TRUNCATE,
-    )).result()
+def update_user(user_id: str, updates: dict) -> bool:
+    """Update one user's editable columns. Returns whether a row changed.
+
+    Appends a new version (#50, #52). This used to read the whole table and
+    reload it with WRITE_TRUNCATE — the pattern #40 removed everywhere else —
+    which erased any signup landing between the read and the load, and applied
+    its edit to a copy that was then discarded, so it never changed anything.
+    """
+    changes = {k: v for k, v in updates.items() if k in _USER_UPDATE_FIELDS and v is not None}
+    if not changes:
+        return False
+
+    row = _find_user_row(user_id)
+    if not row:
+        return False
+
+    db.append_version("users", [{
+        **row,
+        **changes,
+        "updated_at": datetime.now(timezone.utc),
+    }])
+    return True
+
+
+def delete_user(user_id: str) -> bool:
+    """Tombstone one user. Returns whether they existed.
+
+    The old whole-table reload dropped concurrent signups, and truncated the
+    table with an empty DataFrame when the last user was removed (#50).
+    """
+    row = _find_user_row(user_id)
+    if not row:
+        return False
+
+    db.append_version("users", [{
+        **row,
+        "is_deleted": True,
+        "updated_at": datetime.now(timezone.utc),
+    }])
+    return True

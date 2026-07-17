@@ -45,6 +45,7 @@ class FakeClient:
         params = {}
         if job_config is not None:
             for p in job_config.query_parameters:
-                params[p.name] = p.value
+                # Scalars expose .value; ArrayQueryParameter exposes .values.
+                params[p.name] = getattr(p, "value", None) if hasattr(p, "value") else list(p.values)
         self.calls.append({"sql": " ".join(sql.split()), "params": params})
         return FakeJob(self.result_rows, self.num_dml_affected_rows)

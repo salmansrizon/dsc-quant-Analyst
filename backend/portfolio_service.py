@@ -1,4 +1,9 @@
-"""Portfolio queries + mutations (split from the bq_service god module, #43)."""
+"""Portfolio queries + mutations (split from the bq_service god module, #43).
+
+Append-only: mutations record a new version rather than editing in place, and
+reads go through the `portfolios_current` view. See db.append_version (#52) —
+BigQuery's free tier forbids DML outright.
+"""
 import uuid
 from datetime import datetime, timezone
 
@@ -7,14 +12,11 @@ from google.cloud import bigquery
 from . import db
 
 
-# Whitelist of updatable portfolio columns and their BigQuery param types.
-_PORTFOLIO_UPDATE_TYPES = {
-    "buy_price": "FLOAT64",
-    "quantity": "INT64",
-    "price_target": "FLOAT64",
-    "stop_loss": "FLOAT64",
-    "notes": "STRING",
-}
+# Whitelist of updatable portfolio columns. Anything else a caller sends (id,
+# user_id, is_deleted, created_at) is ignored rather than written.
+_PORTFOLIO_UPDATE_FIELDS = frozenset({
+    "buy_price", "quantity", "price_target", "stop_loss", "notes",
+})
 
 
 def get_portfolio(user_id: str):
@@ -24,19 +26,38 @@ def get_portfolio(user_id: str):
                d.LTP AS current_price,
                ROUND((d.LTP - p.buy_price) * p.quantity, 2) AS pnl,
                ROUND(((d.LTP - p.buy_price) / p.buy_price) * 100, 2) AS pnl_percent
-        FROM {db.table_id('portfolios')} p
+        FROM {db.current_view('portfolios')} p
         LEFT JOIN {db.table_id('lankabd_datamatrix')} d ON p.symbol = d.Symbol
-        WHERE p.user_id = @uid AND p.is_deleted = FALSE
+        WHERE p.user_id = @uid
         ORDER BY p.created_at DESC
     """
     params = [bigquery.ScalarQueryParameter("uid", "STRING", user_id)]
     return db.query_rows(sql, params)
 
 
+def _find_holding(portfolio_id: str, user_id: str) -> dict | None:
+    """One of the user's current holdings, or None.
+
+    Scoped by owner: guessing an id must never reach someone else's holding.
+    """
+    rows = db.query_rows(
+        f"""
+        SELECT * FROM {db.current_view('portfolios')}
+        WHERE id = @id AND user_id = @uid
+        LIMIT 1
+        """,
+        [
+            bigquery.ScalarQueryParameter("id", "STRING", portfolio_id),
+            bigquery.ScalarQueryParameter("uid", "STRING", user_id),
+        ],
+    )
+    return rows[0] if rows else None
+
+
 def add_to_portfolio(user_id: str, data: dict):
     pid = str(uuid.uuid4())
     now = datetime.now(timezone.utc)
-    db.insert_rows("portfolios", [{
+    db.append_version("portfolios", [{
         "id": pid,
         "user_id": user_id,
         "symbol": data["symbol"].upper(),
@@ -53,45 +74,41 @@ def add_to_portfolio(user_id: str, data: dict):
     return {"id": pid, "symbol": data["symbol"].upper()}
 
 
-def update_portfolio(portfolio_id: str, user_id: str, data: dict):
-    updates = {k: v for k, v in data.items() if k in _PORTFOLIO_UPDATE_TYPES and v is not None}
-    if not updates:
+def update_portfolio(portfolio_id: str, user_id: str, data: dict) -> bool:
+    """Append an updated version of the holding. Returns whether it changed.
+
+    Read-modify-append: the whole merged row is written, so the version log
+    always holds complete rows. Concurrent edits to the *same* holding are
+    last-writer-wins; edits to different rows never interfere, which is the
+    property the old whole-table rewrite lacked (#40).
+    """
+    changes = {k: v for k, v in data.items() if k in _PORTFOLIO_UPDATE_FIELDS and v is not None}
+    if not changes:
         return False
 
-    set_clauses = ["updated_at = @now"]
-    params = [
-        bigquery.ScalarQueryParameter("now", "TIMESTAMP", datetime.now(timezone.utc)),
-        bigquery.ScalarQueryParameter("id", "STRING", portfolio_id),
-        bigquery.ScalarQueryParameter("uid", "STRING", user_id),
-    ]
-    for col, val in updates.items():
-        set_clauses.append(f"{col} = @{col}")
-        params.append(bigquery.ScalarQueryParameter(col, _PORTFOLIO_UPDATE_TYPES[col], val))
+    holding = _find_holding(portfolio_id, user_id)
+    if not holding:
+        return False
 
-    affected = db.execute_dml(
-        f"""
-        UPDATE {db.table_id('portfolios')}
-        SET {', '.join(set_clauses)}
-        WHERE id = @id AND user_id = @uid AND is_deleted = FALSE
-        """,
-        params,
-    )
-    return affected > 0
+    db.append_version("portfolios", [{
+        **holding,
+        **changes,
+        "updated_at": datetime.now(timezone.utc),
+    }])
+    return True
 
 
-def delete_portfolio(portfolio_id: str, user_id: str):
-    db.execute_dml(
-        f"""
-        UPDATE {db.table_id('portfolios')}
-        SET is_deleted = TRUE, updated_at = @now
-        WHERE id = @id AND user_id = @uid AND is_deleted = FALSE
-        """,
-        [
-            bigquery.ScalarQueryParameter("now", "TIMESTAMP", datetime.now(timezone.utc)),
-            bigquery.ScalarQueryParameter("id", "STRING", portfolio_id),
-            bigquery.ScalarQueryParameter("uid", "STRING", user_id),
-        ],
-    )
+def delete_portfolio(portfolio_id: str, user_id: str) -> bool:
+    """Tombstone one of the user's holdings. Returns whether it existed."""
+    holding = _find_holding(portfolio_id, user_id)
+    if not holding:
+        return False
+
+    db.append_version("portfolios", [{
+        **holding,
+        "is_deleted": True,
+        "updated_at": datetime.now(timezone.utc),
+    }])
     return True
 
 
@@ -102,9 +119,9 @@ def portfolio_summary(user_id: str):
                ROUND(SUM(d.LTP * p.quantity), 2) AS current_value,
                ROUND(SUM((d.LTP - p.buy_price) * p.quantity), 2) AS total_pnl,
                ROUND(AVG(((d.LTP - p.buy_price) / p.buy_price) * 100), 2) AS avg_pnl_pct
-        FROM {db.table_id('portfolios')} p
+        FROM {db.current_view('portfolios')} p
         LEFT JOIN {db.table_id('lankabd_datamatrix')} d ON p.symbol = d.Symbol
-        WHERE p.user_id = @uid AND p.is_deleted = FALSE
+        WHERE p.user_id = @uid
     """
     params = [bigquery.ScalarQueryParameter("uid", "STRING", user_id)]
     rows = db.query_rows(sql, params)

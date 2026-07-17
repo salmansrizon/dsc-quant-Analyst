@@ -183,13 +183,17 @@ def admin_users(admin: UserResponse = Depends(require_admin)):
 
 @app.put("/api/admin/users/{user_id}")
 def admin_update_user(user_id: str, payload: dict, admin: UserResponse = Depends(require_admin)):
-    update_user(user_id, payload)
+    # Report what actually happened: this used to answer "updated" even though
+    # the write was a silent no-op (ticket #50).
+    if not update_user(user_id, payload):
+        raise HTTPException(status_code=404, detail="User not found, or no editable fields supplied")
     return {"status": "updated"}
 
 
 @app.delete("/api/admin/users/{user_id}")
 def admin_delete_user(user_id: str, admin: UserResponse = Depends(require_admin)):
-    delete_user(user_id)
+    if not delete_user(user_id):
+        raise HTTPException(status_code=404, detail="User not found")
     return {"status": "deleted"}
 
 

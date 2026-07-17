@@ -49,6 +49,34 @@ SCHEMAS = {
         ("is_triggered", "BOOL"), ("triggered_at", _TS),
         ("created_at", _TS), ("updated_at", _TS), ("is_deleted", "BOOL"),
     ],
+    # Reported fundamentals (#57). Grain: one row per symbol per reporting
+    # period. Fed by both DividendArchive (annual, 12y of history) and
+    # GetLatestEarnings (current period).
+    "fundamentals_earnings": [
+        ("id", _STR),           # symbol|year|period
+        ("symbol", _STR), ("sector", _STR),
+        ("year", "INT64"),
+        ("period", _STR),       # ANNUAL | H1 | Q1 | Q2 | Q3 | 9M | UNKNOWN
+        ("period_raw", _STR),   # what the site said, to audit the mapping
+        ("eps", "FLOAT64"), ("nav", "FLOAT64"),
+        ("publish_date", "DATE"),
+        ("source", _STR),       # dividend_archive | latest_earnings
+        ("updated_at", _TS), ("is_deleted", "BOOL"),
+    ],
+    # Grain: one dividend DECLARATION. A company declares several a year
+    # (MARICO 2026 has five), so symbol|year would collapse them.
+    "fundamentals_dividends": [
+        ("id", _STR),           # symbol|year|type|publish_date
+        ("symbol", _STR), ("sector", _STR),
+        ("year", "INT64"),
+        ("dividend_type", _STR),      # ANNUAL | SEMI_ANNUAL | INTERIM | FINAL | UNKNOWN
+        ("dividend_type_raw", _STR),  # 754 rows are blank; some say "Annuall"
+        ("cash_dividend_pct", "FLOAT64"), ("stock_dividend_pct", "FLOAT64"),
+        ("publish_date", "DATE"), ("record_date", "DATE"),
+        ("agm_date", "DATE"), ("year_end_date", "DATE"),
+        ("source", _STR),
+        ("updated_at", _TS), ("is_deleted", "BOOL"),
+    ],
 }
 
 

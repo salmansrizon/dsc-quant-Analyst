@@ -117,6 +117,8 @@ VERSIONED_TABLES = {
     "watchlists": "id",
     "portfolios": "id",
     "price_alerts": "id",
+    "fundamentals_earnings": "id",
+    "fundamentals_dividends": "id",
 }
 
 _client: bigquery.Client | None = None

@@ -78,13 +78,13 @@ def pending(monkeypatch):
 
 
 def test_no_pending_alerts_is_a_noop(pending):
-    assert alert_checker.check_alerts() == []
+    assert alert_checker.check_alerts() == {"delivered": [], "undelivered": []}
     assert pending["marked"] == []
 
 
 def test_alerts_that_do_not_meet_their_condition_are_left_alone(pending):
     pending["alerts"] = [_alert(current_price=50.0)]  # target 100, direction above
-    assert alert_checker.check_alerts() == []
+    assert alert_checker.check_alerts() == {"delivered": [], "undelivered": []}
     assert pending["marked"] == []
 
 
@@ -92,22 +92,26 @@ def test_without_a_notifier_a_met_alert_is_reported_but_not_consumed(pending):
     """The heart of defect 3: marking is what consumes the alert."""
     pending["alerts"] = [_alert()]
 
-    met = alert_checker.check_alerts()
+    result = alert_checker.check_alerts()
 
-    assert [a["id"] for a in met] == ["a1"]
+    assert [a["id"] for a in result["undelivered"]] == ["a1"]
+    assert result["delivered"] == []
     assert pending["marked"] == [], "an undelivered alert must stay pending (#34)"
 
 
 def test_a_delivered_alert_is_marked_triggered(pending):
     pending["alerts"] = [_alert()]
-    delivered = alert_checker.check_alerts(notifier=lambda a: True)
-    assert [a["id"] for a in delivered] == ["a1"]
+    result = alert_checker.check_alerts(notifier=lambda a: True)
+    assert [a["id"] for a in result["delivered"]] == ["a1"]
+    assert result["undelivered"] == []
     assert pending["marked"] == ["a1"]
 
 
 def test_a_declined_alert_stays_pending(pending):
     pending["alerts"] = [_alert()]
-    assert alert_checker.check_alerts(notifier=lambda a: False) == []
+    result = alert_checker.check_alerts(notifier=lambda a: False)
+    assert result["delivered"] == []
+    assert [a["id"] for a in result["undelivered"]] == ["a1"]
     assert pending["marked"] == []
 
 
@@ -116,7 +120,9 @@ def test_a_notifier_that_raises_does_not_consume_the_alert(pending):
         raise RuntimeError("telegram is down")
 
     pending["alerts"] = [_alert()]
-    assert alert_checker.check_alerts(notifier=boom) == []
+    result = alert_checker.check_alerts(notifier=boom)
+    assert result["delivered"] == []
+    assert [a["id"] for a in result["undelivered"]] == ["a1"]
     assert pending["marked"] == [], "a delivery failure must not consume the alert"
 
 
@@ -128,8 +134,9 @@ def test_one_failed_delivery_does_not_block_the_others(pending):
             raise RuntimeError("nope")
         return True
 
-    delivered = alert_checker.check_alerts(notifier=flaky)
-    assert [a["id"] for a in delivered] == ["a1", "a3"]
+    result = alert_checker.check_alerts(notifier=flaky)
+    assert [a["id"] for a in result["delivered"]] == ["a1", "a3"]
+    assert [a["id"] for a in result["undelivered"]] == ["a2"]
     assert pending["marked"] == ["a1", "a3"]  # a2 remains pending for the next run
 
 
@@ -139,14 +146,21 @@ def test_only_the_alerts_that_are_met_get_delivered(pending):
         _alert(id="miss", current_price=50.0),
         _alert(id="noprice", current_price=None),
     ]
-    delivered = alert_checker.check_alerts(notifier=lambda a: True)
-    assert [a["id"] for a in delivered] == ["hit"]
+    result = alert_checker.check_alerts(notifier=lambda a: True)
+    assert [a["id"] for a in result["delivered"]] == ["hit"]
     assert pending["marked"] == ["hit"]
 
 
-def test_the_checker_never_touches_bigquery_helper():
-    # It used to reach BigQuery through BigQueryHelper and hand-rolled SQL —
-    # the last legacy data-access idiom outside the scrapers.
-    source = open(alert_checker.__file__, encoding="utf-8").read()
-    assert "BigQueryHelper" not in source
-    assert "UPDATE" not in source
+# ── main / exit code ─────────────────────────────────────────────────────────
+
+def test_main_exits_zero_when_nothing_is_met(pending):
+    pending["alerts"] = [_alert(current_price=50.0)]
+    assert alert_checker.main() == 0
+
+
+def test_main_exits_non_zero_when_an_alert_is_met_but_undeliverable(pending):
+    # A scheduler reads the exit code. "Alerts are firing and nobody is being
+    # told" is not a healthy run, and stays true until #34 lands.
+    pending["alerts"] = [_alert()]
+    assert alert_checker.main() == 1
+

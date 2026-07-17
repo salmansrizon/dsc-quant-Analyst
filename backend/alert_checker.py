@@ -3,15 +3,20 @@
     python -m backend.alert_checker          # from the repo root
     python alert_checker.py                  # from backend/
 
-**This does not notify anyone yet.** Marking an alert triggered is what consumes
-it — the user never sees it again — so an alert is only marked once a notifier
-has accepted it. There is no notification channel (that decision is #34), so by
-default nothing is marked and matched alerts stay pending: they will fire when
-the channel lands, rather than being silently consumed now.
+**This does not notify anyone.** There is no notification channel yet — that
+decision is #34. Marking an alert triggered is what consumes it (the user never
+sees it again), so an alert is only marked once a notifier accepts it. With no
+notifier, nothing is marked and matched alerts stay pending.
 
-That is the opposite of what this file used to do. It committed
-`is_triggered = true` and *then* reached a `# TODO: notification` comment, so
-every alert it ever fired was marked handled and never delivered.
+**What that costs, plainly.** A met alert now stays pending indefinitely: every
+run re-reports it, and the pending set only grows until #34 lands. When a
+channel does land it will find every alert matched since today still waiting,
+against prices that are long stale — so #34 needs a cutoff rule for old pending
+alerts, not just a transport. This trades a silent loss for a visible backlog;
+the backlog is the better problem, but it is a real one.
+
+The exit code says so: non-zero while alerts are met and undeliverable, because
+"nobody is being told" is not a healthy run.
 """
 import logging
 import os
@@ -53,16 +58,19 @@ def is_met(alert: dict) -> bool:
     return False
 
 
-def check_alerts(notifier: Optional[Notifier] = None) -> list[dict]:
-    """Find alerts whose condition is met. Returns them.
+def check_alerts(notifier: Optional[Notifier] = None) -> dict:
+    """Find alerts whose condition is met and try to deliver them.
 
-    With a notifier, each delivered alert is marked triggered. Without one,
-    nothing is marked — see the module docstring.
+    Returns {"delivered": [...], "undelivered": [...]} — both, explicitly,
+    because "what fired" and "who still has not been told" are different
+    questions and a single list cannot answer both.
+
+    Only delivered alerts are marked triggered; see the module docstring.
     """
     pending = alerts_service.pending_alerts()
     if not pending:
         logger.info("No pending alerts to check.")
-        return []
+        return {"delivered": [], "undelivered": []}
 
     met = [a for a in pending if is_met(a)]
     for a in met:
@@ -71,7 +79,7 @@ def check_alerts(notifier: Optional[Notifier] = None) -> list[dict]:
 
     if not met:
         logger.info("Checked %d pending alert(s); none met their condition.", len(pending))
-        return []
+        return {"delivered": [], "undelivered": []}
 
     if notifier is None:
         logger.warning(
@@ -79,28 +87,34 @@ def check_alerts(notifier: Optional[Notifier] = None) -> list[dict]:
             "(#34). Leaving them pending — marking them now would consume them "
             "without telling anyone.", len(met),
         )
-        return met
+        return {"delivered": [], "undelivered": met}
 
-    delivered = []
+    delivered, undelivered = [], []
     for alert in met:
         try:
             if notifier(alert):
                 delivered.append(alert)
             else:
                 logger.warning("Notifier declined alert %s — leaving it pending.", alert["id"])
+                undelivered.append(alert)
         except Exception:
             # A delivery failure must not consume the alert.
             logger.exception("Notifier raised for alert %s — leaving it pending.", alert["id"])
+            undelivered.append(alert)
 
     if delivered:
         marked = alerts_service.mark_triggered([a["id"] for a in delivered])
         logger.info("Delivered and marked %d alert(s) triggered.", marked)
-    return delivered
+    return {"delivered": delivered, "undelivered": undelivered}
 
 
 def main() -> int:
-    check_alerts()
-    return 0
+    """Entry point. Non-zero when alerts are met but nobody can be told.
+
+    dataGrid.py:main does the same for a refused partial scrape — a scheduler
+    reads the exit code, not the log.
+    """
+    return 1 if check_alerts()["undelivered"] else 0
 
 
 if __name__ == "__main__":

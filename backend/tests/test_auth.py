@@ -1,8 +1,10 @@
 """Auth endpoint tests.
 
-These sign up against real BigQuery — they are the ones that told us signup was
-broken (#51: phone was INTEGER in the table, a string everywhere else). They
-were dismissed as "pre-existing failures needing credentials" for far too long.
+These sign up against real BigQuery, so they are marked `integration`. They are
+also the only thing that catches a schema/type drift between the table and the
+models — #51 (phone was INTEGER in BigQuery, a string in models.UserCreate) was
+visible here and nowhere else. If CI ever runs only `-m "not integration"`, that
+class of bug ships silently.
 """
 import pytest
 
@@ -12,7 +14,7 @@ pytestmark = pytest.mark.integration
 def test_signup_returns_token_and_user(client, test_email):
     resp = client.post("/api/auth/signup", json={
         "email": test_email,
-        "phone": "1234567890",
+        "phone": "01700000000",
         "password": "testpass123",
         "full_name": "Test User",
     })
@@ -61,7 +63,7 @@ def test_login_unknown_email_returns_401(client):
 def test_signup_duplicate_email_returns_400(client, created_user):
     resp = client.post("/api/auth/signup", json={
         "email": created_user["email"],
-        "phone": "1234567890",
+        "phone": "01700000000",
         "password": "testpass123",
         "full_name": "Another User",
     })

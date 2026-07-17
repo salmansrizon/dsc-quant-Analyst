@@ -35,7 +35,17 @@ Complete web scraping solution for Lankabangla financial portal stock market dat
    append-only tables (`users`, `watchlists`, `portfolios`, `price_alerts`) and
    their `_current` views. Without it every read fails with
    `404 Not found: Table ..._current`. Idempotent, so re-running is safe.
-4. `uvicorn api:app --reload`
+4. `python migrations/001_users_phone_to_string.py` — only needed for a dataset
+   whose `users` table predates the fix. `bootstrap_tables.py` declares `phone`
+   as STRING for tables it creates, but cannot change an existing column's type,
+   and signup 400s on every phone number while it is INTEGER (#51). Idempotent;
+   `--dry-run` reports without writing. It leaves a `users_backup_pre51` table
+   behind — drop it once satisfied.
+5. `uvicorn api:app --reload`
+
+Tests: `pytest -m "not integration"` is the fast offline suite (no credentials).
+Plain `pytest` also runs the tests that hit real BigQuery — slower, but the only
+ones that catch drift between the tables and the code.
 
 > **Why append-only?** BigQuery's free tier forbids DML — `UPDATE`/`DELETE`
 > return `403 Billing has not been enabled`. So nothing is edited in place: a

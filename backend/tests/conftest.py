@@ -18,7 +18,7 @@ def test_email():
 def created_user(client, test_email):
     resp = client.post("/api/auth/signup", json={
         "email": test_email,
-        "phone": "1234567890",
+        "phone": "01700000000",
         "password": "testpass123",
         "full_name": "Test User",
     })

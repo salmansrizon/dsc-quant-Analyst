@@ -12,32 +12,27 @@ setup or failed — they never exercised an export.
 import json
 
 import pytest
-from fastapi.testclient import TestClient
-
 from backend.api import app
 from backend.auth import require_admin
 from backend.models import UserResponse
 
 
-pytestmark = pytest.mark.integration
-
-
-@pytest.fixture
-def client():
-    return TestClient(app)
-
-
 @pytest.fixture
 def admin_client(client):
-    """A client whose requests are treated as an admin."""
+    """A client whose requests are treated as an admin.
+
+    `client` comes from conftest. Teardown pops only this override — clear()
+    would wipe any other fixture's too.
+    """
     app.dependency_overrides[require_admin] = lambda: UserResponse(
         id="test-admin", email="admin@example.invalid", phone="01700000000",
         full_name="Test Admin", role="admin", created_at=None,
     )
     yield client
-    app.dependency_overrides.clear()
+    app.dependency_overrides.pop(require_admin, None)
 
 
+@pytest.mark.integration
 def test_admin_export_announcements(admin_client):
     resp = admin_client.get("/api/admin/export/announcements")
     assert resp.status_code == 200, resp.text
@@ -51,6 +46,7 @@ def test_admin_export_announcements(admin_client):
     assert "Announcement_Type" in csv_content
 
 
+@pytest.mark.integration
 def test_admin_export_price_archive(admin_client):
     resp = admin_client.get("/api/admin/export/price_archive")
     assert resp.status_code == 200, resp.text
@@ -62,6 +58,7 @@ def test_admin_export_price_archive(admin_client):
     assert "Symbol" in csv_content
 
 
+@pytest.mark.integration
 def test_admin_export_data_grid(admin_client):
     resp = admin_client.get("/api/admin/export/data_grid")
     assert resp.status_code == 200, resp.text

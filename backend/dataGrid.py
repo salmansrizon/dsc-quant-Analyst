@@ -4,6 +4,7 @@ import pandas as pd
 pd.set_option('future.no_silent_downcasting', True)
 import time
 import json
+import sys
 
 
 # logging utility
@@ -178,52 +179,96 @@ def scrape_lankabd(sector=None):
         logger.error(f"An error occurred: {e}")
         return None
 
+class PartialScrapeError(RuntimeError):
+    """Raised when some sectors failed, so the universe must not be replaced."""
+
+
 def scrape_all_sectors():
-    """Fetch and save data for all sectors"""
+    """Fetch every sector and replace lankabd_datamatrix with the result.
+
+    The upload is a full replace, and this table is the symbol universe: both
+    other scrapers take their symbol list from it and the watchlist/portfolio/
+    alert queries join against it. Replacing it with a partial scrape silently
+    shrinks the universe everywhere downstream, with no way to tell that it
+    happened and no way back except a successful rerun (ticket #45). So a
+    partial scrape must not be allowed to land — a stale but complete universe
+    beats a fresh but partial one.
+
+    Raises PartialScrapeError if any sector failed to scrape. A sector that
+    scrapes cleanly but holds no listings (Debenture and G-SEC (T.Bond) are
+    always empty) is not a failure — scrape_lankabd returns None on error and
+    an empty frame on an empty sector, and only the former blocks the upload.
+    """
     sectors = get_available_sectors()
-    
+
     if not sectors:
         logger.error("No sectors found")
         return None
-    
+
     all_data = []
-    
+    failed_sectors = []
+
     for sector in sectors:
         logger.info(f"\n--- Fetching data for sector: {sector} ---")
         df = scrape_lankabd(sector=sector)
-        
-        if df is not None and len(df) > 0:
+
+        if df is None:
+            # The scrape itself broke — the sector's symbols are unknown, so
+            # replacing the universe now would silently drop them.
+            failed_sectors.append(sector)
+            logger.warning(f"Failed to scrape sector: {sector}")
+        elif len(df) > 0:
             all_data.append(df)
             logger.info(f"Successfully fetched {len(df)} rows")
         else:
-            logger.warning(f"No data for sector: {sector}")
-        
+            # Scraped fine, genuinely holds no listings. Not a failure.
+            logger.info(f"Sector is empty: {sector}")
+
         time.sleep(1)  # Be polite to the server
-    
-    # Combine all data
-    if all_data:
-        combined_df = pd.concat(all_data, ignore_index=True)
-        
-        # Save to CSV (local backup)
-        output_file = 'lankabd_data_all_sectors.csv'
-        combined_df.to_csv(output_file, index=False)
-        logger.info(f"\n✓ Combined data saved to {output_file}")
-        
-        # NEW: Upload to BigQuery
-        try:
-            bq = BigQueryHelper()
-            bq.upload_dataframe(combined_df, 'lankabd_datamatrix', truncate=True)
-            logger.info("✓ Data successfully uploaded to BigQuery.")
-        except Exception as e:
-            logger.error(f"Error uploading to BigQuery: {e}")
-            raise e # Allow failure to propagate for CI/CD retry
-            
-        return combined_df
-    else:
+
+    if not all_data:
         logger.warning("\nNo data collected from any sector")
         return None
+
+    combined_df = pd.concat(all_data, ignore_index=True)
+
+    # Always keep the local backup, even when the upload is refused below —
+    # it is the only copy of a partial scrape's work.
+    output_file = 'lankabd_data_all_sectors.csv'
+    combined_df.to_csv(output_file, index=False)
+    logger.info(f"\n✓ Combined data saved to {output_file}")
+
+    if failed_sectors:
+        raise PartialScrapeError(
+            f"{len(failed_sectors)} of {len(sectors)} sectors returned no data "
+            f"({', '.join(failed_sectors)}). Refusing to replace lankabd_datamatrix "
+            f"with a partial universe; the existing table is untouched and "
+            f"{output_file} holds what was scraped."
+        )
+
+    try:
+        bq = BigQueryHelper()
+        bq.upload_dataframe(combined_df, 'lankabd_datamatrix', truncate=True)
+        logger.info("✓ Data successfully uploaded to BigQuery.")
+    except Exception as e:
+        logger.error(f"Error uploading to BigQuery: {e}")
+        raise e # Allow failure to propagate for CI/CD retry
+
+    return combined_df
+
+
+def main() -> int:
+    """Entry point. Returns a process exit code."""
+    try:
+        scrape_all_sectors()
+    except PartialScrapeError as e:
+        # Non-zero so a scheduler or CI run cannot mistake a refused partial
+        # scrape for a successful refresh.
+        logger.error(str(e))
+        return 1
+    return 0
 
 
 if __name__ == "__main__":
     # Local execution support
-    scrape_all_sectors()
+    sys.exit(main())

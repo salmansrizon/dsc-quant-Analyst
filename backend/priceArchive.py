@@ -18,7 +18,6 @@ from datetime import datetime as _dt
 log_filename = f"logs/priceArchive_{_dt.now().strftime('%Y%m%d_%H%M%S')}.log"
 logger = Log(name="priceArchive", filename=log_filename)
 
-# Headers to mimic a real browser
 def scrape_price_archive(symbol, from_date, to_date):
     """Scrape price archive data for a specific symbol and date range"""
     url = "https://lankabd.com/Home/PriceArchive"
@@ -151,7 +150,7 @@ def scrape_all_symbols_price_data(from_date=None, to_date=None):
     if to_date is None:
         _, to_date = get_date_range(years=3)
     
-    symbols = get_symbol_universe()
+    symbols = get_symbol_universe(logger=logger)
     if not symbols:
         logger.error("No symbols found to scrape")
         return None
@@ -265,7 +264,7 @@ def scrape_price_archive_by_sector(sector=None, from_date=None, to_date=None):
     if from_date is None or to_date is None:
         from_date, to_date = get_date_range(years=3)
     
-    symbols = get_symbol_universe(sector=sector)
+    symbols = get_symbol_universe(sector=sector, logger=logger)
 
     if len(symbols) == 0:
         logger.error(f"No symbols found for sector: {sector}")

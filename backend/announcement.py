@@ -16,7 +16,6 @@ from scrapers.common import HEADERS, get_session, get_date_range, get_symbol_uni
 log_filename = f"logs/announcement_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log"
 logger = Log(name="announcement", filename=log_filename)
 
-# Browser headers to mimic a real browser and avoid being blocked by the server
 def scrape_announcement(sn, fromdate, todate, page=None, page_size=None):
     try:
         logger.info(f"Starting scrape for sn={sn}, range={fromdate} to {todate}")
@@ -180,7 +179,7 @@ def scrape_all_symbols_announcements(fromdate=None, todate=None, page_size=None,
     if todate is None:
         _, todate = get_date_range(years=3)
 
-    symbols = get_symbol_universe()
+    symbols = get_symbol_universe(logger=logger)
     if not symbols:
         logger.error("No symbols found to scrape")
         return None
@@ -298,7 +297,7 @@ def scrape_announcements_by_sector(sector=None, fromdate=None, todate=None, page
     if fromdate is None or todate is None:
         fromdate, todate = get_date_range(years=3)
 
-    symbols = get_symbol_universe(sector=sector)
+    symbols = get_symbol_universe(sector=sector, logger=logger)
 
     if len(symbols) == 0:
         logger.error(f"No symbols found for sector: {sector}")

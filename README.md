@@ -61,6 +61,14 @@ push. `integration.yml` runs the BigQuery tests nightly and on demand
 (`workflow_dispatch`); it needs a `GCP_SERVICE_ACCOUNT_JSON` repo secret and
 fails loudly rather than skipping when it is absent.
 
+The integration job runs against the **shared dev dataset**, not a throwaway
+one: the export and market tests read the ETL tables (~870k rows in
+`lankabd_price_archive` alone), which would mean re-scraping lankabd.com per
+run. The trade is that those tests write real rows into the dataset you are
+using — they tombstone their users afterwards, but the tables are append-only,
+so the version rows accumulate. Point the `BIGQUERY_DATASET_ID` repo variable
+elsewhere to override; the workflow bootstraps whatever dataset it is given.
+
 > **Why append-only?** BigQuery's free tier forbids DML — `UPDATE`/`DELETE`
 > return `403 Billing has not been enabled`. So nothing is edited in place: a
 > change appends a new version of the row, a delete appends a tombstone, and

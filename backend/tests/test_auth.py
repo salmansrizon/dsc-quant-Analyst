@@ -12,24 +12,29 @@ pytestmark = pytest.mark.integration
 
 
 def test_signup_returns_token_and_user(client, test_email):
+    from backend.user_service import delete_user
+
     resp = client.post("/api/auth/signup", json={
         "email": test_email,
         "phone": "01700000000",
         "password": "testpass123",
         "full_name": "Test User",
     })
-    assert resp.status_code == 200
+    assert resp.status_code == 200, resp.text
     data = resp.json()
-    assert "access_token" in data
-    assert data["token_type"] == "bearer"
-    assert data["user"]["email"] == test_email
-    assert data["user"]["full_name"] == "Test User"
-    assert data["user"]["role"] == "user"
-    assert "id" in data["user"]
-
-    # Cleanup
-    from backend.user_service import delete_user
-    delete_user(data["user"]["id"])
+    # try/finally, not cleanup-after-asserts: a failing assertion is exactly when
+    # a real bug is present, and it must not also leave a live user behind in the
+    # shared dataset.
+    try:
+        assert "access_token" in data
+        assert data["token_type"] == "bearer"
+        assert data["user"]["email"] == test_email
+        assert data["user"]["full_name"] == "Test User"
+        assert data["user"]["role"] == "user"
+        assert "id" in data["user"]
+        assert data["user"]["phone"] == "01700000000", "the leading zero must survive (#51)"
+    finally:
+        delete_user(data["user"]["id"])
 
 
 def test_login_valid_credentials_returns_token(client, created_user):

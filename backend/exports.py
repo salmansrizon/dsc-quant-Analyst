@@ -1,95 +1,51 @@
-"""Backend export functionality for Admin panel."""
+"""Admin-panel exports: whole tables as CSV or JSON.
 
+Reads go through db.query_rows like every other read. This module used to hold a
+second read path — a client wrapper plus four hand-rolled copies of
+`client.query(...)` + `[dict(r) for r in ...]` — which is what db.query_rows is.
+"""
 import io
 import json
-import os
-from typing import List
-from fastapi import HTTPException
+
 import pandas as pd
-from google.cloud import bigquery
+from fastapi import HTTPException
 
 from . import db
 
 
-def _get_bigquery_client():
-    """The shared API-layer BigQuery client (ticket #41)."""
-    return db.client()
-
-
-def _list_tables() -> List[str]:
-    """List all tables in the dataset."""
-    client = _get_bigquery_client()
-    dataset = client.dataset(os.environ.get("BIGQUERY_DATASET_ID") or db.DATASET)
-    return [table.name for table in dataset.tables()]
+def _csv(rows: list[dict]) -> tuple[bytes, str]:
+    return pd.DataFrame(rows).to_csv(index=False).encode("utf-8"), "text/csv"
 
 
 def export_announcements() -> tuple[bytes, str]:
     """Export announcements as CSV."""
-    client = _get_bigquery_client()
     # The table is `lankabd_announcements`; `announcements` has never existed.
     # It carries no LTP column either — the price lives in the price archive.
-    sql = f"""
+    rows = db.query_rows(f"""
         SELECT Symbol, Date, Announcement_Type, Details, Sector, Importance
         FROM {db.table_id('lankabd_announcements')}
         ORDER BY Date DESC
-    """
-
-    query = client.query(sql, job_config=bigquery.QueryJobConfig())
-    results = [dict(r) for r in query.result()]
-    
-    if not results:
+    """)
+    if not rows:
         raise HTTPException(status_code=404, detail="No announcements found")
-    
-    df = pd.DataFrame(results)
-    csv_buffer = io.StringIO()
-    df.to_csv(csv_buffer, index=False)
-    return csv_buffer.getvalue().encode('utf-8'), 'text/csv'
+    return _csv(rows)
 
 
 def export_price_archive() -> tuple[bytes, str]:
     """Export price archive as CSV."""
-    client = _get_bigquery_client()
-    sql = f"""
+    rows = db.query_rows(f"""
         SELECT Date, Symbol, LTP, Close, Volume_Qty_
         FROM {db.table_id('lankabd_price_archive')}
         ORDER BY Date DESC
-    """
-
-    query = client.query(sql, job_config=bigquery.QueryJobConfig())
-    results = [dict(r) for r in query.result()]
-    
-    df = pd.DataFrame(results)
-    csv_buffer = io.StringIO()
-    df.to_csv(csv_buffer, index=False)
-    return csv_buffer.getvalue().encode('utf-8'), 'text/csv'
+    """)
+    return _csv(rows)
 
 
 def export_master_dataset() -> tuple[str, str]:
-    """Export master dataset as JSON with full structure."""
-    client = _get_bigquery_client()
-    sql = f"""
+    """Export the datamatrix as JSON."""
+    rows = db.query_rows(f"""
         SELECT Symbol, LTP, Change, Sector, Volume_Qty_
         FROM {db.table_id('lankabd_datamatrix')}
         LIMIT 1000
-    """
-    
-    job_config = bigquery.QueryJobConfig()
-    query = client.query(sql, job_config=job_config)
-    results = [dict(r) for r in query.result()]
-    
-    return json.dumps(results, indent=4), 'application/json'
-
-
-def export_table(table_name: str) -> bytes:
-    """Export a specific table as CSV."""
-    client = _get_bigquery_client()
-    # db.table_id already returns a backtick-quoted id — do not re-wrap it.
-    sql = f"SELECT * FROM {db.table_id(table_name)}"
-
-    query = client.query(sql, job_config=bigquery.QueryJobConfig())
-    results = [dict(r) for r in query.result()]
-
-    df = pd.DataFrame(results)
-    csv_buffer = io.StringIO()
-    df.to_csv(csv_buffer, index=False)
-    return csv_buffer.getvalue().encode('utf-8')
+    """)
+    return json.dumps(rows, indent=4, default=str), "application/json"

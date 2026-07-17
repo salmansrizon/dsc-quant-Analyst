@@ -17,7 +17,7 @@ def get_watchlist(user_id: str):
         SELECT w.id, w.symbol, w.added_at,
                d.LTP, d.__Change AS ChangePct, d.Sector
         FROM {db.current_view('watchlists')} w
-        LEFT JOIN {db.table_id('lankabd_datamatrix')} d ON w.symbol = d.Symbol
+        {db.price_join('w')}
         WHERE w.user_id = @uid
         ORDER BY w.added_at DESC
     """

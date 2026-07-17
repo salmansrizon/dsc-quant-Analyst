@@ -154,6 +154,23 @@ def current_view(table: str) -> str:
     return table_id(f"{table}{CURRENT_SUFFIX}")
 
 
+def price_join(alias: str, symbol_column: str = "symbol") -> str:
+    """A LEFT JOIN onto the datamatrix for a live price, aliased `d`.
+
+    Five callers hand-wrote this join, and its failure mode is not theoretical:
+    the user tables store `symbol` while the datamatrix stores `Symbol`, and
+    getting that backwards is exactly why alert_checker never fired an alert
+    (#48). One place to be wrong beats five.
+
+    LEFT, not INNER: a symbol the datamatrix has not seen must still show up in
+    a watchlist with a null price, rather than vanishing from it.
+    """
+    return (
+        f"LEFT JOIN {table_id('lankabd_datamatrix')} d "
+        f"ON {alias}.{symbol_column} = d.Symbol"
+    )
+
+
 def query_rows(sql: str, params: list["bigquery.ScalarQueryParameter"] | None = None) -> list[dict]:
     """Run a parameterized SELECT and return the rows as dicts.
 

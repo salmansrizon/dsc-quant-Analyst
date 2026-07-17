@@ -18,7 +18,7 @@ def get_alerts(user_id: str):
                a.is_triggered, a.triggered_at, a.created_at,
                d.LTP AS current_price
         FROM {db.current_view('price_alerts')} a
-        LEFT JOIN {db.table_id('lankabd_datamatrix')} d ON a.symbol = d.Symbol
+        {db.price_join('a')}
         WHERE a.user_id = @uid
         ORDER BY a.created_at DESC
     """
@@ -41,7 +41,7 @@ def pending_alerts() -> list[dict]:
         SELECT a.id, a.user_id, a.symbol, a.target_price, a.direction,
                d.LTP AS current_price
         FROM {db.current_view('price_alerts')} a
-        LEFT JOIN {db.table_id('lankabd_datamatrix')} d ON a.symbol = d.Symbol
+        {db.price_join('a')}
         WHERE NOT COALESCE(a.is_triggered, FALSE)
     """)
 

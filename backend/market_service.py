@@ -1,8 +1,9 @@
 """Read-only market-data queries (split from the bq_service god module, #43)."""
 from google.cloud import bigquery
 
-from . import indicators
 from . import db
+from . import indicators
+from . import price_series
 
 
 def list_sectors():
@@ -103,43 +104,9 @@ def technical_indicators(symbol: str, days: int = 365):
     scraped passthrough on price_history and are not reconciled here.
     """
     rows = price_history(symbol, days=days)
-    if not rows:
+    closes, highs, lows, volumes = price_series.from_price_history(rows)
+    if not closes:
         return {"symbol": symbol.upper(), "indicators": None, "points": 0}
-
-    # price_history returns newest-first; indicators need oldest-first.
-    rows = list(reversed(rows))
-
-    def _num(v):
-        try:
-            return float(v)
-        except (TypeError, ValueError):
-            return None
-
-    def _series(*keys):
-        out = []
-        for r in rows:
-            val = None
-            for k in keys:
-                val = _num(r.get(k))
-                if val is not None:
-                    break
-            out.append(val)
-        return out
-
-    closes = _series("Close", "LTP")
-    highs = _series("High")
-    lows = _series("Low")
-    volumes = _series("Volume")
-
-    # Drop rows with no usable close; keep parallel arrays aligned. Note this
-    # collapses calendar gaps into adjacent bars (v1 accepts the distortion).
-    clean = [(c, h, l, v) for c, h, l, v in zip(closes, highs, lows, volumes) if c is not None]
-    if not clean:
-        return {"symbol": symbol.upper(), "indicators": None, "points": 0}
-    closes = [c for c, _, _, _ in clean]
-    highs = [h if h is not None else c for c, h, _, _ in clean]
-    lows = [l if l is not None else c for c, _, l, _ in clean]
-    volumes = [v if v is not None else 0.0 for *_, v in clean]
 
     bundle = indicators.compute_all(closes, highs, lows, volumes)
     return {"symbol": symbol.upper(), "points": len(closes), "indicators": bundle}

@@ -27,7 +27,7 @@ def get_portfolio(user_id: str):
                ROUND((d.LTP - p.buy_price) * p.quantity, 2) AS pnl,
                ROUND(((d.LTP - p.buy_price) / p.buy_price) * 100, 2) AS pnl_percent
         FROM {db.current_view('portfolios')} p
-        LEFT JOIN {db.table_id('lankabd_datamatrix')} d ON p.symbol = d.Symbol
+        {db.price_join('p')}
         WHERE p.user_id = @uid
         ORDER BY p.created_at DESC
     """
@@ -105,7 +105,7 @@ def portfolio_summary(user_id: str):
                ROUND(SUM((d.LTP - p.buy_price) * p.quantity), 2) AS total_pnl,
                ROUND(AVG(((d.LTP - p.buy_price) / p.buy_price) * 100), 2) AS avg_pnl_pct
         FROM {db.current_view('portfolios')} p
-        LEFT JOIN {db.table_id('lankabd_datamatrix')} d ON p.symbol = d.Symbol
+        {db.price_join('p')}
         WHERE p.user_id = @uid
     """
     params = [bigquery.ScalarQueryParameter("uid", "STRING", user_id)]

@@ -1,3 +1,14 @@
+"""Auth endpoint tests.
+
+These sign up against real BigQuery — they are the ones that told us signup was
+broken (#51: phone was INTEGER in the table, a string everywhere else). They
+were dismissed as "pre-existing failures needing credentials" for far too long.
+"""
+import pytest
+
+pytestmark = pytest.mark.integration
+
+
 def test_signup_returns_token_and_user(client, test_email):
     resp = client.post("/api/auth/signup", json={
         "email": test_email,

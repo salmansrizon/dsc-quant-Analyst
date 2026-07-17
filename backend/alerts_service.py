@@ -26,6 +26,26 @@ def get_alerts(user_id: str):
     return db.query_rows(sql, params)
 
 
+def pending_alerts() -> list[dict]:
+    """Every untriggered alert, across all users, with its symbol's current price.
+
+    For the alert-checker batch job (#48). The join is done here rather than in
+    pandas because the column names differ by case — alerts store `symbol`, the
+    datamatrix stores `Symbol` — and merging on the wrong one is what made the
+    checker raise KeyError before it could fire a single alert.
+
+    COALESCE on is_triggered: NOT NULL is NULL, so an alert with a null flag
+    would never be returned.
+    """
+    return db.query_rows(f"""
+        SELECT a.id, a.user_id, a.symbol, a.target_price, a.direction,
+               d.LTP AS current_price
+        FROM {db.current_view('price_alerts')} a
+        LEFT JOIN {db.table_id('lankabd_datamatrix')} d ON a.symbol = d.Symbol
+        WHERE NOT COALESCE(a.is_triggered, FALSE)
+    """)
+
+
 def _find_alert(alert_id: str, user_id: str) -> dict | None:
     """One of the user's current alerts, or None.
 

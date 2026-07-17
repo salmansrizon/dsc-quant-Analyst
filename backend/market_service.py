@@ -4,7 +4,6 @@ from google.cloud import bigquery
 from . import indicators
 from . import db
 
-bq = db.client()
 _full_id = db.table_id
 
 
@@ -21,7 +20,7 @@ def list_sectors():
         GROUP BY Sector
         ORDER BY Sector
     """
-    return [dict(r) for r in bq.query(sql).result()]
+    return db.query_rows(sql)
 
 
 def list_stocks(sector: str = None, search: str = None, limit: int = 500):
@@ -46,8 +45,7 @@ def list_stocks(sector: str = None, search: str = None, limit: int = 500):
         ORDER BY Symbol
         LIMIT {int(limit)}
     """
-    job = bq.query(sql, job_config=bigquery.QueryJobConfig(query_parameters=params))
-    return [dict(r) for r in job.result()]
+    return db.query_rows(sql, params)
 
 
 def get_stock(symbol: str):
@@ -60,8 +58,8 @@ def get_stock(symbol: str):
         LIMIT 1
     """
     params = [bigquery.ScalarQueryParameter("symbol", "STRING", symbol.upper())]
-    rows = list(bq.query(sql, job_config=bigquery.QueryJobConfig(query_parameters=params)).result())
-    return dict(rows[0]) if rows else None
+    rows = db.query_rows(sql, params)
+    return rows[0] if rows else None
 
 
 def top_movers(limit: int = 10):
@@ -71,7 +69,7 @@ def top_movers(limit: int = 10):
         ORDER BY __Change DESC
         LIMIT {int(limit)}
     """
-    gainers = [dict(r) for r in bq.query(sql).result()]
+    gainers = db.query_rows(sql)
 
     sql = f"""
         SELECT Symbol, Sector, LTP, ROUND(__Change, 2) AS ChangePct
@@ -79,7 +77,7 @@ def top_movers(limit: int = 10):
         ORDER BY __Change ASC
         LIMIT {int(limit)}
     """
-    losers = [dict(r) for r in bq.query(sql).result()]
+    losers = db.query_rows(sql)
 
     return {"gainers": gainers, "losers": losers}
 
@@ -95,7 +93,7 @@ def price_history(symbol: str, days: int = 365):
         LIMIT {int(days)}
     """
     params = [bigquery.ScalarQueryParameter("symbol", "STRING", symbol.upper())]
-    return [dict(r) for r in bq.query(sql, job_config=bigquery.QueryJobConfig(query_parameters=params)).result()]
+    return db.query_rows(sql, params)
 
 
 def technical_indicators(symbol: str, days: int = 365):
@@ -165,7 +163,7 @@ def list_announcements(symbol: str = None, limit: int = 50):
         ORDER BY Date DESC
         LIMIT {int(limit)}
     """
-    return [dict(r) for r in bq.query(sql, job_config=bigquery.QueryJobConfig(query_parameters=params)).result()]
+    return db.query_rows(sql, params)
 
 
 def market_summary():
@@ -177,5 +175,5 @@ def market_summary():
                MAX(updated_at) AS last_updated
         FROM {_full_id('lankabd_datamatrix')}
     """
-    rows = list(bq.query(sql).result())
-    return dict(rows[0]) if rows else {}
+    rows = db.query_rows(sql)
+    return rows[0] if rows else {}

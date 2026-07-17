@@ -72,13 +72,19 @@ def test_client_is_a_singleton():
     assert db.client() is db.client()
 
 
-def test_api_modules_share_the_single_client():
+def test_no_service_module_binds_a_client_at_import_time():
+    # #46: a module-level `bq = db.client()` built a client on import, which made
+    # the read path unstubbable and forced every read test to hit real BigQuery.
     from backend import (
         market_service, watchlist_service, portfolio_service, alerts_service,
-        user_service, exports,
+        user_service,
     )
     for mod in (market_service, watchlist_service, portfolio_service, alerts_service, user_service):
-        assert mod.bq is db.client()
+        assert not hasattr(mod, "bq"), f"{mod.__name__} still binds a client at import"
+
+
+def test_exports_uses_the_single_client():
+    from backend import exports
     assert exports._get_bigquery_client() is db.client()
 
 

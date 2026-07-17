@@ -132,6 +132,17 @@ def table_id(name: str) -> str:
     return f"`{qualified_name(name)}`"
 
 
+def query_rows(sql: str, params: list | None = None) -> list[dict]:
+    """Run a parameterized SELECT and return the rows as dicts.
+
+    The read counterpart to insert_rows/execute_dml. Callers go through this
+    rather than binding a client at import time, so tests can stub db._client
+    on the read path exactly as they already do for mutations (ticket #46).
+    """
+    job_config = bigquery.QueryJobConfig(query_parameters=params or [])
+    return [dict(r) for r in client().query(sql, job_config=job_config).result()]
+
+
 def insert_rows(table: str, rows: list[dict]) -> None:
     """Append rows via a load job (WRITE_APPEND, free-tier eligible)."""
     if not rows:

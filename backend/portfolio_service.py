@@ -6,7 +6,6 @@ from google.cloud import bigquery
 
 from . import db
 
-bq = db.client()
 _full_id = db.table_id
 
 # Whitelist of updatable portfolio columns and their BigQuery param types.
@@ -32,7 +31,7 @@ def get_portfolio(user_id: str):
         ORDER BY p.created_at DESC
     """
     params = [bigquery.ScalarQueryParameter("uid", "STRING", user_id)]
-    return [dict(r) for r in bq.query(sql, job_config=bigquery.QueryJobConfig(query_parameters=params)).result()]
+    return db.query_rows(sql, params)
 
 
 def add_to_portfolio(user_id: str, data: dict):
@@ -109,5 +108,5 @@ def portfolio_summary(user_id: str):
         WHERE p.user_id = @uid AND p.is_deleted = FALSE
     """
     params = [bigquery.ScalarQueryParameter("uid", "STRING", user_id)]
-    rows = list(bq.query(sql, job_config=bigquery.QueryJobConfig(query_parameters=params)).result())
-    return dict(rows[0]) if rows else {}
+    rows = db.query_rows(sql, params)
+    return rows[0] if rows else {}

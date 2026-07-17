@@ -8,19 +8,15 @@ from . import db
 
 # Single shared client + table-name helper (ticket #41). Previously this module
 # hardcoded PROJECT/DATASET, diverging from the env-driven config elsewhere.
+# No module-level client: reads go through db.query_rows and writes through
+# db.insert_rows, so the read path is stubbable via db._client (ticket #46).
 PROJECT = db.PROJECT
 DATASET = db.DATASET
-bq = db.client()
 _uid = db.table_id
 
 
 def _insert_user_row(row: dict):
-    df = pd.DataFrame([row])
-    full = f"{PROJECT}.{DATASET}.users"
-    bq.load_table_from_dataframe(df, full, job_config=bigquery.LoadJobConfig(
-        write_disposition=bigquery.WriteDisposition.WRITE_APPEND,
-        schema_update_options=[bigquery.SchemaUpdateOption.ALLOW_FIELD_ADDITION],
-    )).result()
+    db.insert_rows("users", [row])
 
 
 def create_user(payload) -> UserResponse:
@@ -64,10 +60,10 @@ def get_user_by_email(email: str) -> Optional[UserResponse]:
         LIMIT 1
     """
     params = [bigquery.ScalarQueryParameter("email", "STRING", email.strip().lower())]
-    rows = list(bq.query(sql, job_config=bigquery.QueryJobConfig(query_parameters=params)).result())
+    rows = db.query_rows(sql, params)
     if not rows:
         return None
-    r = dict(rows[0])
+    r = rows[0]
     return UserResponse(
         id=r["id"],
         email=r["email"],
@@ -86,10 +82,10 @@ def get_user_by_id(user_id: str) -> Optional[UserResponse]:
         LIMIT 1
     """
     params = [bigquery.ScalarQueryParameter("uid", "STRING", user_id)]
-    rows = list(bq.query(sql, job_config=bigquery.QueryJobConfig(query_parameters=params)).result())
+    rows = db.query_rows(sql, params)
     if not rows:
         return None
-    r = dict(rows[0])
+    r = rows[0]
     return UserResponse(
         id=r["id"],
         email=r["email"],
@@ -108,10 +104,10 @@ def get_user_credentials(email: str) -> Optional[dict]:
         LIMIT 1
     """
     params = [bigquery.ScalarQueryParameter("email", "STRING", email.strip().lower())]
-    rows = list(bq.query(sql, job_config=bigquery.QueryJobConfig(query_parameters=params)).result())
+    rows = db.query_rows(sql, params)
     if not rows:
         return None
-    r = dict(rows[0])
+    r = rows[0]
     return {
         "id": r["id"],
         "email": r["email"],
@@ -126,11 +122,16 @@ def list_users():
         FROM {_uid('users')}
         ORDER BY created_at DESC
     """
-    return [dict(r) for r in bq.query(sql).result()]
+    return db.query_rows(sql)
 
 
 def update_user(user_id: str, updates: dict):
-    rows = list(bq.query(f"SELECT * FROM {_uid('users')}").result())
+    # BROKEN — see ticket #50. This reads the whole table and rewrites it with
+    # WRITE_TRUNCATE (the pattern #40 removed everywhere else), and the edit
+    # itself is applied to a copy that is then discarded, so it is a no-op.
+    # Left as-is here deliberately: #46 is a read-path change, and this needs
+    # the scoped-DML rewrite plus the multi-user regression test #40 got.
+    rows = list(db.client().query(f"SELECT * FROM {_uid('users')}").result())
     now = datetime.now(timezone.utc)
     for r in rows:
         d = dict(r)
@@ -141,16 +142,18 @@ def update_user(user_id: str, updates: dict):
             d["updated_at"] = now
     df = pd.DataFrame([dict(r) for r in rows])
     full = f"{PROJECT}.{DATASET}.users"
-    bq.load_table_from_dataframe(df, full, job_config=bigquery.LoadJobConfig(
+    db.client().load_table_from_dataframe(df, full, job_config=bigquery.LoadJobConfig(
         write_disposition=bigquery.WriteDisposition.WRITE_TRUNCATE,
     )).result()
 
 
 def delete_user(user_id: str):
-    rows = list(bq.query(f"SELECT * FROM {_uid('users')}").result())
+    # BROKEN — see ticket #50. Whole-table truncate-and-reload; deleting the
+    # last user truncates with an empty DataFrame.
+    rows = list(db.client().query(f"SELECT * FROM {_uid('users')}").result())
     remaining = [dict(r) for r in rows if r["id"] != user_id]
     df = pd.DataFrame(remaining) if remaining else pd.DataFrame()
     full = f"{PROJECT}.{DATASET}.users"
-    bq.load_table_from_dataframe(df, full, job_config=bigquery.LoadJobConfig(
+    db.client().load_table_from_dataframe(df, full, job_config=bigquery.LoadJobConfig(
         write_disposition=bigquery.WriteDisposition.WRITE_TRUNCATE,
     )).result()

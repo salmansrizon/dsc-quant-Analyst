@@ -6,7 +6,6 @@ from google.cloud import bigquery
 
 from . import db
 
-bq = db.client()
 _full_id = db.table_id
 
 
@@ -20,7 +19,7 @@ def get_watchlist(user_id: str):
         ORDER BY w.added_at DESC
     """
     params = [bigquery.ScalarQueryParameter("uid", "STRING", user_id)]
-    return [dict(r) for r in bq.query(sql, job_config=bigquery.QueryJobConfig(query_parameters=params)).result()]
+    return db.query_rows(sql, params)
 
 
 def add_to_watchlist(user_id: str, symbol: str):

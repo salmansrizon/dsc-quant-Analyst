@@ -64,13 +64,12 @@ SCHEMAS = {
         ("updated_at", _TS), ("is_deleted", "BOOL"),
     ],
     # Financial ratios from the company API (#58). Grain: one row per symbol per
-    # year per ratio. LONG, not wide: the ratio set varies by sector (GP reports
-    # 69, AB Bank 33), so a column per ratio means a migration every time
-    # lankabd adds one — and #51 was that pain.
+    # year per ratio. Long, not wide — see scrapers/company_api.py, which also
+    # explains why `code` cannot be used to query a metric across companies.
     "fundamentals_ratios": [
         ("id", _STR),           # symbol|year|code
         ("symbol", _STR), ("year", "INT64"),
-        ("code", _STR),         # RTAMAQ0210 — stable machine key
+        ("code", _STR),         # RTAMAQ0210 — SECTOR-SCOPED, not a metric id
         ("name", _STR), ("category", _STR),
         ("result", "FLOAT64"),
         ("equation", _STR),        # "158057490000.0000 / 191322941000.0000"

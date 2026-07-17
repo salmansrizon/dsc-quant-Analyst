@@ -20,6 +20,8 @@ except ImportError:  # standalone: the scrapers run with cwd=backend
 
 _logger = logging.getLogger(__name__)
 
+BASE = "https://lankabd.com"
+
 HEADERS = {
     'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
     'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
@@ -47,6 +49,22 @@ def get_session() -> requests.Session:
     session.mount("http://", adapter)
     session.mount("https://", adapter)
     return session
+
+
+def warm_session() -> requests.Session:
+    """A session that has visited the site root, so it carries the cookies the
+    rest of the pages expect. Every scraper opened with these same three lines.
+    """
+    session = get_session()
+    session.get(BASE + "/", headers=referer_headers(), timeout=30)
+    return session
+
+
+def referer_headers(referer: str | None = None) -> dict:
+    """HEADERS with a Referer — lankabd 403s some paths without one."""
+    headers = HEADERS.copy()
+    headers["Referer"] = referer or (BASE + "/")
+    return headers
 
 
 def get_date_range(years: int = 3) -> tuple[str, str]:

@@ -42,14 +42,43 @@ def test_parse_ratios_maps_a_year_block():
     assert r["base_equation"] == '"ISTEX90000" / "BS96033"'
 
 
-def test_every_year_and_ratio_gets_its_own_row():
+def test_the_same_code_in_different_years_is_a_different_row():
+    # The year has to be in the key, or the append-only view (#52) would keep
+    # only the most recently appended year and silently drop the history.
     payload = [
-        {"year": 2025, "ratioList": [_ratio("A"), _ratio("B")]},
-        {"year": 2024, "ratioList": [_ratio("A"), _ratio("B")]},
+        {"year": 2025, "ratioList": [_ratio("A", result=1.0)]},
+        {"year": 2024, "ratioList": [_ratio("A", result=2.0)]},
     ]
     rows = c.parse_ratios("GP", payload)
-    assert len(rows) == 4
-    assert len({r["id"] for r in rows}) == 4, "(year, code) is the grain — verified unique live"
+    assert [r["id"] for r in rows] == ["GP|2025|A", "GP|2024|A"]
+    assert sorted(r["result"] for r in rows) == [1.0, 2.0]
+
+
+def test_a_ratio_that_divides_two_negatives_is_reported_as_it_stands():
+    """AB Bank's 2025 ROE really is 1.1986 — a loss over negative equity.
+
+    -38.9bn / -32.4bn reads as a healthy 120%. The API reports what the
+    statements say, and so do we: the equation is stored so a consumer can see
+    the sign of the inputs rather than trusting the result. #59 has to check.
+    """
+    payload = [{"year": 2025, "ratioList": [_ratio(
+        "RBPIR0010", name="Return on Equity (ROE)", result=1.198591,
+        equation="-38891722887.0000 / -32447856712.0000")]}]
+    r = c.parse_ratios("ABBANK", payload)[0]
+    assert r["result"] == 1.198591, "not smoothed, not flagged, not dropped"
+    assert r["equation"] == "-38891722887.0000 / -32447856712.0000"
+
+
+def test_gross_profit_margin_of_one_is_reported_as_it_stands():
+    # GP reads 1.0 because a telco reports no COGS line. #58 said: surface it,
+    # do not smooth it.
+    payload = [{"year": 2025, "ratioList": [_ratio(
+        "RTPIR0100", name="Gross Profit Margin", result=1.0,
+        equation="158057490000.0000 / 158057490000.0000")]}]
+    r = c.parse_ratios("GP", payload)[0]
+    assert r["result"] == 1.0
+    assert r["equation"] == "158057490000.0000 / 158057490000.0000", \
+        "the equation is what shows a reader why it is 1.0"
 
 
 def test_empty_ratio_lists_are_not_an_error():
@@ -214,6 +243,43 @@ def test_no_companies_found_is_reported_not_crashed(monkeypatch):
     assert counts["companies"] == 0
 
 
+def test_work_is_banked_in_batches_not_buffered_to_the_end(wired, monkeypatch):
+    """Buffering all 414 companies means a crash at 400 throws away 828
+    requests. Append-only is the reason a partial run is safe (#52) — so bank it.
+    """
+    appends = []
+    monkeypatch.setattr(c.db, "append_version", lambda t, rows: appends.append((t, len(rows))))
+    monkeypatch.setattr(c, "BATCH_SIZE", 2)
+    monkeypatch.setattr(c, "symbol_by_cid", lambda s: {i: f"SYM{i}" for i in range(1, 6)})
+    monkeypatch.setattr(c, "_api", lambda s, t, path, cid, **p:
+                        [{"year": 2025, "ratioList": [_ratio("A")]}] if path == c.RATIOS else [_fs()])
+
+    counts = c.ingest()
+
+    assert counts["companies"] == 5 and counts["ratios"] == 5
+    # 5 companies at BATCH_SIZE=2 -> flush at 2, at 4, and a final flush for the
+    # 5th: three appends per table, not one at the end.
+    ratio_appends = [n for t, n in appends if t == "fundamentals_ratios"]
+    assert len(ratio_appends) == 3, f"expected batched appends, got {appends}"
+    assert sum(ratio_appends) == 5, "every row still lands exactly once"
+
+
+def test_a_company_failing_mid_way_does_not_half_ingest_it(wired, monkeypatch):
+    # Ratios succeed, statements blow up. The company must not land with half
+    # its data while also being counted as failed.
+    def half_broken(session, token, path, cid, **params):
+        if path == c.RATIOS:
+            return [{"year": 2025, "ratioList": [_ratio("A")]}]
+        raise RuntimeError("statements 500")
+
+    monkeypatch.setattr(c, "_api", half_broken)
+    counts = c.ingest()
+
+    assert counts["failed"] == 2
+    assert counts["ratios"] == 0, "no half-ingested company"
+    assert counts["statements"] == 0
+
+
 def test_ingest_respects_a_limit(wired, monkeypatch):
     monkeypatch.setattr(c, "_api", lambda s, t, path, cid, **p:
                         [{"year": 2025, "ratioList": [_ratio("A")]}] if path == c.RATIOS else [_fs()])
@@ -228,8 +294,9 @@ def test_open_session_fails_loudly_without_a_token(monkeypatch):
         def get(self, *a, **k):
             return _Resp()
 
-    monkeypatch.setattr(c, "get_session", lambda: _Session())
+    monkeypatch.setattr(c, "warm_session", lambda: _Session())
     # Without the token every call is a 400 with an empty body — a confusing
-    # failure to debug 414 times over.
+    # failure to debug 414 times over. announcement.py silently accepts a
+    # missing token instead; see #61.
     with pytest.raises(RuntimeError, match="RequestVerificationToken"):
         c.open_session()

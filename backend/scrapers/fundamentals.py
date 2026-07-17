@@ -30,14 +30,13 @@ from bs4 import BeautifulSoup
 
 try:
     from backend import db
-    from backend.scrapers.common import HEADERS, get_session
+    from backend.scrapers.common import BASE, referer_headers, warm_session
 except ImportError:  # standalone: cwd=backend
     import db
-    from scrapers.common import HEADERS, get_session
+    from scrapers.common import BASE, referer_headers, warm_session
 
 logger = logging.getLogger(__name__)
 
-BASE = "https://lankabd.com"
 DIVIDEND_ARCHIVE = "/Home/DividendArchive"
 LATEST_EARNINGS = "/Details/GetLatestEarnings"
 
@@ -272,11 +271,8 @@ def parse_latest_earnings(html: str) -> list[dict]:
 
 
 def _fetch(path: str) -> str:
-    session = get_session()
-    headers = HEADERS.copy()
-    headers["Referer"] = BASE + "/"
-    session.get(BASE + "/", headers=headers, timeout=30)  # cookies
-    resp = session.get(BASE + path, headers=headers, timeout=30)
+    session = warm_session()
+    resp = session.get(BASE + path, headers=referer_headers(), timeout=30)
     resp.raise_for_status()
     return resp.text
 

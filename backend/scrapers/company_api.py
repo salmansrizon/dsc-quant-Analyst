@@ -44,20 +44,22 @@ from bs4 import BeautifulSoup
 
 try:
     from backend import db
-    from backend.scrapers.common import HEADERS, get_session
+    from backend.scrapers.common import BASE, HEADERS, referer_headers, warm_session
 except ImportError:  # standalone: cwd=backend
     import db
-    from scrapers.common import HEADERS, get_session
+    from scrapers.common import BASE, HEADERS, referer_headers, warm_session
 
 logger = logging.getLogger(__name__)
 
-BASE = "https://lankabd.com"
 DATA_MATRIX = "/Home/DataMatrix"
 RATIOS = "/api/company/FinancialRatiosV2"
 STATEMENTS = "/api/company/FinancialStatementCollection"
 
-# Politeness, matching the other scrapers.
+# Politeness, matching the other scrapers. Applied per REQUEST — this makes two
+# per company, so sleeping per company would halve it.
 DELAY_SECONDS = 0.5
+# Bank the work every N companies rather than buffering all 414.
+BATCH_SIZE = 50
 # How many years of statements to ask for. The ratios endpoint ignores it and
 # returns three regardless.
 STATEMENT_YEARS = 5
@@ -69,12 +71,9 @@ def open_session():
     The token comes off any company page and works for every cid — it belongs to
     the session, not the company.
     """
-    session = get_session()
-    headers = HEADERS.copy()
-    headers["Referer"] = BASE + "/"
-    session.get(BASE + "/", headers=headers, timeout=30)
-
-    page = session.get(f"{BASE}/Company/OverviewV2?cid=160", headers=headers, timeout=30)
+    session = warm_session()
+    page = session.get(f"{BASE}/Company/OverviewV2?cid=160",
+                       headers=referer_headers(), timeout=30)
     field = BeautifulSoup(page.text, "lxml").find("input", {"name": "__RequestVerificationToken"})
     if not field or not field.get("value"):
         raise RuntimeError(
@@ -90,9 +89,7 @@ def symbol_by_cid(session) -> dict[int, str]:
     The DataMatrix page links each row to /Company/OverviewV2?cid=N with the
     ticker as the link text — 414 pairs, one cid each.
     """
-    headers = HEADERS.copy()
-    headers["Referer"] = BASE + "/"
-    html = session.get(BASE + DATA_MATRIX, headers=headers, timeout=30).text
+    html = session.get(BASE + DATA_MATRIX, headers=referer_headers(), timeout=30).text
 
     out = {}
     for link in BeautifulSoup(html, "lxml").find_all("a", href=True):
@@ -103,9 +100,8 @@ def symbol_by_cid(session) -> dict[int, str]:
     return out
 
 
-def _api(session, token, path: str, cid: int, **params):
-    query = "&".join(f"{k}={v}" for k, v in params.items())
-    url = f"{BASE}{path}?cid={cid}" + (f"&{query}" if query else "")
+def _api(session, token, path: str, cid: int, count: int | None = None):
+    url = f"{BASE}{path}?cid={cid}" + (f"&count={count}" if count else "")
     resp = session.get(url, timeout=30, headers={
         **HEADERS,
         "RequestVerificationToken": token,
@@ -114,6 +110,7 @@ def _api(session, token, path: str, cid: int, **params):
         "Referer": f"{BASE}/Company/OverviewV2?cid={cid}",
     })
     resp.raise_for_status()
+    time.sleep(DELAY_SECONDS)  # per request, not per company: this is 2 per company
     return resp.json() if resp.text.strip() else None
 
 
@@ -193,34 +190,52 @@ def ingest(limit: int | None = None) -> dict:
     targets = sorted(cids.items())[:limit] if limit else sorted(cids.items())
     logger.info("Fetching ratios + statements for %d companies ...", len(targets))
 
-    all_ratios, all_statements, failed = [], [], []
+    ratios, statements, failed = [], [], []
+    counts = {"companies": len(targets), "ratios": 0, "statements": 0, "failed": 0}
+
+    def flush():
+        """Append what we have so far and let it go.
+
+        Buffering all 414 companies and appending once at the end means a crash
+        at company 400 writes nothing and throws away 828 requests. Append-only
+        is the whole reason a partial run is safe (#52) — so actually bank the
+        work as it arrives.
+        """
+        if ratios:
+            db.append_version("fundamentals_ratios", ratios)
+            counts["ratios"] += len(ratios)
+            ratios.clear()
+        if statements:
+            db.append_version("fundamentals_statements", statements)
+            counts["statements"] += len(statements)
+            statements.clear()
+
     for i, (cid, symbol) in enumerate(targets, 1):
         try:
-            all_ratios.extend(parse_ratios(symbol, _api(session, token, RATIOS, cid)))
-            all_statements.extend(parse_statements(
-                symbol, _api(session, token, STATEMENTS, cid, count=STATEMENT_YEARS)))
+            company_ratios = parse_ratios(symbol, _api(session, token, RATIOS, cid))
+            company_statements = parse_statements(
+                symbol, _api(session, token, STATEMENTS, cid, count=STATEMENT_YEARS))
         except Exception as e:
+            # Both endpoints or neither: a company whose statements failed after
+            # its ratios succeeded must not land half-ingested and still be
+            # counted as failed.
             logger.warning("[%d/%d] %s (cid=%d) failed: %s", i, len(targets), symbol, cid, e)
             failed.append(symbol)
-        else:
-            if i % 50 == 0:
-                logger.info("  [%d/%d] %s ...", i, len(targets), symbol)
-        time.sleep(DELAY_SECONDS)
+            continue
 
+        ratios.extend(company_ratios)
+        statements.extend(company_statements)
+        if i % BATCH_SIZE == 0:
+            logger.info("  [%d/%d] %s — banking %d ratios, %d statements ...",
+                        i, len(targets), symbol, len(ratios), len(statements))
+            flush()
+
+    flush()
     if failed:
         logger.warning("%d companies failed: %s", len(failed), ", ".join(failed[:10]))
 
-    if all_ratios:
-        db.append_version("fundamentals_ratios", all_ratios)
-    if all_statements:
-        db.append_version("fundamentals_statements", all_statements)
-
-    return {
-        "companies": len(targets),
-        "ratios": len(all_ratios),
-        "statements": len(all_statements),
-        "failed": len(failed),
-    }
+    counts["failed"] = len(failed)
+    return counts
 
 
 def main() -> int:

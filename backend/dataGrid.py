@@ -10,35 +10,13 @@ import sys
 # logging utility
 from utils.logger import Log
 from utils.bigquery_helper import BigQueryHelper
+from scrapers.common import HEADERS, get_session
 from datetime import datetime as _dt
 
 # module logger
 log_filename = f"logs/main_{_dt.now().strftime('%Y%m%d_%H%M%S')}.log"
 logger = Log(name="main", filename=log_filename)
 
-# Headers to mimic a real browser
-HEADERS = {
-    'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
-    'Accept-Language': 'en-US,en;q=0.5',
-    'Accept-Encoding': 'gzip, deflate, br',
-    'Connection': 'keep-alive',
-    'Upgrade-Insecure-Requests': '1',
-    'Cache-Control': 'max-age=0',
-}
-
-def get_session():
-    session = requests.Session()
-    # Add retry strategy
-    retry_strategy = requests.adapters.Retry(
-        total=3,
-        backoff_factor=1,
-        status_forcelist=[429, 500, 502, 503, 504]
-    )
-    adapter = requests.adapters.HTTPAdapter(max_retries=retry_strategy)
-    session.mount("http://", adapter)
-    session.mount("https://", adapter)
-    return session
 
 def get_available_sectors():
     """Fetch all available sectors from the DataMatrix page"""

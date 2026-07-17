@@ -10,6 +10,7 @@ from urllib.parse import urlencode
 # logging utility
 from utils.logger import Log
 from utils.bigquery_helper import BigQueryHelper
+from scrapers.common import HEADERS, get_session, get_date_range, get_symbol_universe
 
 # create a module-level logger with file output
 from datetime import datetime as _dt
@@ -18,53 +19,6 @@ log_filename = f"logs/priceArchive_{_dt.now().strftime('%Y%m%d_%H%M%S')}.log"
 logger = Log(name="priceArchive", filename=log_filename)
 
 # Headers to mimic a real browser
-HEADERS = {
-    'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
-    'Accept-Language': 'en-US,en;q=0.5',
-    'Accept-Encoding': 'gzip, deflate, br',
-    'Connection': 'keep-alive',
-    'Upgrade-Insecure-Requests': '1',
-    'Cache-Control': 'max-age=0',
-}
-
-
-def get_session():
-    """Create a session with retry strategy"""
-    session = requests.Session()
-    retry_strategy = requests.adapters.Retry(
-        total=3,
-        backoff_factor=1,
-        status_forcelist=[429, 500, 502, 503, 504]
-    )
-    adapter = requests.adapters.HTTPAdapter(max_retries=retry_strategy)
-    session.mount("http://", adapter)
-    session.mount("https://", adapter)
-    return session
-
-
-def get_date_range(years=3):
-    """Calculate date range for last N years"""
-    today = datetime.now()
-    start_date = today - timedelta(days=365*years)
-    return start_date.strftime('%Y-%m-%d'), today.strftime('%Y-%m-%d')
-
-
-def get_symbols_from_sectors():
-    """Extract all symbols from BigQuery datamatrix table"""
-    bq = BigQueryHelper()
-    try:
-        full_table_id = bq._get_full_table_id('lankabd_datamatrix')
-        query = f"SELECT DISTINCT Symbol FROM `{full_table_id}` WHERE Symbol IS NOT NULL"
-        results = bq.client.query(query).result()
-        symbols = [row.Symbol for row in results]
-        logger.info(f"Extracted {len(symbols)} unique symbols from BigQuery datamatrix")
-        return symbols
-    except Exception as e:
-        logger.error(f"Error fetching symbols from BigQuery: {e}")
-        return []
-
-
 def scrape_price_archive(symbol, from_date, to_date):
     """Scrape price archive data for a specific symbol and date range"""
     url = "https://lankabd.com/Home/PriceArchive"
@@ -197,7 +151,7 @@ def scrape_all_symbols_price_data(from_date=None, to_date=None):
     if to_date is None:
         _, to_date = get_date_range(years=3)
     
-    symbols = get_symbols_from_sectors()
+    symbols = get_symbol_universe()
     if not symbols:
         logger.error("No symbols found to scrape")
         return None
@@ -311,26 +265,8 @@ def scrape_price_archive_by_sector(sector=None, from_date=None, to_date=None):
     if from_date is None or to_date is None:
         from_date, to_date = get_date_range(years=3)
     
-    # Load sector data
-    bq = BigQueryHelper()
-    try:
-        query = f"SELECT DISTINCT Symbol FROM `{bq._get_full_table_id('lankabd_datamatrix')}`"
-        if sector:
-            query += f" WHERE Sector = '{sector}' AND Symbol IS NOT NULL"
-        else:
-            query += " WHERE Symbol IS NOT NULL"
-        results = bq.client.query(query).result()
-        symbols = [row.Symbol for row in results]
-        
-        if sector:
-            logger.info(f"Found {len(symbols)} symbols in {sector} sector from BigQuery")
-        else:
-            logger.info(f"Found {len(symbols)} total symbols from BigQuery")
-            
-    except Exception as e:
-        logger.error(f"Error fetching symbols from BigQuery: {e}")
-        return None
-    
+    symbols = get_symbol_universe(sector=sector)
+
     if len(symbols) == 0:
         logger.error(f"No symbols found for sector: {sector}")
         return None

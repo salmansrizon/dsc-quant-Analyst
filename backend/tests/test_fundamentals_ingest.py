@@ -29,25 +29,17 @@ EARNINGS_HEADERS = ["Publish Date", "Symbol", "Sector", "Year", "Annual/Quarter"
 # ── normalisers ──────────────────────────────────────────────────────────────
 
 @pytest.mark.parametrize("raw, expected", [
-    ("Annual", "ANNUAL"),
     ("Annuall", "ANNUAL"),                 # sic — observed live
-    ("Annual (18 Months)", "ANNUAL"),
-    ("12 Months", "ANNUAL"),
-    ("Semi-Annual", "SEMI_ANNUAL"),
-    ("Semi Annual", "SEMI_ANNUAL"),
     ("Semi- Annual", "SEMI_ANNUAL"),       # sic
-    ("Semi-annual", "SEMI_ANNUAL"),
-    ("Half Yearly", "SEMI_ANNUAL"),
-    ("06 Months", "SEMI_ANNUAL"),
-    ("Interim", "INTERIM"),
-    ("Interim (12 Months)", "INTERIM"),
-    ("Final", "FINAL"),
-    ("Final (06 Months)", "FINAL"),
+    ("Interim (12 Months)", "INTERIM"),    # the word wins, not the months
+    ("  Annual  ", "ANNUAL"),              # whitespace is collapsed
     ("", "UNKNOWN"),                       # 754 rows are blank
     ("   ", "UNKNOWN"),
-    ("Something New", "UNKNOWN"),          # must not crash on a new variant
+    ("Something New", "UNKNOWN"),          # a new variant must not crash
 ])
 def test_normalise_dividend_type(raw, expected):
+    # Only the cases that exercise logic — enumerating the lookup table back at
+    # itself would assert nothing.
     assert f.normalise_dividend_type(raw) == expected
 
 
@@ -109,20 +101,28 @@ def test_multiple_declarations_in_one_year_get_distinct_ids():
 
 
 @pytest.mark.parametrize("raw, expected", [
-    ("Annual", "ANNUAL"),
-    ("Annual (18 Months)", "18M"),      # the months win over the word
+    # A stated month count is reported verbatim and never aliased. In MJLBD's
+    # 18-month fiscal year the 12-month figure is NOT the annual one, so
+    # "12 Months" -> ANNUAL would hand #59 an interim EPS to compute PEG from.
+    ("Annual (18 Months)", "18M"),
     ("Annual (11 Months)", "11M"),
-    ("Interim (12 Months)", "ANNUAL"),  # an interim declaration over a full year
-    ("Final (06 Months)", "H1"),
-    ("12 Months", "ANNUAL"),
-    ("06 Months", "H1"),
+    ("Interim (12 Months)", "12M"),
+    ("Final (06 Months)", "6M"),
+    ("12 Months", "12M"),
+    ("06 Months", "6M"),
+    # No month count: fall back to what the type word says.
+    ("Annual", "ANNUAL"),
+    ("Annuall", "ANNUAL"),
     ("Semi-Annual", "H1"),
     ("Half Yearly", "H1"),
-    ("Interim", "UNKNOWN"),             # no length stated — do not guess
+    # A bare Interim/Final genuinely does not say what it covers.
+    ("Interim", "UNKNOWN"),
     ("Final", "UNKNOWN"),
-    ("", "UNKNOWN"),                    # 747 blank rows carry EPS but no period
+    # Blank: inferred ANNUAL. All 747 are 2014-16, each the only EPS record for
+    # its symbol-year, none sharing a symbol-year with a typed row.
+    ("", "ANNUAL"),
 ])
-def test_archive_period_reads_the_length_the_row_states(raw, expected):
+def test_archive_period_reports_the_span_the_row_states(raw, expected):
     assert f.archive_period(raw) == expected
 
 
@@ -143,10 +143,12 @@ def test_one_year_reporting_three_periods_keeps_all_three():
     assert len(earnings) == 3
     assert len({e["id"] for e in earnings}) == 3, "three periods, three ids"
     assert sorted(e["eps"] for e in earnings) == [3.48, 4.18, 7.72]
-    assert {e["period"] for e in earnings} == {"18M", "H1", "ANNUAL"}
+    # Reported verbatim: 4.18 + 3.48 = 7.66 ~= 7.72, so the parts sum to the
+    # 18-month whole — and the 12-month figure is not the annual one.
+    assert {e["period"] for e in earnings} == {"18M", "12M", "6M"}
 
 
-def test_eps_on_an_interim_row_is_not_labelled_annual():
+def test_eps_on_a_bare_interim_row_is_not_labelled_annual():
     # GP 2026: the archive reports EPS 10.52 on an Interim declaration, and
     # GetLatestEarnings independently calls that figure Half Yearly. Calling it
     # ANNUAL would be a fabrication.
@@ -200,6 +202,9 @@ def test_blank_dividend_type_is_kept_not_dropped():
     assert dividends[0]["dividend_type"] == "UNKNOWN"
     assert dividends[0]["dividend_type_raw"] == ""
     assert len(earnings) == 1 and earnings[0]["eps"] == 1.23
+    # The blank -> ANNUAL inference must stay auditable from the row itself.
+    assert earnings[0]["period"] == "ANNUAL"
+    assert earnings[0]["period_raw"] == ""
 
 
 def test_rows_without_a_symbol_or_year_are_skipped():

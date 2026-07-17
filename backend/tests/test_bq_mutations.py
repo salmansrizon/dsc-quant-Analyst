@@ -11,34 +11,12 @@ through db.execute_dml / db.insert_rows.
 import pytest
 
 from backend import db, watchlist_service, portfolio_service, alerts_service
-
-
-class _FakeJob:
-    def __init__(self):
-        self.num_dml_affected_rows = 1
-
-    def result(self):
-        return self
-
-
-class _FakeClient:
-    """Records every query() call so tests can assert on the emitted SQL."""
-
-    def __init__(self):
-        self.calls = []
-
-    def query(self, sql, job_config=None):
-        params = {}
-        if job_config is not None:
-            for p in job_config.query_parameters:
-                params[p.name] = p.value
-        self.calls.append({"sql": " ".join(sql.split()), "params": params})
-        return _FakeJob()
+from backend.tests.fakes import FakeClient, FakeJob
 
 
 @pytest.fixture
 def fake_bq(monkeypatch):
-    client = _FakeClient()
+    client = FakeClient()
     monkeypatch.setattr(db, "_client", client)  # db.client() now returns the fake
     return client
 
@@ -105,10 +83,8 @@ def test_update_portfolio_no_valid_fields_is_noop(fake_bq):
 def test_update_portfolio_returns_false_when_no_row_affected(fake_bq, monkeypatch):
     # Simulate a mutation that matched no row (wrong owner / missing id).
     def zero_dml(sql, job_config=None):
-        job = _FakeJob()
-        job.num_dml_affected_rows = 0
         fake_bq.calls.append({"sql": sql, "params": {}})
-        return job
+        return FakeJob(num_dml_affected_rows=0)
 
     monkeypatch.setattr(fake_bq, "query", zero_dml)
     ok = portfolio_service.update_portfolio("pf-x", "user-1", {"quantity": 5})
@@ -143,9 +119,7 @@ class _SemanticFakeClient:
                 if match:
                     r["is_deleted"] = True
                     affected += 1
-        job = _FakeJob()
-        job.num_dml_affected_rows = affected
-        return job
+        return FakeJob(num_dml_affected_rows=affected)
 
 
 def _semantic(monkeypatch, tables):

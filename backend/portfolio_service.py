@@ -6,7 +6,6 @@ from google.cloud import bigquery
 
 from . import db
 
-_full_id = db.table_id
 
 # Whitelist of updatable portfolio columns and their BigQuery param types.
 _PORTFOLIO_UPDATE_TYPES = {
@@ -25,8 +24,8 @@ def get_portfolio(user_id: str):
                d.LTP AS current_price,
                ROUND((d.LTP - p.buy_price) * p.quantity, 2) AS pnl,
                ROUND(((d.LTP - p.buy_price) / p.buy_price) * 100, 2) AS pnl_percent
-        FROM {_full_id('portfolios')} p
-        LEFT JOIN {_full_id('lankabd_datamatrix')} d ON p.symbol = d.Symbol
+        FROM {db.table_id('portfolios')} p
+        LEFT JOIN {db.table_id('lankabd_datamatrix')} d ON p.symbol = d.Symbol
         WHERE p.user_id = @uid AND p.is_deleted = FALSE
         ORDER BY p.created_at DESC
     """
@@ -71,7 +70,7 @@ def update_portfolio(portfolio_id: str, user_id: str, data: dict):
 
     affected = db.execute_dml(
         f"""
-        UPDATE {_full_id('portfolios')}
+        UPDATE {db.table_id('portfolios')}
         SET {', '.join(set_clauses)}
         WHERE id = @id AND user_id = @uid AND is_deleted = FALSE
         """,
@@ -83,7 +82,7 @@ def update_portfolio(portfolio_id: str, user_id: str, data: dict):
 def delete_portfolio(portfolio_id: str, user_id: str):
     db.execute_dml(
         f"""
-        UPDATE {_full_id('portfolios')}
+        UPDATE {db.table_id('portfolios')}
         SET is_deleted = TRUE, updated_at = @now
         WHERE id = @id AND user_id = @uid AND is_deleted = FALSE
         """,
@@ -103,8 +102,8 @@ def portfolio_summary(user_id: str):
                ROUND(SUM(d.LTP * p.quantity), 2) AS current_value,
                ROUND(SUM((d.LTP - p.buy_price) * p.quantity), 2) AS total_pnl,
                ROUND(AVG(((d.LTP - p.buy_price) / p.buy_price) * 100), 2) AS avg_pnl_pct
-        FROM {_full_id('portfolios')} p
-        LEFT JOIN {_full_id('lankabd_datamatrix')} d ON p.symbol = d.Symbol
+        FROM {db.table_id('portfolios')} p
+        LEFT JOIN {db.table_id('lankabd_datamatrix')} d ON p.symbol = d.Symbol
         WHERE p.user_id = @uid AND p.is_deleted = FALSE
     """
     params = [bigquery.ScalarQueryParameter("uid", "STRING", user_id)]

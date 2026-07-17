@@ -4,8 +4,6 @@ from google.cloud import bigquery
 from . import indicators
 from . import db
 
-_full_id = db.table_id
-
 
 def list_sectors():
     sql = f"""
@@ -15,7 +13,7 @@ def list_sectors():
                ROUND(AVG(__Change), 2) AS avg_change,
                SUM(Volume_Qty_) AS total_volume,
                ROUND(SUM(Value_Turnover_), 2) AS total_turnover
-        FROM {_full_id('lankabd_datamatrix')}
+        FROM {db.table_id('lankabd_datamatrix')}
         WHERE Sector IS NOT NULL AND Sector != ''
         GROUP BY Sector
         ORDER BY Sector
@@ -40,7 +38,7 @@ def list_stocks(sector: str = None, search: str = None, limit: int = 500):
         SELECT Symbol, Sector, LTP, Open, High, Low, Close, YCP,
                ROUND(Change, 2) AS Change, ROUND(__Change, 2) AS ChangePct,
                Volume_Qty_, Value_Turnover_, EPS
-        FROM {_full_id('lankabd_datamatrix')}
+        FROM {db.table_id('lankabd_datamatrix')}
         WHERE {where}
         ORDER BY Symbol
         LIMIT {int(limit)}
@@ -53,7 +51,7 @@ def get_stock(symbol: str):
         SELECT Symbol, Sector, LTP, Open, High, Low, Close, YCP,
                ROUND(Change, 2) AS Change, ROUND(__Change, 2) AS ChangePct,
                Volume_Qty_, Value_Turnover_, EPS
-        FROM {_full_id('lankabd_datamatrix')}
+        FROM {db.table_id('lankabd_datamatrix')}
         WHERE Symbol = @symbol
         LIMIT 1
     """
@@ -65,7 +63,7 @@ def get_stock(symbol: str):
 def top_movers(limit: int = 10):
     sql = f"""
         SELECT Symbol, Sector, LTP, ROUND(__Change, 2) AS ChangePct
-        FROM {_full_id('lankabd_datamatrix')}
+        FROM {db.table_id('lankabd_datamatrix')}
         ORDER BY __Change DESC
         LIMIT {int(limit)}
     """
@@ -73,7 +71,7 @@ def top_movers(limit: int = 10):
 
     sql = f"""
         SELECT Symbol, Sector, LTP, ROUND(__Change, 2) AS ChangePct
-        FROM {_full_id('lankabd_datamatrix')}
+        FROM {db.table_id('lankabd_datamatrix')}
         ORDER BY __Change ASC
         LIMIT {int(limit)}
     """
@@ -87,7 +85,7 @@ def price_history(symbol: str, days: int = 365):
         SELECT Date, Symbol, LTP, High, Low, OPENP_ AS Open, Close, YCP,
                ROUND(Change__, 2) AS ChangePct, Volume_Qty_ AS Volume,
                SMA_20, RSI
-        FROM {_full_id('lankabd_price_archive')}
+        FROM {db.table_id('lankabd_price_archive')}
         WHERE Symbol = @symbol
         ORDER BY Date DESC
         LIMIT {int(days)}
@@ -158,7 +156,7 @@ def list_announcements(symbol: str = None, limit: int = 50):
     sql = f"""
         SELECT Symbol, Date, Announcement_Type, Details, Sentiment,
                Expected_Price_Impact, Importance, Sector
-        FROM {_full_id('lankabd_announcements')}
+        FROM {db.table_id('lankabd_announcements')}
         WHERE {where}
         ORDER BY Date DESC
         LIMIT {int(limit)}
@@ -173,7 +171,7 @@ def market_summary():
                ROUND(AVG(LTP), 2) AS avg_price,
                ROUND(SUM(Value_Turnover_), 2) AS total_turnover,
                MAX(updated_at) AS last_updated
-        FROM {_full_id('lankabd_datamatrix')}
+        FROM {db.table_id('lankabd_datamatrix')}
     """
     rows = db.query_rows(sql)
     return rows[0] if rows else {}

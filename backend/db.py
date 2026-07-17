@@ -132,7 +132,7 @@ def table_id(name: str) -> str:
     return f"`{qualified_name(name)}`"
 
 
-def query_rows(sql: str, params: list | None = None) -> list[dict]:
+def query_rows(sql: str, params: list["bigquery.ScalarQueryParameter"] | None = None) -> list[dict]:
     """Run a parameterized SELECT and return the rows as dicts.
 
     The read counterpart to insert_rows/execute_dml. Callers go through this

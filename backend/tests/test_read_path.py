@@ -6,52 +6,32 @@ stubbable via db._client (see test_bq_mutations.py); these extend the same
 pattern to reads — the asymmetry #41/#43 left behind.
 """
 import pytest
+from google.cloud import bigquery
 
 from backend import db, market_service, watchlist_service, portfolio_service, alerts_service, user_service
-
-
-class _FakeJob:
-    def __init__(self, rows):
-        self._rows = rows
-
-    def result(self):
-        return self._rows
-
-
-class _FakeClient:
-    """Records SQL + params and replays canned rows."""
-
-    def __init__(self, rows=()):
-        self.calls = []
-        self.rows = list(rows)
-
-    def query(self, sql, job_config=None):
-        params = {}
-        if job_config is not None:
-            for p in job_config.query_parameters:
-                params[p.name] = p.value
-        self.calls.append({"sql": " ".join(sql.split()), "params": params})
-        return _FakeJob(self.rows)
+from backend.tests.fakes import FakeClient, rows as fake_rows
 
 
 @pytest.fixture
 def fake_bq(monkeypatch):
-    client = _FakeClient()
+    client = FakeClient()
     monkeypatch.setattr(db, "_client", client)
     return client
 
 
-def test_query_rows_passes_params_and_maps_to_dicts(monkeypatch):
-    client = _FakeClient(rows=[{"Symbol": "GP"}, {"Symbol": "BEXIMCO"}])
+def test_query_rows_converts_bigquery_rows_to_plain_dicts(monkeypatch):
+    # The client library yields Row objects, not dicts — converting them is the
+    # one transformation query_rows performs.
+    client = FakeClient(result_rows=fake_rows({"Symbol": "GP"}, {"Symbol": "BEXIMCO"}))
     monkeypatch.setattr(db, "_client", client)
 
-    from google.cloud import bigquery
-    rows = db.query_rows(
+    result = db.query_rows(
         "SELECT Symbol FROM t WHERE Sector = @sector",
         [bigquery.ScalarQueryParameter("sector", "STRING", "Banks")],
     )
 
-    assert rows == [{"Symbol": "GP"}, {"Symbol": "BEXIMCO"}]
+    assert result == [{"Symbol": "GP"}, {"Symbol": "BEXIMCO"}]
+    assert all(type(r) is dict for r in result), "rows must be plain dicts, not Row"
     assert client.calls[0]["params"] == {"sector": "Banks"}
 
 
@@ -72,8 +52,10 @@ def test_get_stock_returns_none_when_absent(fake_bq):
 
 
 def test_get_stock_returns_the_row_when_present(monkeypatch):
-    monkeypatch.setattr(db, "_client", _FakeClient(rows=[{"Symbol": "GP", "LTP": 1.5}]))
-    assert market_service.get_stock("GP") == {"Symbol": "GP", "LTP": 1.5}
+    monkeypatch.setattr(db, "_client", FakeClient(result_rows=fake_rows({"Symbol": "GP", "LTP": 1.5})))
+    stock = market_service.get_stock("GP")
+    assert stock == {"Symbol": "GP", "LTP": 1.5}
+    assert type(stock) is dict  # callers index it and FastAPI serializes it
 
 
 def test_list_stocks_filters_are_parameterized_not_interpolated(fake_bq):
@@ -126,3 +108,23 @@ def test_get_user_by_email_lowercases_and_parameterizes(fake_bq):
 
 def test_get_user_credentials_returns_none_when_absent(fake_bq):
     assert user_service.get_user_credentials("nobody@example.com") is None
+
+
+def test_get_user_by_email_maps_a_real_row_onto_UserResponse(monkeypatch):
+    # The getters call r.get(...) with defaults, which only works once the Row
+    # has been converted to a dict.
+    monkeypatch.setattr(db, "_client", FakeClient(result_rows=fake_rows({
+        "id": "u1", "email": "a@b.com", "phone": "0170",
+        "full_name": "Test User", "role": "admin", "created_at": "2026-07-17",
+    })))
+    user = user_service.get_user_by_email("a@b.com")
+    assert (user.id, user.email, user.role) == ("u1", "a@b.com", "admin")
+
+
+def test_get_user_by_email_tolerates_columns_the_row_omits(monkeypatch):
+    # Defaults exist for a reason: legacy rows predate some columns.
+    monkeypatch.setattr(db, "_client", FakeClient(result_rows=fake_rows({
+        "id": "u1", "email": "a@b.com", "created_at": None,
+    })))
+    user = user_service.get_user_by_email("a@b.com")
+    assert user.role == "user" and user.phone == "" and user.full_name == ""

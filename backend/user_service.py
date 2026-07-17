@@ -12,7 +12,6 @@ from . import db
 # db.insert_rows, so the read path is stubbable via db._client (ticket #46).
 PROJECT = db.PROJECT
 DATASET = db.DATASET
-_uid = db.table_id
 
 
 def _insert_user_row(row: dict):
@@ -55,7 +54,7 @@ def create_user(payload) -> UserResponse:
 def get_user_by_email(email: str) -> Optional[UserResponse]:
     sql = f"""
         SELECT id, email, phone, full_name, role, created_at
-        FROM {_uid('users')}
+        FROM {db.table_id('users')}
         WHERE LOWER(email) = @email
         LIMIT 1
     """
@@ -77,7 +76,7 @@ def get_user_by_email(email: str) -> Optional[UserResponse]:
 def get_user_by_id(user_id: str) -> Optional[UserResponse]:
     sql = f"""
         SELECT id, email, phone, full_name, role, created_at
-        FROM {_uid('users')}
+        FROM {db.table_id('users')}
         WHERE id = @uid
         LIMIT 1
     """
@@ -99,7 +98,7 @@ def get_user_by_id(user_id: str) -> Optional[UserResponse]:
 def get_user_credentials(email: str) -> Optional[dict]:
     sql = f"""
         SELECT id, email, phone, password_hash, full_name, role
-        FROM {_uid('users')}
+        FROM {db.table_id('users')}
         WHERE LOWER(email) = @email
         LIMIT 1
     """
@@ -119,7 +118,7 @@ def get_user_credentials(email: str) -> Optional[dict]:
 def list_users():
     sql = f"""
         SELECT id, email, phone, full_name, role, created_at
-        FROM {_uid('users')}
+        FROM {db.table_id('users')}
         ORDER BY created_at DESC
     """
     return db.query_rows(sql)
@@ -131,7 +130,7 @@ def update_user(user_id: str, updates: dict):
     # itself is applied to a copy that is then discarded, so it is a no-op.
     # Left as-is here deliberately: #46 is a read-path change, and this needs
     # the scoped-DML rewrite plus the multi-user regression test #40 got.
-    rows = list(db.client().query(f"SELECT * FROM {_uid('users')}").result())
+    rows = list(db.client().query(f"SELECT * FROM {db.table_id('users')}").result())
     now = datetime.now(timezone.utc)
     for r in rows:
         d = dict(r)
@@ -150,7 +149,7 @@ def update_user(user_id: str, updates: dict):
 def delete_user(user_id: str):
     # BROKEN — see ticket #50. Whole-table truncate-and-reload; deleting the
     # last user truncates with an empty DataFrame.
-    rows = list(db.client().query(f"SELECT * FROM {_uid('users')}").result())
+    rows = list(db.client().query(f"SELECT * FROM {db.table_id('users')}").result())
     remaining = [dict(r) for r in rows if r["id"] != user_id]
     df = pd.DataFrame(remaining) if remaining else pd.DataFrame()
     full = f"{PROJECT}.{DATASET}.users"

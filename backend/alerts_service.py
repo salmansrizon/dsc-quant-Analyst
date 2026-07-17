@@ -6,16 +6,14 @@ from google.cloud import bigquery
 
 from . import db
 
-_full_id = db.table_id
-
 
 def get_alerts(user_id: str):
     sql = f"""
         SELECT a.id, a.symbol, a.target_price, a.direction,
                a.is_triggered, a.triggered_at, a.created_at,
                d.LTP AS current_price
-        FROM {_full_id('price_alerts')} a
-        LEFT JOIN {_full_id('lankabd_datamatrix')} d ON a.symbol = d.Symbol
+        FROM {db.table_id('price_alerts')} a
+        LEFT JOIN {db.table_id('lankabd_datamatrix')} d ON a.symbol = d.Symbol
         WHERE a.user_id = @uid
         ORDER BY a.created_at DESC
     """
@@ -41,7 +39,7 @@ def create_alert(user_id: str, data: dict):
 
 def delete_alert(alert_id: str, user_id: str):
     db.execute_dml(
-        f"DELETE FROM {_full_id('price_alerts')} WHERE id = @id AND user_id = @uid",
+        f"DELETE FROM {db.table_id('price_alerts')} WHERE id = @id AND user_id = @uid",
         [
             bigquery.ScalarQueryParameter("id", "STRING", alert_id),
             bigquery.ScalarQueryParameter("uid", "STRING", user_id),

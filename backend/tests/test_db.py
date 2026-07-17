@@ -88,8 +88,11 @@ def test_exports_uses_the_single_client():
     assert exports._get_bigquery_client() is db.client()
 
 
-def test_table_helpers_delegate_to_db():
+def test_no_module_aliases_the_table_helper():
+    # The modules used to alias db.table_id as `_full_id` (and user_service as
+    # `_uid`, which read as "user id" next to its own @uid params). Both hid a
+    # name that was already clear; call sites now use db.table_id directly.
     from backend import market_service, watchlist_service, portfolio_service, alerts_service, user_service
-    for mod in (market_service, watchlist_service, portfolio_service, alerts_service):
-        assert mod._full_id is db.table_id
-    assert user_service._uid is db.table_id
+    for mod in (market_service, watchlist_service, portfolio_service, alerts_service, user_service):
+        assert not hasattr(mod, "_full_id")
+        assert not hasattr(mod, "_uid")

@@ -164,12 +164,16 @@ def scrape_lankabd(sector=None):
 
         # Apply sector filter if specified
         if sector:
-            if 'Sector' in df.columns:
-                df = df[df['Sector'] == sector]
-                logger.info(f"Filtered data for sector: {sector} ({len(df)} rows)")
-            else:
-                logger.warning("'Sector' column not found in data")
-        
+            if 'Sector' not in df.columns:
+                # Without the column there is nothing to filter on, and returning
+                # the unfiltered frame would hand every sector a copy of the whole
+                # table — which scrape_all_sectors would then concat into an N-way
+                # duplicate and truncate the universe with. Fail instead.
+                logger.error("'Sector' column not found in data — cannot filter")
+                return None
+            df = df[df['Sector'] == sector]
+            logger.info(f"Filtered data for sector: {sector} ({len(df)} rows)")
+
         return df
         
     except requests.exceptions.RequestException as e:
@@ -179,8 +183,33 @@ def scrape_lankabd(sector=None):
         logger.error(f"An error occurred: {e}")
         return None
 
+# Sectors the site lists but which carry no equity listings. They are empty on
+# every run (23 sectors offered, 21 with rows), so an empty result for these is
+# expected rather than a failed scrape. Any OTHER sector coming back empty is
+# treated as a failure: scrape_lankabd fetches one page and filters it
+# client-side, so "empty" only means no row carried this sector's label — a
+# truncated page or a renamed label is indistinguishable from a genuinely empty
+# sector, and both must block the replace.
+EXPECTED_EMPTY_SECTORS = frozenset({"Debenture", "G-SEC (T.Bond)"})
+
+
 class PartialScrapeError(RuntimeError):
-    """Raised when some sectors failed, so the universe must not be replaced."""
+    """Raised when some sectors failed, so the universe must not be replaced.
+
+    Carries the sector names and the CSV path so a caller can act on them
+    without parsing the message.
+    """
+
+    def __init__(self, failed_sectors, total_sectors, output_file):
+        self.failed_sectors = list(failed_sectors)
+        self.total_sectors = total_sectors
+        self.output_file = output_file
+        super().__init__(
+            f"{len(self.failed_sectors)} of {total_sectors} sectors failed to scrape "
+            f"({', '.join(self.failed_sectors)}). Refusing to replace "
+            f"lankabd_datamatrix with a partial universe; the existing table is "
+            f"untouched and {output_file} holds what was scraped."
+        )
 
 
 def scrape_all_sectors():
@@ -194,10 +223,8 @@ def scrape_all_sectors():
     partial scrape must not be allowed to land — a stale but complete universe
     beats a fresh but partial one.
 
-    Raises PartialScrapeError if any sector failed to scrape. A sector that
-    scrapes cleanly but holds no listings (Debenture and G-SEC (T.Bond) are
-    always empty) is not a failure — scrape_lankabd returns None on error and
-    an empty frame on an empty sector, and only the former blocks the upload.
+    Raises PartialScrapeError unless every sector yields rows, except the ones
+    in EXPECTED_EMPTY_SECTORS, which never have any.
     """
     sectors = get_available_sectors()
 
@@ -212,17 +239,14 @@ def scrape_all_sectors():
         logger.info(f"\n--- Fetching data for sector: {sector} ---")
         df = scrape_lankabd(sector=sector)
 
-        if df is None:
-            # The scrape itself broke — the sector's symbols are unknown, so
-            # replacing the universe now would silently drop them.
-            failed_sectors.append(sector)
-            logger.warning(f"Failed to scrape sector: {sector}")
-        elif len(df) > 0:
+        if df is not None and len(df) > 0:
             all_data.append(df)
             logger.info(f"Successfully fetched {len(df)} rows")
+        elif sector in EXPECTED_EMPTY_SECTORS and df is not None:
+            logger.info(f"Sector is empty as expected: {sector}")
         else:
-            # Scraped fine, genuinely holds no listings. Not a failure.
-            logger.info(f"Sector is empty: {sector}")
+            failed_sectors.append(sector)
+            logger.warning(f"Failed to scrape sector: {sector}")
 
         time.sleep(1)  # Be polite to the server
 
@@ -239,12 +263,7 @@ def scrape_all_sectors():
     logger.info(f"\n✓ Combined data saved to {output_file}")
 
     if failed_sectors:
-        raise PartialScrapeError(
-            f"{len(failed_sectors)} of {len(sectors)} sectors returned no data "
-            f"({', '.join(failed_sectors)}). Refusing to replace lankabd_datamatrix "
-            f"with a partial universe; the existing table is untouched and "
-            f"{output_file} holds what was scraped."
-        )
+        raise PartialScrapeError(failed_sectors, len(sectors), output_file)
 
     try:
         bq = BigQueryHelper()
@@ -260,11 +279,15 @@ def scrape_all_sectors():
 def main() -> int:
     """Entry point. Returns a process exit code."""
     try:
-        scrape_all_sectors()
+        result = scrape_all_sectors()
     except PartialScrapeError as e:
         # Non-zero so a scheduler or CI run cannot mistake a refused partial
         # scrape for a successful refresh.
         logger.error(str(e))
+        return 1
+    if result is None:
+        # No sectors listed, or every sector failed — nothing was uploaded.
+        logger.error("Scrape produced no data; lankabd_datamatrix is unchanged.")
         return 1
     return 0
 

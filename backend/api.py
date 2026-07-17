@@ -12,6 +12,7 @@ from .user_service import (
     get_user_by_id, list_users, update_user, delete_user,
 )
 from . import market_service, watchlist_service, portfolio_service, alerts_service
+from . import fundamentals_service
 
 app = FastAPI(title="DSC Quant Analyst API", version="1.0.0")
 
@@ -96,6 +97,14 @@ def price_history(symbol: str, days: int = Query(default=365, le=1095)):
 @app.get("/api/market/technical/{symbol}")
 def technical_indicators(symbol: str, days: int = Query(default=365, le=1095)):
     return market_service.technical_indicators(symbol.upper(), days=days)
+
+
+@app.get("/api/market/fundamentals/{symbol}")
+def fundamentals(symbol: str):
+    result = fundamentals_service.get_fundamentals(symbol.upper())
+    if not result:
+        raise HTTPException(status_code=404, detail="Symbol not found")
+    return result
 
 
 @app.get("/api/market/announcements")

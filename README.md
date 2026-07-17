@@ -43,9 +43,23 @@ Complete web scraping solution for Lankabangla financial portal stock market dat
    behind — drop it once satisfied.
 5. `uvicorn api:app --reload`
 
-Tests: `pytest -m "not integration"` is the fast offline suite (no credentials).
-Plain `pytest` also runs the tests that hit real BigQuery — slower, but the only
-ones that catch drift between the tables and the code.
+### Tests
+
+| Command | What it runs |
+|---|---|
+| `pip install -r requirements-dev.txt` | runtime deps + pytest/httpx |
+| `pytest -m "not integration"` | 132 offline tests, ~0.5s, no credentials |
+| `pytest -m integration` | 10 tests against real BigQuery, ~3min |
+| `npx vitest run` | 16 frontend tests |
+
+**The offline suite stubs BigQuery, so it cannot see a schema drift, a missing
+table, or a permissions failure.** Every serious defect in this codebase was
+invisible to it. `-m integration` is what catches those.
+
+CI (`.github/workflows/`): `ci.yml` runs the offline + frontend checks on every
+push. `integration.yml` runs the BigQuery tests nightly and on demand
+(`workflow_dispatch`); it needs a `GCP_SERVICE_ACCOUNT_JSON` repo secret and
+fails loudly rather than skipping when it is absent.
 
 > **Why append-only?** BigQuery's free tier forbids DML — `UPDATE`/`DELETE`
 > return `403 Billing has not been enabled`. So nothing is edited in place: a

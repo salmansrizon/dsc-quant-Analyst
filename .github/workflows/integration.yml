@@ -1,0 +1,47 @@
+name: Integration (real BigQuery)
+
+# These are the tests that actually catch things. Every serious defect found in
+# this codebase — a missing symbol-universe table, exports naming tables that
+# never existed, a credential path that only broke from cwd=backend, every
+# mutation 403ing on the free tier, signup rejecting every phone number — was
+# invisible to the offline suite, which stubs the client and asserts SQL shape.
+#
+# They need credentials, so they cannot run on every push. Nightly + on demand.
+# See #54.
+
+on:
+  schedule:
+    - cron: '0 2 * * *'   # 02:00 UTC daily
+  workflow_dispatch:       # and whenever you want to check before a merge
+
+jobs:
+  integration:
+    name: Integration tests
+    runs-on: ubuntu-latest
+    # A fork PR must never get the key.
+    if: github.repository == 'salmansrizon/dsc-quant-Analyst'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+          cache: pip
+      - run: pip install -r requirements-dev.txt
+
+      - name: Check the secret is configured
+        # Fail loudly rather than skipping: a silently-skipped integration run
+        # is how "green CI" starts lying (#54).
+        env:
+          KEY: ${{ secrets.GCP_SERVICE_ACCOUNT_JSON }}
+        run: |
+          if [ -z "$KEY" ]; then
+            echo "::error::GCP_SERVICE_ACCOUNT_JSON is not set. These tests cannot run without it."
+            exit 1
+          fi
+
+      - name: Run integration tests
+        env:
+          # db._resolve_credentials reads this and writes it to a temp file.
+          GCP_SERVICE_ACCOUNT_JSON: ${{ secrets.GCP_SERVICE_ACCOUNT_JSON }}
+          BIGQUERY_DATASET_ID: ${{ vars.BIGQUERY_DATASET_ID || 'lankabd_dataset' }}
+        run: pytest backend/tests -m integration -v

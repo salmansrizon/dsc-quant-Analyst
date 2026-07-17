@@ -1,8 +1,25 @@
+# API
 fastapi
 uvicorn
-pandas
-google-cloud-bigquery
+python-multipart
+pydantic
+
+# Auth
 pyjwt
 bcrypt
-python-multipart
+
+# Config
 python-dotenv
+
+# BigQuery. The pandas extra pulls pyarrow, which load_table_from_dataframe
+# needs; db-dtypes is what to_dataframe() needs for DATE/TIME columns.
+google-cloud-bigquery[pandas]
+db-dtypes
+pandas
+numpy
+
+# ETL scrapers. lxml is not optional — it is the parser BeautifulSoup is asked
+# for by name: BeautifulSoup(html, 'lxml').
+requests
+beautifulsoup4
+lxml

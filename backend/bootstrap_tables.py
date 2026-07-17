@@ -63,6 +63,31 @@ SCHEMAS = {
         ("source", _STR),       # dividend_archive | latest_earnings
         ("updated_at", _TS), ("is_deleted", "BOOL"),
     ],
+    # Financial ratios from the company API (#58). Grain: one row per symbol per
+    # year per ratio. LONG, not wide: the ratio set varies by sector (GP reports
+    # 69, AB Bank 33), so a column per ratio means a migration every time
+    # lankabd adds one — and #51 was that pain.
+    "fundamentals_ratios": [
+        ("id", _STR),           # symbol|year|code
+        ("symbol", _STR), ("year", "INT64"),
+        ("code", _STR),         # RTAMAQ0210 — stable machine key
+        ("name", _STR), ("category", _STR),
+        ("result", "FLOAT64"),
+        ("equation", _STR),        # "158057490000.0000 / 191322941000.0000"
+        ("base_equation", _STR),   # "ISTEX90000 / BS96033" — joins to fs_code
+        ("updated_at", _TS), ("is_deleted", "BOOL"),
+    ],
+    # Statement line items (#58). Grain: one row per symbol per year per line.
+    "fundamentals_statements": [
+        ("id", _STR),           # symbol|year|fs_code
+        ("symbol", _STR), ("year", "INT64"),
+        ("fs_type", _STR),      # Balance Sheet | Income Statement | Cash Flow Statement
+        ("fs_code", _STR),      # BS96002 — what a ratio's base_equation references
+        ("fs_key", _STR),       # "Property Plant & Equipment"
+        ("fs_value", "FLOAT64"),
+        ("fs_order", "INT64"),
+        ("updated_at", _TS), ("is_deleted", "BOOL"),
+    ],
     # Grain: one dividend DECLARATION. A company declares several a year
     # (MARICO 2026 has five), so symbol|year would collapse them.
     "fundamentals_dividends": [

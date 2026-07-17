@@ -31,18 +31,7 @@ def _find_alert(alert_id: str, user_id: str) -> dict | None:
 
     Scoped by owner: guessing an id must never reach someone else's alert.
     """
-    rows = db.query_rows(
-        f"""
-        SELECT * FROM {db.current_view('price_alerts')}
-        WHERE id = @id AND user_id = @uid
-        LIMIT 1
-        """,
-        [
-            bigquery.ScalarQueryParameter("id", "STRING", alert_id),
-            bigquery.ScalarQueryParameter("uid", "STRING", user_id),
-        ],
-    )
-    return rows[0] if rows else None
+    return db.find_current("price_alerts", id=alert_id, user_id=user_id)
 
 
 def create_alert(user_id: str, data: dict):
@@ -69,11 +58,7 @@ def delete_alert(alert_id: str, user_id: str) -> bool:
     if not alert:
         return False
 
-    db.append_version("price_alerts", [{
-        **alert,
-        "is_deleted": True,
-        "updated_at": datetime.now(timezone.utc),
-    }])
+    db.tombstone("price_alerts", alert)
     return True
 
 
@@ -91,7 +76,7 @@ def mark_triggered(alert_ids: list[str]) -> int:
     rows = db.query_rows(
         f"""
         SELECT * FROM {db.current_view('price_alerts')}
-        WHERE id IN UNNEST(@ids) AND NOT is_triggered
+        WHERE id IN UNNEST(@ids) AND NOT COALESCE(is_triggered, FALSE)
         """,
         [bigquery.ArrayQueryParameter("ids", "STRING", alert_ids)],
     )

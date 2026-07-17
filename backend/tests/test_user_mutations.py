@@ -12,7 +12,7 @@ BigQuery's free tier forbids DML.
 import pytest
 
 from backend import db, user_service
-from backend.tests.fakes import FakeClient, rows as fake_rows
+from backend.tests.fakes import AppendLog, FakeClient, VersionStore, rows as fake_rows
 
 _ROW = {
     "id": "u1", "email": "alice@example.com", "phone": "0170",
@@ -21,17 +21,9 @@ _ROW = {
 }
 
 
-class _AppendLog:
-    def __init__(self):
-        self.appends = []
-
-    def __call__(self, table, rows):
-        self.appends.append({"table": table, "rows": [dict(r) for r in rows]})
-
-
 @pytest.fixture
 def appended(monkeypatch):
-    log = _AppendLog()
+    log = AppendLog()
     monkeypatch.setattr(db, "append_version", log)
     return log
 
@@ -121,24 +113,8 @@ def test_reads_resolve_the_current_view_not_the_raw_table(monkeypatch):
 
 # ── Multi-user survival (the regression #40 got, on the users table) ──────────
 
-class _VersionStore:
-    """Append-only rows plus `_current` semantics, in memory."""
-
-    def __init__(self, initial=()):
-        self.versions = [dict(r) for r in initial]
-
-    def append(self, table, rows):
-        self.versions.extend(dict(r) for r in rows)
-
-    def current(self):
-        latest = {}
-        for row in self.versions:
-            latest[row["id"]] = row
-        return [r for r in latest.values() if not r.get("is_deleted")]
-
-
 def test_updating_one_user_changes_only_that_user(monkeypatch):
-    store = _VersionStore([
+    store = VersionStore([
         dict(_ROW, id="u1", full_name="Alice"),
         dict(_ROW, id="u2", full_name="Bob", role="admin"),
     ])
@@ -156,7 +132,7 @@ def test_updating_one_user_changes_only_that_user(monkeypatch):
 
 
 def test_deleting_one_user_leaves_the_others(monkeypatch):
-    store = _VersionStore([dict(_ROW, id=i) for i in ("u1", "u2", "u3")])
+    store = VersionStore([dict(_ROW, id=i) for i in ("u1", "u2", "u3")])
     monkeypatch.setattr(db, "append_version", store.append)
     monkeypatch.setattr(db, "_client", FakeClient(result_rows=fake_rows(dict(_ROW, id="u2"))))
 
@@ -167,7 +143,7 @@ def test_deleting_one_user_leaves_the_others(monkeypatch):
 def test_deleting_the_last_user_does_not_wipe_the_table(monkeypatch):
     # The old code loaded an EMPTY DataFrame with WRITE_TRUNCATE here, taking
     # the schema with it. An append cannot: the version log is still there.
-    store = _VersionStore([dict(_ROW, id="only")])
+    store = VersionStore([dict(_ROW, id="only")])
     monkeypatch.setattr(db, "append_version", store.append)
     monkeypatch.setattr(db, "_client", FakeClient(result_rows=fake_rows(dict(_ROW, id="only"))))
 
@@ -179,7 +155,7 @@ def test_deleting_the_last_user_does_not_wipe_the_table(monkeypatch):
 def test_a_concurrent_signup_survives_an_update(monkeypatch):
     # The old read-all + reload dropped any row inserted between the SELECT and
     # the load job. An append never rewrites the other rows at all.
-    store = _VersionStore([dict(_ROW, id="u1", full_name="Alice")])
+    store = VersionStore([dict(_ROW, id="u1", full_name="Alice")])
     monkeypatch.setattr(db, "append_version", store.append)
     monkeypatch.setattr(db, "_client", FakeClient(result_rows=fake_rows(dict(_ROW, id="u1"))))
 

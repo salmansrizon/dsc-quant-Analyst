@@ -12,22 +12,12 @@ actually stores what was appended, not one that only records SQL text.
 import pytest
 
 from backend import db, watchlist_service, portfolio_service, alerts_service
-from backend.tests.fakes import FakeClient, rows as fake_rows
-
-
-class _AppendLog:
-    """Captures db.append_version calls without touching BigQuery."""
-
-    def __init__(self):
-        self.appends = []
-
-    def __call__(self, table, rows):
-        self.appends.append({"table": table, "rows": [dict(r) for r in rows]})
+from backend.tests.fakes import AppendLog, FakeClient, VersionStore, rows as fake_rows
 
 
 @pytest.fixture
 def appended(monkeypatch):
-    log = _AppendLog()
+    log = AppendLog()
     monkeypatch.setattr(db, "append_version", log)
     return log
 
@@ -101,8 +91,10 @@ def test_lookups_are_scoped_to_the_owner(monkeypatch):
     monkeypatch.setattr(db, "_client", client)
     portfolio_service.delete_portfolio("p1", "u1")
     call = client.calls[0]
-    assert "WHERE id = @id AND user_id = @uid" in call["sql"]
-    assert call["params"] == {"id": "p1", "uid": "u1"}
+    assert "WHERE id = @id AND user_id = @user_id" in call["sql"]
+    assert call["params"] == {"id": "p1", "user_id": "u1"}
+    # Values are bound, never interpolated into the SQL.
+    assert "p1" not in call["sql"] and "u1" not in call["sql"]
 
 
 def test_update_portfolio_appends_the_whole_merged_row(monkeypatch, appended):
@@ -170,33 +162,9 @@ def test_mark_triggered_with_no_ids_does_nothing(no_rows, appended):
 
 # ── Multi-user survival: the regression #40 was filed for ─────────────────────
 
-class _VersionStore:
-    """An append-only table plus the `_current` view semantics, in memory.
-
-    Mirrors what BigQuery does: appends accumulate, and a read resolves the
-    latest version per id and drops tombstones.
-    """
-
-    def __init__(self):
-        self.versions = []  # every appended row, in order
-
-    def append(self, table, rows):
-        self.versions.extend(dict(r) for r in rows)
-
-    def current(self):
-        latest = {}
-        for row in self.versions:        # later appends win
-            latest[row["id"]] = row
-        return [r for r in latest.values() if not r.get("is_deleted")]
-
-    def current_for(self, **match):
-        return [r for r in self.current()
-                if all(r.get(k) == v for k, v in match.items())]
-
-
 @pytest.fixture
 def store(monkeypatch):
-    s = _VersionStore()
+    s = VersionStore()
     monkeypatch.setattr(db, "append_version", s.append)
     return s
 

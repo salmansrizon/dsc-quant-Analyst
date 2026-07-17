@@ -24,7 +24,12 @@ class _RecordingClient:
         return _Done()
 
     def query(self, sql, job_config=None):
-        self.queries.append({"sql": " ".join(sql.split()), "job_config": job_config})
+        params = {}
+        if job_config is not None and job_config.query_parameters:
+            params = {p.name: p.value for p in job_config.query_parameters}
+        self.queries.append({
+            "sql": " ".join(sql.split()), "job_config": job_config, "params": params,
+        })
         return _Done()
 
 
@@ -86,7 +91,7 @@ def test_ensure_current_view_resolves_latest_and_hides_tombstones(client):
     db.ensure_current_view("watchlists")
     sql = client.queries[0]["sql"]
     assert sql.startswith("CREATE OR REPLACE VIEW")
-    assert "ROW_NUMBER() OVER ( PARTITION BY id ORDER BY updated_at DESC )" in sql
+    assert "ROW_NUMBER() OVER ( PARTITION BY id" in sql
     assert "_rn = 1" in sql
     # COALESCE is load-bearing: users predates is_deleted, and NOT NULL is NULL,
     # so those rows would silently vanish from the view.
@@ -98,14 +103,45 @@ def test_ensure_current_view_can_key_on_another_column(client):
     assert "PARTITION BY user_id" in client.queries[0]["sql"]
 
 
-def test_compact_writes_to_the_table_without_dml(client):
-    db.compact("watchlists")
+def test_the_view_breaks_updated_at_ties_in_favour_of_the_tombstone(client):
+    # updated_at comes from Python's clock, so two appends can tie. Without a
+    # tiebreaker ROW_NUMBER picks arbitrarily and a tombstone can lose to the
+    # row it deletes — resurrecting deleted data.
+    db.ensure_current_view("watchlists")
+    sql = client.queries[0]["sql"]
+    assert "ORDER BY updated_at DESC, COALESCE(is_deleted, FALSE) DESC" in sql
+
+
+def test_there_is_no_compact_helper():
+    # A SELECT-then-WRITE_TRUNCATE compaction destroys any row appended while it
+    # runs — exactly the bug #40 was filed for. It needs a quiesced-writes
+    # design, not a convenience helper (#52).
+    assert not hasattr(db, "compact")
+
+
+def test_find_current_reads_the_view_and_binds_its_values(client):
+    db.find_current("portfolios", id="p1", user_id="u1")
     q = client.queries[0]
-    # A query job with a destination table is allowed on the free tier; DML is not.
-    assert q["sql"].strip().upper().startswith("SELECT")
-    # The library normalizes the destination into a TableReference.
-    assert str(q["job_config"].destination) == db.qualified_name("watchlists")
-    assert q["job_config"].write_disposition == "WRITE_TRUNCATE"
+    assert "portfolios_current" in q["sql"]
+    assert "WHERE id = @id AND user_id = @user_id" in " ".join(q["sql"].split())
+
+
+def test_find_current_requires_a_filter(client):
+    # An unfiltered "find one" would hand back an arbitrary user's row.
+    with pytest.raises(ValueError):
+        db.find_current("portfolios")
+
+
+def test_tombstone_carries_the_whole_row(client):
+    db.tombstone("watchlists", {"id": "w1", "user_id": "u1", "symbol": "GP"})
+    row = client.loaded[0]["rows"][0]
+    assert row["is_deleted"] is True
+    assert row["symbol"] == "GP" and row["user_id"] == "u1"
+
+
+def test_find_current_binds_values_as_parameters(client):
+    db.find_current("portfolios", id="p1", user_id="u1")
+    assert client.queries[0]["params"] == {"id": "p1", "user_id": "u1"}
 
 
 def test_versioned_tables_all_have_a_view_key():

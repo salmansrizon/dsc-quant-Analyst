@@ -80,7 +80,7 @@ def _add_missing_columns(name: str, columns) -> list[str]:
 
 def bootstrap() -> None:
     for table, key in db.VERSIONED_TABLES.items():
-        columns = SCHEMAS[table]
+        columns = SCHEMAS[table]  # KeyError here means the two lists drifted
         if not _table_exists(table):
             _create_table(table, columns)
             logger.info("created table %s", table)

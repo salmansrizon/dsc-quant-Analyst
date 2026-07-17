@@ -27,26 +27,17 @@ def get_watchlist(user_id: str):
 
 def _find_entry(user_id: str, symbol: str) -> dict | None:
     """The user's current row for a symbol, or None."""
-    rows = db.query_rows(
-        f"""
-        SELECT id, user_id, symbol, added_at
-        FROM {db.current_view('watchlists')}
-        WHERE user_id = @uid AND symbol = @symbol
-        LIMIT 1
-        """,
-        [
-            bigquery.ScalarQueryParameter("uid", "STRING", user_id),
-            bigquery.ScalarQueryParameter("symbol", "STRING", symbol.upper()),
-        ],
-    )
-    return rows[0] if rows else None
+    return db.find_current("watchlists", user_id=user_id, symbol=symbol.upper())
 
 
 def add_to_watchlist(user_id: str, symbol: str):
     symbol = symbol.upper()
     existing = _find_entry(user_id, symbol)
     if existing:
-        # Already watching it — adding twice must not create a second version.
+        # Re-adding must not create a second entry for the same symbol. Two
+        # truly concurrent adds can still both miss here and append two rows;
+        # the free tier has no way to make this atomic, and duplicate rows are
+        # a far smaller problem than the alternative.
         return {"id": existing["id"], "symbol": symbol}
 
     wid = str(uuid.uuid4())
@@ -68,9 +59,5 @@ def remove_from_watchlist(user_id: str, symbol: str) -> bool:
     if not entry:
         return False
 
-    db.append_version("watchlists", [{
-        **entry,
-        "is_deleted": True,
-        "updated_at": datetime.now(timezone.utc),
-    }])
+    db.tombstone("watchlists", entry)
     return True

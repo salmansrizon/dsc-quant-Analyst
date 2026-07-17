@@ -46,6 +46,41 @@ class FakeClient:
         if job_config is not None:
             for p in job_config.query_parameters:
                 # Scalars expose .value; ArrayQueryParameter exposes .values.
-                params[p.name] = getattr(p, "value", None) if hasattr(p, "value") else list(p.values)
+                params[p.name] = p.value if hasattr(p, "value") else list(p.values)
         self.calls.append({"sql": " ".join(sql.split()), "params": params})
         return FakeJob(self.result_rows, self.num_dml_affected_rows)
+
+
+class AppendLog:
+    """Captures db.append_version calls without touching BigQuery."""
+
+    def __init__(self):
+        self.appends = []
+
+    def __call__(self, table, rows):
+        self.appends.append({"table": table, "rows": [dict(r) for r in rows]})
+
+
+class VersionStore:
+    """An append-only table plus the `_current` view semantics, in memory.
+
+    Mirrors what BigQuery does: appends accumulate, and a read resolves the
+    latest version per id and drops tombstones. Used by the survival tests,
+    which have to assert on what actually SURVIVED — not on SQL text.
+    """
+
+    def __init__(self, initial=()):
+        self.versions = [dict(r) for r in initial]
+
+    def append(self, table, rows):
+        self.versions.extend(dict(r) for r in rows)
+
+    def current(self):
+        latest = {}
+        for row in self.versions:  # later appends win, as ORDER BY updated_at does
+            latest[row["id"]] = row
+        return [r for r in latest.values() if not r.get("is_deleted")]
+
+    def current_for(self, **match):
+        return [r for r in self.current()
+                if all(r.get(k) == v for k, v in match.items())]

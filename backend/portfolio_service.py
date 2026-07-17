@@ -40,18 +40,7 @@ def _find_holding(portfolio_id: str, user_id: str) -> dict | None:
 
     Scoped by owner: guessing an id must never reach someone else's holding.
     """
-    rows = db.query_rows(
-        f"""
-        SELECT * FROM {db.current_view('portfolios')}
-        WHERE id = @id AND user_id = @uid
-        LIMIT 1
-        """,
-        [
-            bigquery.ScalarQueryParameter("id", "STRING", portfolio_id),
-            bigquery.ScalarQueryParameter("uid", "STRING", user_id),
-        ],
-    )
-    return rows[0] if rows else None
+    return db.find_current("portfolios", id=portfolio_id, user_id=user_id)
 
 
 def add_to_portfolio(user_id: str, data: dict):
@@ -104,11 +93,7 @@ def delete_portfolio(portfolio_id: str, user_id: str) -> bool:
     if not holding:
         return False
 
-    db.append_version("portfolios", [{
-        **holding,
-        "is_deleted": True,
-        "updated_at": datetime.now(timezone.utc),
-    }])
+    db.tombstone("portfolios", holding)
     return True
 
 

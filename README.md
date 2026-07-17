@@ -31,7 +31,17 @@ Complete web scraping solution for Lankabangla financial portal stock market dat
 ### Backend Setup
 1. `cd backend`
 2. `pip install -r requirements.txt`
-3. `uvicorn api:app --reload`
+3. `python bootstrap_tables.py` — **required once per environment.** Creates the
+   append-only tables (`users`, `watchlists`, `portfolios`, `price_alerts`) and
+   their `_current` views. Without it every read fails with
+   `404 Not found: Table ..._current`. Idempotent, so re-running is safe.
+4. `uvicorn api:app --reload`
+
+> **Why append-only?** BigQuery's free tier forbids DML — `UPDATE`/`DELETE`
+> return `403 Billing has not been enabled`. So nothing is edited in place: a
+> change appends a new version of the row, a delete appends a tombstone, and
+> `<table>_current` resolves the latest live version. Load jobs and views are
+> free. See ticket #52.
 
 ### Frontend Setup
 1. `cd frontend`

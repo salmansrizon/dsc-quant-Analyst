@@ -14,8 +14,17 @@ from . import db
 _USER_UPDATE_FIELDS = frozenset({"full_name", "phone", "role"})
 
 
-def _insert_user_row(row: dict):
-    db.append_version("users", [row])
+def _to_user_response(r: dict) -> UserResponse:
+    # `or ""` rather than .get(col, ""): the column exists but can be NULL, and
+    # a default only applies to a missing key.
+    return UserResponse(
+        id=r["id"],
+        email=r["email"],
+        phone=r.get("phone") or "",
+        full_name=r.get("full_name") or "",
+        role=r.get("role") or "user",
+        created_at=str(r["created_at"]) if r.get("created_at") else None,
+    )
 
 
 def create_user(payload) -> UserResponse:
@@ -30,7 +39,7 @@ def create_user(payload) -> UserResponse:
     now = datetime.now(timezone.utc)
     hashed = hash_password(payload.password)
 
-    _insert_user_row({
+    db.append_version("users", [{
         "id": user_id,
         "email": email,
         "phone": payload.phone,
@@ -39,7 +48,7 @@ def create_user(payload) -> UserResponse:
         "role": "user",
         "created_at": now,
         "updated_at": now,
-    })
+    }])
 
     return UserResponse(
         id=user_id,
@@ -62,15 +71,7 @@ def get_user_by_email(email: str) -> Optional[UserResponse]:
     rows = db.query_rows(sql, params)
     if not rows:
         return None
-    r = rows[0]
-    return UserResponse(
-        id=r["id"],
-        email=r["email"],
-        phone=r.get("phone") or "",
-        full_name=r.get("full_name") or "",
-        role=r.get("role") or "user",
-        created_at=str(r["created_at"]) if r.get("created_at") else None,
-    )
+    return _to_user_response(rows[0])
 
 
 def get_user_by_id(user_id: str) -> Optional[UserResponse]:
@@ -84,15 +85,7 @@ def get_user_by_id(user_id: str) -> Optional[UserResponse]:
     rows = db.query_rows(sql, params)
     if not rows:
         return None
-    r = rows[0]
-    return UserResponse(
-        id=r["id"],
-        email=r["email"],
-        phone=r.get("phone") or "",
-        full_name=r.get("full_name") or "",
-        role=r.get("role") or "user",
-        created_at=str(r["created_at"]) if r.get("created_at") else None,
-    )
+    return _to_user_response(rows[0])
 
 
 def get_user_credentials(email: str) -> Optional[dict]:
@@ -126,11 +119,7 @@ def list_users():
 
 def _find_user_row(user_id: str) -> dict | None:
     """The user's full current row (including password_hash), or None."""
-    rows = db.query_rows(
-        f"SELECT * FROM {db.current_view('users')} WHERE id = @uid LIMIT 1",
-        [bigquery.ScalarQueryParameter("uid", "STRING", user_id)],
-    )
-    return rows[0] if rows else None
+    return db.find_current("users", id=user_id)
 
 
 def update_user(user_id: str, updates: dict) -> bool:
@@ -167,9 +156,5 @@ def delete_user(user_id: str) -> bool:
     if not row:
         return False
 
-    db.append_version("users", [{
-        **row,
-        "is_deleted": True,
-        "updated_at": datetime.now(timezone.utc),
-    }])
+    db.tombstone("users", row)
     return True

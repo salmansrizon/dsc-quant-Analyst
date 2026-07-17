@@ -192,14 +192,49 @@ def append_version(table: str, rows: list[dict]) -> None:
     """
     stamped = []
     for row in rows:
+        if "id" not in row:
+            raise ValueError(f"append_version({table}): row has no id to version by")
         row = dict(row)
         row.setdefault("updated_at", datetime.now(timezone.utc))
         row.setdefault("is_deleted", False)
-        missing = {"id", "updated_at", "is_deleted"} - set(row)
-        if missing:
-            raise ValueError(f"append_version({table}) row is missing {sorted(missing)}")
         stamped.append(row)
     insert_rows(table, stamped)
+
+
+def find_current(table: str, **match) -> dict | None:
+    """One current row matching every column=value, or None.
+
+    Reads `<table>_current`, so superseded versions and tombstones are already
+    resolved away. Values are always bound as parameters — callers pass user
+    input here (`find_current("portfolios", id=pid, user_id=uid)`), and scoping
+    a lookup by owner is what stops one user reaching another's row.
+    """
+    if not match:
+        raise ValueError("find_current needs at least one column to match on")
+    where = " AND ".join(f"{col} = @{col}" for col in match)
+    params = [
+        bigquery.ScalarQueryParameter(col, "STRING", val)
+        for col, val in match.items()
+    ]
+    rows = query_rows(
+        f"SELECT * FROM {current_view(table)} WHERE {where} LIMIT 1", params
+    )
+    return rows[0] if rows else None
+
+
+def tombstone(table: str, row: dict) -> None:
+    """Mark a row deleted by appending a tombstone version of it.
+
+    The whole row is carried over, not just its id: the view resolves the
+    latest version per id, so a partial tombstone would be the row's new
+    current state if it were ever un-deleted, and columns added later would
+    read NULL.
+    """
+    append_version(table, [{
+        **row,
+        "is_deleted": True,
+        "updated_at": datetime.now(timezone.utc),
+    }])
 
 
 def ensure_current_view(table: str, key: str = "id") -> None:
@@ -207,15 +242,22 @@ def ensure_current_view(table: str, key: str = "id") -> None:
 
     DDL is permitted on the free tier; DML is not (#52).
 
-    COALESCE on is_deleted is load-bearing: `users` predates the column, so its
-    existing rows read NULL, and `NOT NULL` is NULL — those rows would silently
-    vanish from the view.
+    Two details are load-bearing:
+
+    - COALESCE on is_deleted: `users` predates the column, so its existing rows
+      read NULL, and `NOT NULL` is NULL — those rows would silently vanish.
+    - The is_deleted tiebreaker: updated_at comes from Python's clock, so two
+      appends can tie (same microsecond, or skew between processes). Without a
+      tiebreaker ROW_NUMBER picks arbitrarily, and a tombstone losing to the
+      row it deletes would resurrect deleted data. Ordering tombstones first
+      makes a tie fail safe: a delete never loses.
     """
     sql = f"""
     CREATE OR REPLACE VIEW {current_view(table)} AS
     SELECT * EXCEPT(_rn) FROM (
       SELECT *, ROW_NUMBER() OVER (
-        PARTITION BY {key} ORDER BY updated_at DESC
+        PARTITION BY {key}
+        ORDER BY updated_at DESC, COALESCE(is_deleted, FALSE) DESC
       ) AS _rn
       FROM {table_id(table)}
     )
@@ -224,28 +266,10 @@ def ensure_current_view(table: str, key: str = "id") -> None:
     client().query(sql).result()
 
 
-def compact(table: str, key: str = "id") -> int:
-    """Collapse an append-only table to one row per key, dropping tombstones.
-
-    A query job writing to a destination table with WRITE_TRUNCATE — not DML,
-    so the free tier allows it (#52). Retains only live current versions, so
-    superseded versions and the audit history are discarded; run it when the
-    version log has grown, not on the write path.
-
-    Returns the row count kept.
-    """
-    sql = f"""
-    SELECT * EXCEPT(_rn) FROM (
-      SELECT *, ROW_NUMBER() OVER (
-        PARTITION BY {key} ORDER BY updated_at DESC
-      ) AS _rn
-      FROM {table_id(table)}
-    )
-    WHERE _rn = 1 AND NOT COALESCE(is_deleted, FALSE)
-    """
-    job = client().query(sql, job_config=bigquery.QueryJobConfig(
-        destination=qualified_name(table),
-        write_disposition=bigquery.WriteDisposition.WRITE_TRUNCATE,
-    ))
-    job.result()
-    return job.num_dml_affected_rows or len(query_rows(f"SELECT {key} FROM {table_id(table)}"))
+# No compact() here on purpose. The obvious implementation — SELECT the latest
+# versions into the same table with WRITE_TRUNCATE — is precisely the pattern
+# #40 was filed to kill: any row appended between the SELECT and the load job is
+# destroyed, silently. On the free tier there is no atomic swap to make that
+# safe, so compaction needs a quiesced-writes window and its own design. See
+# the follow-up ticket. Until then the version log simply grows, which is what
+# an append-only log is supposed to do.

@@ -4,17 +4,26 @@ from fastapi import FastAPI, Depends, HTTPException, status, Query, Response, He
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import OAuth2PasswordBearer
 
-from .auth import create_access_token, verify_password, get_current_user, require_admin
+from .auth import (
+    create_access_token, create_refresh_token, create_reset_token,
+    decode_refresh_token, decode_reset_token, verify_reset_fingerprint,
+    hash_password, verify_password, get_current_user, require_admin,
+)
 from .models import (
     UserCreate, UserLogin, UserResponse, TokenResponse,
+    RefreshRequest, ForgotPasswordRequest, ResetPasswordRequest, MessageResponse,
     WatchlistAdd, PortfolioAdd, PortfolioUpdate, AlertCreate,
 )
 from .user_service import (
     create_user, get_user_by_email, get_user_credentials,
-    get_user_by_id, list_users, update_user, delete_user,
+    get_user_by_id, get_user_session, bump_token_version, reset_password,
+    list_users, update_user, delete_user,
 )
+from . import account_recovery
 from . import market_service, watchlist_service, portfolio_service, alerts_service
 from . import fundamentals_service
+
+FRONTEND_URL = os.environ.get("FRONTEND_URL", "http://localhost:5173")
 
 app = FastAPI(title="DSC Quant Analyst API", version="1.0.0")
 
@@ -36,8 +45,9 @@ def signup(payload: UserCreate):
         user = create_user(payload)
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
-    token = create_access_token(user)
-    return TokenResponse(access_token=token, user=user)
+    access = create_access_token(user)
+    refresh = create_refresh_token(user.id, token_version=0)
+    return TokenResponse(access_token=access, refresh_token=refresh, user=user)
 
 
 @app.post("/api/auth/login", response_model=TokenResponse)
@@ -48,8 +58,9 @@ def login(payload: UserLogin):
     cred = get_user_credentials(payload.email)
     if not cred or not verify_password(payload.password, cred.get("password_hash", "")):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
-    token = create_access_token(user)
-    return TokenResponse(access_token=token, user=user)
+    access = create_access_token(user)
+    refresh = create_refresh_token(user.id, token_version=cred["token_version"])
+    return TokenResponse(access_token=access, refresh_token=refresh, user=user)
 
 
 @app.get("/api/auth/me", response_model=UserResponse)
@@ -59,6 +70,78 @@ def read_me(current_user: UserResponse = Depends(get_current_user)):
     # role or edited profile is reflected here without waiting for token expiry.
     fresh = get_user_by_id(current_user.id)
     return fresh or current_user
+
+
+@app.post("/api/auth/refresh", response_model=TokenResponse)
+def refresh_token_endpoint(payload: RefreshRequest):
+    """Sliding-window refresh (#68): re-issues BOTH tokens on every call.
+
+    The refresh token's token_version must match the user's current value —
+    a mismatch means password-reset or logout-all happened since this refresh
+    token was issued, and it is no longer honored.
+    """
+    claims = decode_refresh_token(payload.refresh_token)
+    user_id = claims.get("sub")
+    session = get_user_session(user_id) if user_id else None
+    if not session:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid refresh token")
+    if claims.get("token_version") != session["token_version"]:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Refresh token has been revoked")
+
+    user = get_user_by_id(user_id)
+    if not user:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid refresh token")
+
+    access = create_access_token(user)
+    new_refresh = create_refresh_token(user_id, session["token_version"])
+    return TokenResponse(access_token=access, refresh_token=new_refresh, user=user)
+
+
+@app.post("/api/auth/logout", response_model=MessageResponse)
+def logout(current_user: UserResponse = Depends(get_current_user)):
+    """Client-discard contract: no token is revocable server-side short of a
+    token_version bump, and a single-session logout does not warrant one —
+    the client simply drops both tokens. This is a documented no-op.
+    """
+    return MessageResponse(message="Logged out. Discard your tokens.")
+
+
+@app.post("/api/auth/logout-all", response_model=MessageResponse)
+def logout_all(current_user: UserResponse = Depends(get_current_user)):
+    """Bump token_version, invalidating every outstanding refresh token."""
+    bump_token_version(current_user.id)
+    return MessageResponse(message="Logged out of all sessions.")
+
+
+@app.post("/api/auth/forgot-password", response_model=MessageResponse)
+def forgot_password(payload: ForgotPasswordRequest):
+    """Always 200 — whether the account exists is never revealed (#68)."""
+    user = get_user_by_email(payload.email)
+    if user:
+        session = get_user_session(user.id)
+        reset_token = create_reset_token(user.id, session["password_hash"])
+        reset_link = f"{FRONTEND_URL}/reset-password?token={reset_token}"
+        account_recovery.send_reset_email(user.id, user.email, reset_link)
+    return MessageResponse(message="If that email exists, a password reset link has been sent.")
+
+
+@app.post("/api/auth/reset-password", response_model=MessageResponse)
+def reset_password_endpoint(payload: ResetPasswordRequest):
+    """Verify the reset token's signature, expiry, purpose, and single-use
+    fingerprint (#68), then set the new password and bump token_version —
+    which also signs the user out of every existing session.
+    """
+    claims = decode_reset_token(payload.token)
+    user_id = claims.get("sub")
+    session = get_user_session(user_id) if user_id else None
+    if not session:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid reset token")
+
+    verify_reset_fingerprint(claims, session["password_hash"])
+
+    new_hash = hash_password(payload.new_password)
+    reset_password(user_id, new_hash)
+    return MessageResponse(message="Password reset. Please log in again.")
 
 
 # ── Market Data ──────────────────────────────────────────────────────────────

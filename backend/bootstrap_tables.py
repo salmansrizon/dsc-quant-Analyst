@@ -31,6 +31,11 @@ SCHEMAS = {
     "users": [
         ("id", _STR), ("email", _STR), ("phone", _STR), ("password_hash", _STR),
         ("full_name", _STR), ("role", _STR),
+        # Bumped by password-reset and logout-all (#68); a refresh token's
+        # embedded token_version must match this or it is rejected. NULL on
+        # every row appended before this column existed — callers treat that
+        # as 0, the documented default, never as "no version".
+        ("token_version", "INT64"),
         ("created_at", _TS), ("updated_at", _TS), ("is_deleted", "BOOL"),
     ],
     "watchlists": [

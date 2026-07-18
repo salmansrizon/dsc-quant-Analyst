@@ -65,6 +65,79 @@ def test_require_admin_rejects_stale_admin_token(monkeypatch):
     assert getattr(exc.value, "status_code", None) == 403
 
 
+# ── access/refresh/reset token types (#68) ──────────────────────────────────
+
+def test_access_token_carries_type_access():
+    payload = auth.decode_token(auth.create_access_token(_user()))
+    assert payload["type"] == "access"
+
+
+def test_refresh_token_carries_type_and_version():
+    token = auth.create_refresh_token("user-1", token_version=3)
+    payload = auth.decode_token(token)
+    assert payload["sub"] == "user-1"
+    assert payload["type"] == "refresh"
+    assert payload["token_version"] == 3
+    # No PII/role in a refresh token — it only ever mints a new pair.
+    assert "role" not in payload and "email" not in payload
+
+
+def test_decode_access_token_rejects_a_refresh_token():
+    token = auth.create_refresh_token("user-1", token_version=0)
+    with pytest.raises(Exception) as exc:
+        auth.decode_access_token(token)
+    assert getattr(exc.value, "status_code", None) == 401
+
+
+def test_decode_access_token_accepts_a_legacy_token_with_no_type():
+    legacy = jwt.encode(
+        {"sub": "old-1", "role": "user",
+         "exp": datetime.now(timezone.utc) + timedelta(hours=1)},
+        auth.SECRET_KEY, algorithm=auth.ALGORITHM,
+    )
+    payload = auth.decode_access_token(legacy)
+    assert payload["sub"] == "old-1"
+
+
+def test_decode_refresh_token_rejects_an_access_token():
+    token = auth.create_access_token(_user())
+    with pytest.raises(Exception) as exc:
+        auth.decode_refresh_token(token)
+    assert getattr(exc.value, "status_code", None) == 401
+
+
+def test_get_current_user_rejects_a_refresh_token_used_as_access():
+    token = auth.create_refresh_token("user-1", token_version=0)
+    with pytest.raises(Exception) as exc:
+        auth.get_current_user(_creds(token))
+    assert getattr(exc.value, "status_code", None) == 401
+
+
+def test_reset_token_round_trips_purpose_and_fingerprint():
+    token = auth.create_reset_token("user-1", current_password_hash="hash-v1")
+    payload = auth.decode_reset_token(token)
+    assert payload["sub"] == "user-1"
+    assert payload["purpose"] == "reset"
+    auth.verify_reset_fingerprint(payload, "hash-v1")  # must not raise
+
+
+def test_reset_token_fingerprint_fails_after_the_password_changes():
+    """Single-use: once reset succeeds, password_hash changes, and the same
+    token's embedded fingerprint no longer matches (#68)."""
+    token = auth.create_reset_token("user-1", current_password_hash="hash-v1")
+    payload = auth.decode_reset_token(token)
+    with pytest.raises(Exception) as exc:
+        auth.verify_reset_fingerprint(payload, "hash-v2")
+    assert getattr(exc.value, "status_code", None) == 401
+
+
+def test_decode_reset_token_rejects_a_non_reset_token():
+    token = auth.create_access_token(_user())
+    with pytest.raises(Exception) as exc:
+        auth.decode_reset_token(token)
+    assert getattr(exc.value, "status_code", None) == 401
+
+
 def test_legacy_token_without_email_falls_back_to_db(monkeypatch):
     import backend.user_service as us
     called = {"n": 0}

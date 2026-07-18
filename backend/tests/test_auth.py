@@ -27,6 +27,7 @@ def test_signup_returns_token_and_user(client, test_email):
     # shared dataset.
     try:
         assert "access_token" in data
+        assert "refresh_token" in data, "the session model (#68) issues both on signup"
         assert data["token_type"] == "bearer"
         assert data["user"]["email"] == test_email
         assert data["user"]["full_name"] == "Test User"
@@ -45,6 +46,7 @@ def test_login_valid_credentials_returns_token(client, created_user):
     assert resp.status_code == 200
     data = resp.json()
     assert "access_token" in data
+    assert "refresh_token" in data
     assert data["token_type"] == "bearer"
     assert data["user"]["email"] == created_user["email"]
 

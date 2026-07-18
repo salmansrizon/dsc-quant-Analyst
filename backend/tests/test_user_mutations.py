@@ -152,6 +152,55 @@ def test_deleting_the_last_user_does_not_wipe_the_table(monkeypatch):
     assert len(store.versions) == 2, "the tombstone is appended, nothing is erased"
 
 
+# ── Session recovery: token_version + reset (#68) ──────────────────────────
+
+def test_get_user_session_defaults_missing_token_version_to_zero(serving_alice):
+    # _ROW predates #68's column — the row has no token_version key at all.
+    session = user_service.get_user_session("u1")
+    assert session == {
+        "id": "u1", "email": "alice@example.com",
+        "password_hash": "hash", "token_version": 0,
+    }
+
+
+def test_get_user_session_on_a_missing_user_is_none(serving_nobody):
+    assert user_service.get_user_session("ghost") is None
+
+
+def test_bump_token_version_increments_from_missing_column(serving_alice, appended):
+    assert user_service.bump_token_version("u1") is True
+    row = appended.appends[0]["rows"][0]
+    assert row["token_version"] == 1
+    assert row["password_hash"] == "hash", "logout-all must not touch the password"
+
+
+def test_bump_token_version_on_a_missing_user_is_false(serving_nobody, appended):
+    assert user_service.bump_token_version("ghost") is False
+    assert appended.appends == []
+
+
+def test_reset_password_sets_hash_and_bumps_version_in_one_append(serving_alice, appended):
+    assert user_service.reset_password("u1", "new-hash") is True
+    assert len(appended.appends) == 1, "one version, not a separate write per field"
+    row = appended.appends[0]["rows"][0]
+    assert row["password_hash"] == "new-hash"
+    assert row["token_version"] == 1
+    assert row["email"] == "alice@example.com"      # untouched columns survive
+
+
+def test_reset_password_compounds_on_an_existing_version(monkeypatch, appended):
+    monkeypatch.setattr(db, "_client", FakeClient(
+        result_rows=fake_rows(dict(_ROW, token_version=2)),
+    ))
+    user_service.reset_password("u1", "new-hash")
+    assert appended.appends[0]["rows"][0]["token_version"] == 3
+
+
+def test_reset_password_on_a_missing_user_is_false(serving_nobody, appended):
+    assert user_service.reset_password("ghost", "new-hash") is False
+    assert appended.appends == []
+
+
 def test_a_concurrent_signup_survives_an_update(monkeypatch):
     # The old read-all + reload dropped any row inserted between the SELECT and
     # the load job. An append never rewrites the other rows at all.

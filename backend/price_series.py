@@ -84,6 +84,26 @@ def _cumulative_factor(date, factors: list[tuple]) -> float:
     return result
 
 
+def dedupe_by_date(rows: list[dict]) -> list[dict]:
+    """Drop rows that repeat a Date, keeping the first (#64).
+
+    `lankabd_price_archive` holds every (Symbol, Date) twice; a query is
+    per-symbol, so a repeated Date is a duplicate bar. Left in, every indicator
+    double-counts every day. Rows with no Date are kept — they cannot be proven
+    duplicates.
+    """
+    seen = set()
+    out = []
+    for row in rows:
+        date = row.get("Date")
+        if date is not None and date in seen:
+            continue
+        if date is not None:
+            seen.add(date)
+        out.append(row)
+    return out
+
+
 def from_price_history(rows: list[dict], factors: Iterable[tuple] | None = None) -> tuple[list, list, list, list]:
     """(closes, highs, lows, volumes), oldest-first, aligned, gap-free, adjusted.
 
@@ -104,8 +124,14 @@ def from_price_history(rows: list[dict], factors: Iterable[tuple] | None = None)
     factor before indicators.py ever sees them, so it never learns adjustment
     exists. Volume is never scaled. Rows with no `Date` are left unadjusted —
     there is nothing to compare a record_date against.
+
+    Duplicate-Date rows are collapsed and non-positive closes dropped (#64): the
+    archive stores every bar twice and carries stray 0.0 closes, both of which
+    corrupt every indicator (a double-counted bar, and a real -100% crash plus a
+    near-zero division). A non-positive close is dropped exactly as a missing one
+    is — the same accepted gap-collapse.
     """
-    rows = list(reversed(rows))
+    rows = dedupe_by_date(list(reversed(rows)))
 
     closes = column(rows, *CLOSE_KEYS)
     highs = column(rows, *HIGH_KEYS)
@@ -115,7 +141,7 @@ def from_price_history(rows: list[dict], factors: Iterable[tuple] | None = None)
     usable = [
         (c, h, l, v, row.get("Date"))
         for row, c, h, l, v in zip(rows, closes, highs, lows, volumes)
-        if c is not None
+        if c is not None and c > 0
     ]
     if not usable:
         return [], [], [], []

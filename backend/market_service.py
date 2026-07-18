@@ -82,8 +82,11 @@ def top_movers(limit: int = 10):
 
 
 def price_history(symbol: str, days: int = 365):
+    # DISTINCT because lankabd_price_archive stores every (Symbol, Date) twice
+    # (#64); without it LIMIT counts doubled rows and returns ~half the days.
+    # price_series dedupes again defensively for partial (non-identical) dupes.
     sql = f"""
-        SELECT Date, Symbol, LTP, High, Low, OPENP_ AS Open, Close, YCP,
+        SELECT DISTINCT Date, Symbol, LTP, High, Low, OPENP_ AS Open, Close, YCP,
                ROUND(Change__, 2) AS ChangePct, Volume_Qty_ AS Volume,
                SMA_20, RSI
         FROM {db.table_id('lankabd_price_archive')}

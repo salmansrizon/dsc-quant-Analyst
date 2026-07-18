@@ -56,6 +56,40 @@ def test_column_is_none_when_no_key_parses():
 
 # ── from_price_history ───────────────────────────────────────────────────────
 
+def test_duplicate_dates_are_collapsed():
+    # The archive stores every (Symbol, Date) twice; left in, every bar is
+    # double-counted. Input is newest-first (from_price_history reverses it).
+    rows = [_bar(close=11.0, Date="2026/01/03"),
+            _bar(close=10.0, Date="2026/01/02"), _bar(close=10.0, Date="2026/01/02")]
+    closes, _, _, _ = ps.from_price_history(rows)
+    assert closes == [10.0, 11.0]
+
+
+def test_dedupe_keeps_the_first_row_per_date():
+    rows = [_bar(close=1.0, Date="d"), _bar(close=2.0, Date="d")]
+    assert ps.dedupe_by_date(rows) == [{"Close": 1.0, "High": None, "Low": None,
+                                        "Volume": None, "Date": "d"}]
+
+
+def test_rows_without_a_date_are_never_treated_as_duplicates():
+    rows = [_bar(close=2.0), _bar(close=1.0)]  # no Date — cannot prove duplicate
+    closes, _, _, _ = ps.from_price_history(rows)
+    assert closes == [1.0, 2.0]
+
+
+def test_a_zero_close_is_dropped():
+    # EASTRNLUB 2026/06/30 close 0.0 — a real -100% bar and a near-zero divisor.
+    rows = [_bar(close=12.0, Date="d3"), _bar(close=0.0, Date="d2"),
+            _bar(close=10.0, Date="d1")]
+    closes, _, _, _ = ps.from_price_history(rows)
+    assert closes == [10.0, 12.0]
+
+
+def test_a_negative_close_is_dropped():
+    closes, _, _, _ = ps.from_price_history([_bar(close=-5.0, Date="d")])
+    assert closes == []
+
+
 def test_rows_are_reversed_into_oldest_first():
     """price_history returns newest-first. Every indicator assumes the
     opposite, and getting it backwards silently inverts every trend.

@@ -22,113 +22,12 @@ except ImportError:  # standalone: cwd=backend
 logging.basicConfig(level=logging.INFO, format="%(message)s")
 logger = logging.getLogger(__name__)
 
-_TS = "TIMESTAMP"
-_STR = "STRING"
-
-# Explicit schemas: these tables were previously created by load-job autodetect,
-# which is how `users.phone` ended up INTEGER and broke signup (#51).
-SCHEMAS = {
-    "users": [
-        ("id", _STR), ("email", _STR), ("phone", _STR), ("password_hash", _STR),
-        ("full_name", _STR), ("role", _STR),
-        # Bumped by password-reset and logout-all (#68); a refresh token's
-        # embedded token_version must match this or it is rejected. NULL on
-        # every row appended before this column existed — callers treat that
-        # as 0, the documented default, never as "no version".
-        ("token_version", "INT64"),
-        ("created_at", _TS), ("updated_at", _TS), ("is_deleted", "BOOL"),
-    ],
-    "watchlists": [
-        ("id", _STR), ("user_id", _STR), ("symbol", _STR),
-        ("added_at", _TS), ("updated_at", _TS), ("is_deleted", "BOOL"),
-    ],
-    "portfolios": [
-        ("id", _STR), ("user_id", _STR), ("symbol", _STR),
-        ("buy_price", "FLOAT64"), ("quantity", "INT64"), ("buy_date", _STR),
-        ("price_target", "FLOAT64"), ("stop_loss", "FLOAT64"), ("notes", _STR),
-        ("created_at", _TS), ("updated_at", _TS), ("is_deleted", "BOOL"),
-    ],
-    "price_alerts": [
-        ("id", _STR), ("user_id", _STR), ("symbol", _STR),
-        ("target_price", "FLOAT64"), ("direction", _STR),
-        ("is_triggered", "BOOL"), ("triggered_at", _TS),
-        ("created_at", _TS), ("updated_at", _TS), ("is_deleted", "BOOL"),
-    ],
-    # Type-discriminated alerts (#66, from #34). One shape for all 10 alert
-    # types: `type` names the detector, `condition_json` holds its per-type
-    # condition ({"op":"above","value":250}), so adding a type is data, never an
-    # ALTER. `last_met` is the edge-trigger state (fire on the false->true flip,
-    # not on being met); `is_active` is the one-shot flag (false after firing).
-    # Supersedes `price_alerts` — see migrations/002.
-    "alerts": [
-        ("id", _STR), ("user_id", _STR), ("type", _STR), ("symbol", _STR),
-        ("condition_json", _STR), ("last_met", "BOOL"), ("is_active", "BOOL"),
-        ("created_at", _TS), ("updated_at", _TS), ("is_deleted", "BOOL"),
-    ],
-    # Delivery log (#66, from #34). Append-only; `status` is also the
-    # log-before-send lock — a `sending`/`sent` row for a crossing blocks a
-    # duplicate send. Transactional email (#39 password reset) logs here too,
-    # with type=password_reset and alert_id NULL.
-    "notifications": [
-        ("id", _STR), ("user_id", _STR), ("alert_id", _STR),
-        ("channel", _STR), ("type", _STR), ("subject", _STR),
-        ("status", _STR),        # sending | sent | failed | bounced
-        ("attempts", "INT64"), ("error", _STR),
-        ("created_at", _TS), ("updated_at", _TS), ("is_deleted", "BOOL"),
-    ],
-    # Reported fundamentals (#57). Grain: one row per symbol per reporting
-    # period. Fed by both DividendArchive (annual, 12y of history) and
-    # GetLatestEarnings (current period).
-    "fundamentals_earnings": [
-        ("id", _STR),           # symbol|year|period
-        ("symbol", _STR), ("sector", _STR),
-        ("year", "INT64"),
-        ("period", _STR),       # ANNUAL | H1 | Q1 | Q2 | Q3 | 9M | UNKNOWN
-        ("period_raw", _STR),   # what the site said, to audit the mapping
-        ("eps", "FLOAT64"), ("nav", "FLOAT64"),
-        ("publish_date", "DATE"),
-        ("source", _STR),       # dividend_archive | latest_earnings
-        ("updated_at", _TS), ("is_deleted", "BOOL"),
-    ],
-    # Financial ratios from the company API (#58). Grain: one row per symbol per
-    # year per ratio. Long, not wide — see scrapers/company_api.py, which also
-    # explains why `code` cannot be used to query a metric across companies.
-    "fundamentals_ratios": [
-        ("id", _STR),           # symbol|year|code
-        ("symbol", _STR), ("year", "INT64"),
-        ("code", _STR),         # RTAMAQ0210 — SECTOR-SCOPED, not a metric id
-        ("name", _STR), ("category", _STR),
-        ("result", "FLOAT64"),
-        ("equation", _STR),        # "158057490000.0000 / 191322941000.0000"
-        ("base_equation", _STR),   # "ISTEX90000 / BS96033" — joins to fs_code
-        ("updated_at", _TS), ("is_deleted", "BOOL"),
-    ],
-    # Statement line items (#58). Grain: one row per symbol per year per line.
-    "fundamentals_statements": [
-        ("id", _STR),           # symbol|year|fs_code
-        ("symbol", _STR), ("year", "INT64"),
-        ("fs_type", _STR),      # Balance Sheet | Income Statement | Cash Flow Statement
-        ("fs_code", _STR),      # BS96002 — what a ratio's base_equation references
-        ("fs_key", _STR),       # "Property Plant & Equipment"
-        ("fs_value", "FLOAT64"),
-        ("fs_order", "INT64"),
-        ("updated_at", _TS), ("is_deleted", "BOOL"),
-    ],
-    # Grain: one dividend DECLARATION. A company declares several a year
-    # (MARICO 2026 has five), so symbol|year would collapse them.
-    "fundamentals_dividends": [
-        ("id", _STR),           # symbol|year|type|publish_date
-        ("symbol", _STR), ("sector", _STR),
-        ("year", "INT64"),
-        ("dividend_type", _STR),      # ANNUAL | SEMI_ANNUAL | INTERIM | FINAL | UNKNOWN
-        ("dividend_type_raw", _STR),  # 754 rows are blank; some say "Annuall"
-        ("cash_dividend_pct", "FLOAT64"), ("stock_dividend_pct", "FLOAT64"),
-        ("publish_date", "DATE"), ("record_date", "DATE"),
-        ("agm_date", "DATE"), ("year_end_date", "DATE"),
-        ("source", _STR),
-        ("updated_at", _TS), ("is_deleted", "BOOL"),
-    ],
-}
+# The append-only tables come from the shared registry (#62) — key + columns
+# in one place, so this file and db.VERSIONED_TABLES can no longer drift.
+try:
+    from backend.schema import TABLES
+except ImportError:  # standalone: cwd=backend
+    from schema import TABLES
 
 
 def _table_exists(name: str) -> bool:
@@ -158,8 +57,8 @@ def _add_missing_columns(name: str, columns) -> list[str]:
 
 
 def bootstrap() -> None:
-    for table, key in db.VERSIONED_TABLES.items():
-        columns = SCHEMAS[table]  # KeyError here means the two lists drifted
+    for table, spec in TABLES.items():
+        columns, key = spec.columns, spec.key
         if not _table_exists(table):
             _create_table(table, columns)
             logger.info("created table %s", table)

@@ -109,20 +109,15 @@ DATASET = os.environ.get("BIGQUERY_DATASET_ID") or "lankabd_dataset"
 # Suffix of the latest-version view over an append-only table (#52).
 CURRENT_SUFFIX = "_current"
 
-# The append-only tables: every mutation appends a version, and reads go through
-# `<table>_current`. Keyed by the column the latest version is resolved per.
-VERSIONED_TABLES = {
-    "users": "id",
-    "watchlists": "id",
-    "portfolios": "id",
-    "price_alerts": "id",
-    "alerts": "id",
-    "notifications": "id",
-    "fundamentals_earnings": "id",
-    "fundamentals_dividends": "id",
-    "fundamentals_ratios": "id",
-    "fundamentals_statements": "id",
-}
+# The append-only table registry (#62): one home for each versioned table's key
+# and columns. VERSIONED_TABLES (name -> key) is derived from it so the old
+# callers keep working; append_version validates against it.
+try:
+    from backend.schema import TABLES
+except ImportError:  # standalone: cwd=backend
+    from schema import TABLES
+
+VERSIONED_TABLES = {name: spec.key for name, spec in TABLES.items()}
 
 _client: bigquery.Client | None = None
 
@@ -223,7 +218,16 @@ def append_version(table: str, rows: list[dict]) -> None:
     concurrent writer's rows, which is the failure #40 was filed for.
 
     Every row must carry `id`, `updated_at`, and `is_deleted`.
+
+    The `table` is validated against the registry (#62): a typo used to append
+    to an autodetect-created table with no `_current` view, where the rows just
+    never read back — a silent data loss. Now it fails loudly.
     """
+    if table not in TABLES:
+        raise ValueError(
+            f"append_version: {table!r} is not a registered versioned table "
+            f"(see backend/schema.py). Known: {', '.join(sorted(TABLES))}."
+        )
     stamped = []
     for row in rows:
         if "id" not in row:

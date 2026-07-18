@@ -144,10 +144,26 @@ def test_find_current_binds_values_as_parameters(client):
     assert client.queries[0]["params"] == {"id": "p1", "user_id": "u1"}
 
 
-def test_versioned_tables_all_have_a_view_key():
-    # bootstrap_tables iterates this; a table listed without a schema would fail there.
-    from backend.bootstrap_tables import SCHEMAS
-    assert set(db.VERSIONED_TABLES) == set(SCHEMAS)
-    for table, columns in SCHEMAS.items():
-        names = {c for c, _ in columns}
+def test_versioned_tables_derive_from_the_one_registry():
+    # #62: VERSIONED_TABLES is derived from schema.TABLES, so the two can no
+    # longer drift (they used to be independent dicts that had to agree).
+    from backend.schema import TABLES
+    assert db.VERSIONED_TABLES == {name: spec.key for name, spec in TABLES.items()}
+
+
+def test_every_registered_table_can_be_versioned():
+    from backend.schema import TABLES
+    for table, spec in TABLES.items():
+        names = {c for c, _ in spec.columns}
         assert {"id", "updated_at", "is_deleted"} <= names, f"{table} cannot be versioned"
+
+
+def test_append_version_rejects_an_unregistered_table(monkeypatch):
+    # The deepening (#62): a typo used to append to an autodetect table with no
+    # _current view, silently losing the rows. Now it fails loudly, before any write.
+    from backend.tests.fakes import AppendLog
+    log = AppendLog()
+    monkeypatch.setattr(db, "insert_rows", log)
+    with pytest.raises(ValueError, match="not a registered versioned table"):
+        db.append_version("portfoliosss", [{"id": "x"}])
+    assert log.appends == [], "nothing may be written for an unknown table"

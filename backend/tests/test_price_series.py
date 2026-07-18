@@ -138,3 +138,104 @@ def test_the_caller_is_not_mutated():
     before = [dict(r) for r in rows]
     ps.from_price_history(rows)
     assert rows == before, "reversed() must not reorder the caller's list"
+
+
+# ── stock_dividend_factor / adjustment_factors (#63) ────────────────────────
+
+def test_stock_dividend_factor_of_50_percent():
+    assert ps.stock_dividend_factor(50) == pytest.approx(1 / 1.5)
+
+
+def test_stock_dividend_factor_of_100_percent_halves():
+    assert ps.stock_dividend_factor(100) == pytest.approx(0.5)
+
+
+def test_adjustment_factors_skips_cash_only_declarations():
+    declarations = [
+        {"record_date": "2025-12-22", "stock_dividend_pct": None, "cash_dividend_pct": 10},
+    ]
+    assert ps.adjustment_factors(declarations) == []
+
+
+def test_adjustment_factors_skips_rows_with_no_record_date():
+    declarations = [{"record_date": None, "stock_dividend_pct": 50}]
+    assert ps.adjustment_factors(declarations) == []
+
+
+def test_adjustment_factors_keeps_bonus_declarations():
+    declarations = [{"record_date": "2025-12-22", "stock_dividend_pct": 50}]
+    assert ps.adjustment_factors(declarations) == [("2025-12-22", pytest.approx(1 / 1.5))]
+
+
+# ── from_price_history adjustment (#63) ─────────────────────────────────────
+
+def test_no_factors_leaves_prices_unadjusted():
+    rows = [_bar(close=10.0, Date="2026-01-02"), _bar(close=5.0, Date="2026-01-01")]
+    closes, _, _, _ = ps.from_price_history(rows)
+    assert closes == [5.0, 10.0]
+
+
+def test_bar_on_record_date_is_adjusted_down():
+    """EASTRNLUB, 50% bonus, record_date 2025-12-22 (#33): the last cum day
+    (2501.5) is scaled down to the continuous pre-bonus-equivalent price, and
+    the ex-day bar (already low, real) is left alone.
+    """
+    rows = [
+        _bar(close=1719.9, Date="2025-12-23"),  # ex-day: already reflects the bonus
+        _bar(close=2501.5, Date="2025-12-22"),  # last cum day
+    ]
+    factors = [("2025-12-22", ps.stock_dividend_factor(50))]
+    closes, _, _, _ = ps.from_price_history(rows, factors)
+    assert closes == [pytest.approx(2501.5 / 1.5), 1719.9]
+
+
+def test_bars_before_record_date_are_also_adjusted():
+    rows = [
+        _bar(close=2501.5, Date="2025-12-22"),
+        _bar(close=2400.0, Date="2025-12-01"),  # well before the bonus
+    ]
+    factors = [("2025-12-22", ps.stock_dividend_factor(50))]
+    closes, _, _, _ = ps.from_price_history(rows, factors)
+    assert closes == [pytest.approx(2400.0 / 1.5), pytest.approx(2501.5 / 1.5)]
+
+
+def test_high_low_are_scaled_by_the_same_factor():
+    rows = [_bar(close=2501.5, high=2600.0, low=2400.0, Date="2025-12-22")]
+    factors = [("2025-12-22", ps.stock_dividend_factor(50))]
+    closes, highs, lows, _ = ps.from_price_history(rows, factors)
+    assert closes == [pytest.approx(2501.5 / 1.5)]
+    assert highs == [pytest.approx(2600.0 / 1.5)]
+    assert lows == [pytest.approx(2400.0 / 1.5)]
+
+
+def test_volume_is_never_adjusted():
+    rows = [_bar(close=2501.5, volume=1000.0, Date="2025-12-22")]
+    factors = [("2025-12-22", ps.stock_dividend_factor(50))]
+    _, _, _, volumes = ps.from_price_history(rows, factors)
+    assert volumes == [1000.0]
+
+
+def test_a_bar_with_no_date_is_left_unadjusted():
+    rows = [_bar(close=2501.5)]
+    factors = [("2025-12-22", ps.stock_dividend_factor(50))]
+    closes, _, _, _ = ps.from_price_history(rows, factors)
+    assert closes == [2501.5]
+
+
+def test_two_bonuses_compound():
+    """A bar before both bonuses carries the product of both factors."""
+    rows = [
+        _bar(close=100.0, Date="2026-06-01"),   # after both
+        _bar(close=100.0, Date="2026-01-15"),   # between the two record dates
+        _bar(close=100.0, Date="2025-12-01"),   # before both
+    ]
+    factors = [
+        ("2025-12-22", ps.stock_dividend_factor(50)),
+        ("2026-02-01", ps.stock_dividend_factor(20)),
+    ]
+    closes, _, _, _ = ps.from_price_history(rows, factors)
+    assert closes == [
+        pytest.approx(100.0 / 1.5 / 1.2),   # 2025-12-01: both ahead of it
+        pytest.approx(100.0 / 1.2),          # 2026-01-15: only the second is ahead
+        pytest.approx(100.0),                # 2026-06-01: both already happened
+    ]

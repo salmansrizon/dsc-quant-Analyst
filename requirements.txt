@@ -11,10 +11,13 @@ bcrypt
 # Config
 python-dotenv
 
-# BigQuery. The pandas extra pulls pyarrow, which load_table_from_dataframe
-# needs; db-dtypes is what to_dataframe() needs for DATE/TIME columns.
-google-cloud-bigquery[pandas]
-db-dtypes
+# BigQuery. Plain (no [pandas] extra): that extra pulls pyarrow, which is
+# ~500MB on its own and single-handedly pushed the Vercel function bundle
+# over the platform's 500MB limit (#72) — the same failure mode a82931f fixed
+# once before, pre-#41. db.py writes via load_table_from_json, not
+# load_table_from_dataframe, so pyarrow is not needed; to_dataframe() (which
+# would need db-dtypes) is never called.
+google-cloud-bigquery
 pandas
 numpy
 

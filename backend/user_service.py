@@ -46,6 +46,7 @@ def create_user(payload) -> UserResponse:
         "password_hash": hashed,
         "full_name": payload.full_name,
         "role": "user",
+        "token_version": 0,
         "created_at": now,
         "updated_at": now,
     }])
@@ -90,7 +91,7 @@ def get_user_by_id(user_id: str) -> Optional[UserResponse]:
 
 def get_user_credentials(email: str) -> Optional[dict]:
     sql = f"""
-        SELECT id, email, phone, password_hash, full_name, role
+        SELECT id, email, phone, password_hash, full_name, role, token_version
         FROM {db.current_view('users')}
         WHERE LOWER(email) = @email
         LIMIT 1
@@ -105,6 +106,26 @@ def get_user_credentials(email: str) -> Optional[dict]:
         "email": r["email"],
         "password_hash": r.get("password_hash") or "",
         "role": r.get("role") or "user",
+        # NULL for every row appended before #68 added the column — 0 is the
+        # documented default, not a guess.
+        "token_version": r.get("token_version") or 0,
+    }
+
+
+def get_user_session(user_id: str) -> Optional[dict]:
+    """password_hash + token_version for the session flows (#68): /refresh
+    compares token_version, /reset-password checks the fingerprint against
+    password_hash. Not exposed through UserResponse — those are session-only,
+    not profile data.
+    """
+    row = _find_user_row(user_id)
+    if not row:
+        return None
+    return {
+        "id": row["id"],
+        "email": row["email"],
+        "password_hash": row.get("password_hash") or "",
+        "token_version": row.get("token_version") or 0,
     }
 
 
@@ -141,6 +162,46 @@ def update_user(user_id: str, updates: dict) -> bool:
     db.append_version("users", [{
         **row,
         **changes,
+        "updated_at": datetime.now(timezone.utc),
+    }])
+    return True
+
+
+def bump_token_version(user_id: str) -> bool:
+    """Invalidate every outstanding refresh token for a user (#68).
+
+    Used by logout-all. A refresh token carries the token_version it was
+    issued under; /refresh compares that against the user's current value, so
+    bumping it here fails every token issued before this call without a
+    separate revocation list.
+    """
+    row = _find_user_row(user_id)
+    if not row:
+        return False
+
+    db.append_version("users", [{
+        **row,
+        "token_version": (row.get("token_version") or 0) + 1,
+        "updated_at": datetime.now(timezone.utc),
+    }])
+    return True
+
+
+def reset_password(user_id: str, new_password_hash: str) -> bool:
+    """Set a new password hash and bump token_version in the same version (#68).
+
+    One append, not two: reset-password and logout-all both want the version
+    bump, and a password reset should also kill every existing session, so the
+    two changes land together rather than racing across separate writes.
+    """
+    row = _find_user_row(user_id)
+    if not row:
+        return False
+
+    db.append_version("users", [{
+        **row,
+        "password_hash": new_password_hash,
+        "token_version": (row.get("token_version") or 0) + 1,
         "updated_at": datetime.now(timezone.utc),
     }])
     return True

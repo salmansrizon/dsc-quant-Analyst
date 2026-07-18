@@ -37,8 +37,26 @@ class UserUpdate(BaseModel):
 
 class TokenResponse(BaseModel):
     access_token: str
+    refresh_token: str
     token_type: str = "bearer"
     user: UserResponse
+
+
+class RefreshRequest(BaseModel):
+    refresh_token: str
+
+
+class ForgotPasswordRequest(BaseModel):
+    email: str
+
+
+class ResetPasswordRequest(BaseModel):
+    token: str
+    new_password: str = Field(..., min_length=6)
+
+
+class MessageResponse(BaseModel):
+    message: str
 
 
 # ─── Watchlist ────────────────────────────────────────────────────────────────
@@ -84,6 +102,40 @@ class PortfolioItem(BaseModel):
     current_price: Optional[float] = None
     pnl: Optional[float] = None
     pnl_percent: Optional[float] = None
+
+
+# ─── Screener (#71) ───────────────────────────────────────────────────────────
+
+class ScreenerFilter(BaseModel):
+    field: str
+    op: str
+    value: float | str
+
+
+class ScreenerRequest(BaseModel):
+    preset: Optional[str] = None
+    filters: Optional[list[ScreenerFilter]] = None
+    limit: int = Field(default=500, gt=0, le=500)
+
+
+class ScreenerResult(BaseModel):
+    symbol: str
+    sector: Optional[str] = None
+    price: Optional[float] = None
+    volume: Optional[float] = None
+    market_cap: Optional[float] = None
+    pe: Optional[float] = None
+    pb: Optional[float] = None
+    dividend_yield: Optional[float] = None
+
+
+class ScreenerResponse(BaseModel):
+    count: int
+    results: list[ScreenerResult]
+
+
+class ScreenerWatchlistAdd(BaseModel):
+    symbols: list[str]
 
 
 # ─── Alerts ───────────────────────────────────────────────────────────────────

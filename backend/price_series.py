@@ -44,8 +44,48 @@ def column(rows: Iterable[dict], *keys: str) -> list[float | None]:
     return out
 
 
-def from_price_history(rows: list[dict]) -> tuple[list, list, list, list]:
-    """(closes, highs, lows, volumes), oldest-first, aligned and gap-free.
+def stock_dividend_factor(pct: float) -> float:
+    """The price factor a bonus/stock-dividend of `pct`% dilutes to: `1/(1+pct/100)`.
+
+    A 50% bonus -> 0.6667; a 100% bonus -> 0.5. Same shape covers a face-value
+    split `N:1` as `1/N`, but no split source is ingested yet (#33) so only
+    bonus declarations feed `adjustment_factors` today.
+    """
+    return 1.0 / (1.0 + pct / 100.0)
+
+
+def adjustment_factors(declarations: Iterable[dict]) -> list[tuple]:
+    """(record_date, factor) for every bonus/stock-dividend declaration.
+
+    Cash-only declarations (no `stock_dividend_pct`) and rows with no
+    `record_date` are not price adjustments and are skipped (#63 scope: bonus/
+    split price adjustment only — cash dividends are a total-return convention,
+    deferred to v2).
+    """
+    return [
+        (d["record_date"], stock_dividend_factor(d["stock_dividend_pct"]))
+        for d in declarations
+        if d.get("stock_dividend_pct") and d.get("record_date")
+    ]
+
+
+def _cumulative_factor(date, factors: list[tuple]) -> float:
+    """Product of every factor whose action is still ahead of this bar.
+
+    lankabd gives record_date, not ex-date; #33 confirmed against EASTRNLUB's
+    50% bonus that record_date is the **last cum-dividend day** — a bar dated
+    on or before it is still at the pre-bonus price and must be scaled down.
+    `date <= record_date` is therefore the adjust-this-bar test, not `<`.
+    """
+    result = 1.0
+    for record_date, factor in factors:
+        if date <= record_date:
+            result *= factor
+    return result
+
+
+def from_price_history(rows: list[dict], factors: Iterable[tuple] | None = None) -> tuple[list, list, list, list]:
+    """(closes, highs, lows, volumes), oldest-first, aligned, gap-free, adjusted.
 
     Rows arrive newest-first from price_history and are reversed here.
 
@@ -58,6 +98,12 @@ def from_price_history(rows: list[dict]) -> tuple[list, list, list, list]:
 
     High/low fall back to the close when absent — a bar with no range. Volume
     falls back to 0.0, which OBV and VWAP treat as "no trade", not "unknown".
+
+    `factors` (see `adjustment_factors`, #63) is an on-read corporate-action
+    adjustment: closes/highs/lows are scaled by the cumulative bonus/split
+    factor before indicators.py ever sees them, so it never learns adjustment
+    exists. Volume is never scaled. Rows with no `Date` are left unadjusted —
+    there is nothing to compare a record_date against.
     """
     rows = list(reversed(rows))
 
@@ -67,16 +113,24 @@ def from_price_history(rows: list[dict]) -> tuple[list, list, list, list]:
     volumes = column(rows, *VOLUME_KEYS)
 
     usable = [
-        (c, h, l, v)
-        for c, h, l, v in zip(closes, highs, lows, volumes)
+        (c, h, l, v, row.get("Date"))
+        for row, c, h, l, v in zip(rows, closes, highs, lows, volumes)
         if c is not None
     ]
     if not usable:
         return [], [], [], []
 
-    return (
-        [c for c, _, _, _ in usable],
-        [h if h is not None else c for c, h, _, _ in usable],
-        [l if l is not None else c for c, _, l, _ in usable],
-        [v if v is not None else 0.0 for *_, v in usable],
-    )
+    factors = list(factors) if factors else []
+
+    out_closes, out_highs, out_lows, out_volumes = [], [], [], []
+    for c, h, l, v, date in usable:
+        h = h if h is not None else c
+        l = l if l is not None else c
+        v = v if v is not None else 0.0
+        f = _cumulative_factor(date, factors) if factors and date is not None else 1.0
+        out_closes.append(c * f)
+        out_highs.append(h * f)
+        out_lows.append(l * f)
+        out_volumes.append(v)
+
+    return out_closes, out_highs, out_lows, out_volumes

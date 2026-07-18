@@ -271,6 +271,33 @@ def tombstone(table: str, row: dict) -> None:
     }])
 
 
+def revise(table: str, changes: dict, **match) -> bool:
+    """Read the current row matching `match`, merge `changes`, append the new
+    version. Returns whether a row was found to revise (#70).
+
+    The one home for the read-current / merge / append shape that
+    alerts_service.record_state, notifications_service.resolve, and
+    portfolio_service.update_portfolio each hand-rolled — a change to the
+    carry-forward rule now lives here, not in three files. The whole current
+    row is carried forward so untouched columns survive under the latest-version
+    view (a partial append would null them). `updated_at` is always stamped
+    fresh, so the new version wins the view's ORDER BY updated_at.
+
+    A field left out of `changes` keeps its current value — which is how a
+    conditional update (e.g. "only deactivate when fired") is expressed: omit
+    the field rather than reading-then-recomputing it.
+    """
+    current = find_current(table, **match)
+    if not current:
+        return False
+    append_version(table, [{
+        **current,
+        **changes,
+        "updated_at": datetime.now(timezone.utc),
+    }])
+    return True
+
+
 def ensure_current_view(table: str, key: str = "id") -> None:
     """Create/replace `<table>_current`: the latest version per key, no tombstones.
 

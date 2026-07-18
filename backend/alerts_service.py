@@ -139,16 +139,11 @@ def record_state(alert: dict, met: bool, fired: bool) -> None:
     append volume tracks real crossings, not checks — #34). `fired` sets
     is_active=False, the one-shot: a fired alert does not re-arm in Phase 1.
 
-    Reads the full current row first so the version carries every column (a
-    partial append would blank the rest under the latest-version view).
+    Omitting is_active unless firing is deliberate — db.revise keeps the current
+    value for any field not in `changes`, so a down-crossing rebaseline leaves
+    is_active untouched, and only a fire flips it to False (the one-shot).
     """
-    current = db.find_current("alerts", id=alert["id"])
-    if not current:
-        return
-    now = datetime.now(timezone.utc)
-    db.append_version("alerts", [{
-        **current,
-        "last_met": met,
-        "is_active": not fired and current.get("is_active", True),
-        "updated_at": now,
-    }])
+    changes = {"last_met": met}
+    if fired:
+        changes["is_active"] = False
+    db.revise("alerts", changes, id=alert["id"])

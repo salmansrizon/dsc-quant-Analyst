@@ -75,16 +75,9 @@ def update_portfolio(portfolio_id: str, user_id: str, data: dict) -> bool:
     if not changes:
         return False
 
-    holding = _find_holding(portfolio_id, user_id)
-    if not holding:
-        return False
-
-    db.append_version("portfolios", [{
-        **holding,
-        **changes,
-        "updated_at": datetime.now(timezone.utc),
-    }])
-    return True
+    # Scoped by owner (id + user_id) so guessing an id can't reach another
+    # user's holding; db.revise reads-merges-appends the whole row (#70).
+    return db.revise("portfolios", changes, id=portfolio_id, user_id=user_id)
 
 
 def delete_portfolio(portfolio_id: str, user_id: str) -> bool:

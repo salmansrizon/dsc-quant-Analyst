@@ -28,6 +28,24 @@ def no_rows(monkeypatch):
     monkeypatch.setattr(db, "_client", FakeClient())
 
 
+def test_revise_merges_changes_and_stamps_updated_at(monkeypatch, appended):
+    # db.revise reads the current row, overlays changes, appends the whole row.
+    monkeypatch.setattr(db, "_client", FakeClient(result_rows=fake_rows(
+        {"id": "x", "user_id": "u1", "symbol": "GP", "status": "sending",
+         "error": None, "updated_at": "old"},
+    )))
+    assert db.revise("notifications", {"status": "sent"}, id="x") is True
+    row = appended.appends[0]["rows"][0]
+    assert row["status"] == "sent"          # changed
+    assert row["symbol"] == "GP"            # untouched column survives
+    assert row["updated_at"] != "old"       # stamped fresh so the version wins
+
+
+def test_revise_on_a_missing_row_returns_false_and_appends_nothing(no_rows, appended):
+    assert db.revise("notifications", {"status": "sent"}, id="ghost") is False
+    assert appended.appends == []
+
+
 def test_no_service_issues_dml(monkeypatch):
     # DML is a 403 on the free tier (#52). Nothing may emit UPDATE/DELETE/INSERT.
     client = FakeClient()

@@ -79,15 +79,7 @@ def begin(user_id: str, alert_id: str | None, channel: str, type_: str,
 def resolve(notification_id: str, status: str, error: str | None = None) -> None:
     """Resolve a claimed delivery to sent/failed/bounced.
 
-    Carries the full current row forward so the version keeps every column under
-    the latest-version view.
+    Carries the full current row forward (via db.revise) so the version keeps
+    every column under the latest-version view.
     """
-    current = db.find_current("notifications", id=notification_id)
-    if not current:
-        return
-    db.append_version("notifications", [{
-        **current,
-        "status": status,
-        "error": error,
-        "updated_at": datetime.now(timezone.utc),
-    }])
+    db.revise("notifications", {"status": status, "error": error}, id=notification_id)

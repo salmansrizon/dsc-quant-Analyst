@@ -1,7 +1,7 @@
 """
 Pydantic models for request/response schemas.
 """
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, Field
 from typing import Optional
 from datetime import datetime
 
@@ -74,8 +74,11 @@ class WatchlistItem(BaseModel):
 
 class PortfolioAdd(BaseModel):
     symbol: str
-    buy_price: float
-    quantity: int
+    # buy_price must be > 0: portfolio_service computes pnl as (LTP - buy_price)
+    # / buy_price, so 0 is a division by zero in SQL and a negative price is a
+    # nonsense P&L (#62). Reject it at the interface, not deep in a query.
+    buy_price: float = Field(..., gt=0)
+    quantity: int = Field(..., gt=0)
     buy_date: Optional[str] = None
     price_target: Optional[float] = None
     stop_loss: Optional[float] = None
@@ -83,8 +86,8 @@ class PortfolioAdd(BaseModel):
 
 
 class PortfolioUpdate(BaseModel):
-    buy_price: Optional[float] = None
-    quantity: Optional[int] = None
+    buy_price: Optional[float] = Field(default=None, gt=0)
+    quantity: Optional[int] = Field(default=None, gt=0)
     price_target: Optional[float] = None
     stop_loss: Optional[float] = None
     notes: Optional[str] = None

@@ -13,6 +13,7 @@ from .models import (
     UserCreate, UserLogin, UserResponse, TokenResponse,
     RefreshRequest, ForgotPasswordRequest, ResetPasswordRequest, MessageResponse,
     WatchlistAdd, PortfolioAdd, PortfolioUpdate, AlertCreate,
+    ScreenerRequest, ScreenerResponse, ScreenerWatchlistAdd,
 )
 from .user_service import (
     create_user, get_user_by_email, get_user_credentials,
@@ -22,6 +23,7 @@ from .user_service import (
 from . import account_recovery
 from . import market_service, watchlist_service, portfolio_service, alerts_service
 from . import fundamentals_service
+from . import screener_service
 
 FRONTEND_URL = os.environ.get("FRONTEND_URL", "http://localhost:5173")
 
@@ -195,6 +197,52 @@ def fundamentals(symbol: str):
 @app.get("/api/market/announcements")
 def announcements(symbol: str = None, limit: int = Query(default=50, le=200)):
     return market_service.list_announcements(symbol=symbol, limit=limit)
+
+
+@app.post("/api/market/screener", response_model=ScreenerResponse)
+def screener(payload: ScreenerRequest):
+    """Bulk-filter the ~414 symbols in one hybrid read (#71) — see
+    screener_service for the native-SQL/derived-Python split and the
+    whitelist that guards it.
+    """
+    try:
+        results = screener_service.screen(
+            preset=payload.preset,
+            filters=[f.model_dump() for f in payload.filters] if payload.filters else None,
+            limit=payload.limit,
+        )
+    except screener_service.InvalidFilter as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+    return ScreenerResponse(count=len(results), results=results)
+
+
+@app.post("/api/market/screener/export")
+def screener_export(payload: ScreenerRequest):
+    """CSV of the same result set /screener would return — reuses exports._csv
+    (#71) rather than a second CSV-writing path.
+    """
+    from .exports import _csv
+    try:
+        results = screener_service.screen(
+            preset=payload.preset,
+            filters=[f.model_dump() for f in payload.filters] if payload.filters else None,
+            limit=payload.limit,
+        )
+    except screener_service.InvalidFilter as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+    content, media_type = _csv(results)
+    return Response(content, media_type=media_type,
+                     headers={"Content-Disposition": "attachment; filename=screener_results.csv"})
+
+
+@app.post("/api/market/screener/watchlist")
+def screener_add_to_watchlist(payload: ScreenerWatchlistAdd, current_user: UserResponse = Depends(get_current_user)):
+    """Bulk-add a screener result set's symbols to the caller's watchlist —
+    reuses watchlist_service.add_to_watchlist per symbol (#71), the same
+    dedup-safe path a single manual add uses.
+    """
+    added = [watchlist_service.add_to_watchlist(current_user.id, symbol) for symbol in payload.symbols]
+    return {"added": added}
 
 
 # ── Watchlist ────────────────────────────────────────────────────────────────

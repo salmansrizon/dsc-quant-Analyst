@@ -104,6 +104,40 @@ class PortfolioItem(BaseModel):
     pnl_percent: Optional[float] = None
 
 
+# ─── Screener (#71) ───────────────────────────────────────────────────────────
+
+class ScreenerFilter(BaseModel):
+    field: str
+    op: str
+    value: float | str
+
+
+class ScreenerRequest(BaseModel):
+    preset: Optional[str] = None
+    filters: Optional[list[ScreenerFilter]] = None
+    limit: int = Field(default=500, gt=0, le=500)
+
+
+class ScreenerResult(BaseModel):
+    symbol: str
+    sector: Optional[str] = None
+    price: Optional[float] = None
+    volume: Optional[float] = None
+    market_cap: Optional[float] = None
+    pe: Optional[float] = None
+    pb: Optional[float] = None
+    dividend_yield: Optional[float] = None
+
+
+class ScreenerResponse(BaseModel):
+    count: int
+    results: list[ScreenerResult]
+
+
+class ScreenerWatchlistAdd(BaseModel):
+    symbols: list[str]
+
+
 # ─── Alerts ───────────────────────────────────────────────────────────────────
 
 class AlertCreate(BaseModel):

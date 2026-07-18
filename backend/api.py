@@ -190,6 +190,12 @@ def run_alerts(authorization: str = Header(default="")):
     sweep. Auth is the platform-signed `Authorization: Bearer $CRON_SECRET`
     header Vercel Cron sends — a missing or wrong secret is a 401, and an unset
     server-side secret fails closed (never open the endpoint to the world).
+
+    **Scale-out (#34 dec.6):** this runs synchronously inside the function
+    budget, fine at v1 scale (single-digit users, ms sweeps). When a crossing
+    batch × ~300ms/email approaches the Vercel function timeout, move the sweep
+    to a standalone GitHub Actions script (the ETL already runs there, #55) and
+    keep this endpoint only for manual runs.
     """
     secret = os.environ.get("CRON_SECRET")
     if not secret or authorization != f"Bearer {secret}":

@@ -34,12 +34,13 @@ def _has_open_delivery(alert_id: str, type_: str) -> bool:
         f"""
         SELECT id FROM {db.current_view('notifications')}
         WHERE alert_id = @aid AND type = @type
-          AND status IN ('{SENDING}', '{SENT}')
+          AND status IN UNNEST(@open)
         LIMIT 1
         """,
         [
             bigquery.ScalarQueryParameter("aid", "STRING", alert_id),
             bigquery.ScalarQueryParameter("type", "STRING", type_),
+            bigquery.ArrayQueryParameter("open", "STRING", [SENDING, SENT]),
         ],
     )
     return bool(rows)

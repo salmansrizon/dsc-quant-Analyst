@@ -14,8 +14,10 @@ Mapping per row:
 - type = "price"
 - condition_json = {"op": direction, "value": target_price}
 - is_active = NOT is_triggered  (a fired one-shot is inactive)
-- last_met = False  (baseline: the sweep re-observes state; a not-yet-fired
-  alert that is already met will fire on its next up-crossing)
+- last_met = the live met-state at migration time, exactly as create_alert
+  baselines a new alert. Hardcoding False would fire every already-met alert on
+  the first sweep (met=True vs last_met=False is a crossing) — the spurious fire
+  #34's "baseline silently, fire nothing" rule exists to prevent.
 
 Idempotent: an id already present in `alerts_current` is skipped, so a re-run
 adds nothing.
@@ -23,7 +25,6 @@ adds nothing.
 Run `bootstrap_tables` first so the `alerts` table and view exist.
 """
 import argparse
-import json
 import logging
 import os
 import sys
@@ -32,6 +33,8 @@ from datetime import datetime, timezone
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
 from backend import db  # noqa: E402
+from backend import alert_conditions  # noqa: E402
+from backend.alerts_service import _current_price  # noqa: E402
 
 logging.basicConfig(level=logging.INFO, format="%(message)s")
 logger = logging.getLogger(__name__)
@@ -46,14 +49,21 @@ def _existing_alert_ids() -> set[str]:
 
 
 def _to_alert_row(pa: dict, now: datetime) -> dict:
+    condition_json = alert_conditions.price_condition(
+        op=pa.get("direction"), value=pa.get("target_price"),
+    )
+    # Baseline last_met to the live met-state, exactly as create_alert does, so
+    # an already-met migrated alert does not fire spuriously on the first sweep.
+    met = alert_conditions.is_met(
+        alert_conditions.PRICE, condition_json, _current_price(pa["symbol"]),
+    )
     return {
         "id": pa["id"],
         "user_id": pa["user_id"],
         "type": "price",
         "symbol": pa["symbol"],
-        "condition_json": json.dumps({"op": pa.get("direction"),
-                                      "value": pa.get("target_price")}),
-        "last_met": False,
+        "condition_json": condition_json,
+        "last_met": met is True,
         "is_active": not bool(pa.get("is_triggered")),
         "created_at": pa.get("created_at") or now,
         "updated_at": now,

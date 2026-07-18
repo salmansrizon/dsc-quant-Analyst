@@ -17,6 +17,17 @@ re-arm in Phase 1. A down-crossing (met->unmet) just rebaselines `last_met`.
 logic here never imports the email provider. An undelivered crossing is *not*
 recorded as fired, so the next sweep retries it — a delivery failure never
 consumes an alert (the #48 guarantee, kept).
+
+**Where it runs, and the scale-out (#34 dec.6).** The sweep is triggered by
+Vercel Cron hitting POST /api/internal/run-alerts — serverless has no
+in-process scheduler. Two ceilings come with that: Vercel Cron on Hobby is
+daily / two-crons-max, and a large crossing batch × ~300ms/email can exceed the
+function timeout. Both are scale risks, not now risks (single-digit users, ms
+sweeps). **The scale-out, when sweep time approaches the function budget:** move
+this exact entry point to a standalone GitHub Actions cron (as the ETL scrapers
+do, #55) — check_alerts + build_email_notifier run unchanged off a runner with
+a 6h budget instead of a function timeout. Nothing here changes; only the
+trigger does.
 """
 import logging
 import os
@@ -102,10 +113,9 @@ def build_email_notifier() -> Notifier:
             logger.warning("Alert %s owner has no email — cannot deliver.", alert["id"])
             return False
 
-        cond = alert_conditions.parse_condition(alert.get("condition_json"))
-        subject = f"{alert['symbol']} is {cond.get('op')} {cond.get('value')}"
-        body = (f"<p>Your alert fired: <b>{alert['symbol']}</b> is "
-                f"{cond.get('op')} {cond.get('value')} "
+        phrase = alert_conditions.describe(alert["symbol"], alert.get("condition_json"))
+        subject = f"Alert: {phrase}"
+        body = (f"<p>Your alert fired: <b>{phrase}</b> "
                 f"(now {alert.get('current_price')}).</p>")
 
         nid = notifications_service.begin(

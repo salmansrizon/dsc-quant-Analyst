@@ -22,14 +22,6 @@ from typing import Optional
 
 PRICE = "price"
 
-# Every alert type Phase-1's schema accommodates. Only PRICE is evaluable yet;
-# the rest are declared so an alert row can carry them before their detector
-# lands (#34's Phase 2), and so an unknown type is a clear error, not a crash.
-KNOWN_TYPES = {
-    PRICE, "volume", "breakout", "technical",
-    "portfolio", "circuit_breaker", "earnings", "dividend",
-}
-
 
 def parse_condition(condition_json: Optional[str]) -> dict:
     """The stored condition string as a dict. Empty/invalid JSON reads as {}.
@@ -49,6 +41,16 @@ def parse_condition(condition_json: Optional[str]) -> dict:
 def price_condition(op: str, value: float) -> str:
     """Serialize a price condition to the stored `condition_json` shape."""
     return json.dumps({"op": op, "value": value})
+
+
+def describe(symbol: str, condition_json: Optional[str]) -> str:
+    """A human phrase for a condition, e.g. "GP above 100".
+
+    Owns the rendering of a condition so callers building a notification subject
+    don't re-parse condition_json themselves.
+    """
+    cond = parse_condition(condition_json)
+    return f"{symbol} {cond.get('op')} {cond.get('value')}"
 
 
 def is_met(alert_type: str, condition_json: Optional[str],

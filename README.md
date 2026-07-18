@@ -32,7 +32,8 @@ Complete web scraping solution for Lankabangla financial portal stock market dat
 1. `cd backend`
 2. `pip install -r requirements.txt`
 3. `python bootstrap_tables.py` — **required once per environment.** Creates the
-   append-only tables (`users`, `watchlists`, `portfolios`, `price_alerts`) and
+   append-only tables (`users`, `watchlists`, `portfolios`, `price_alerts`,
+   `alerts`, `notifications`, and the `fundamentals_*` set) and
    their `_current` views. Without it every read fails with
    `404 Not found: Table ..._current`. Idempotent, so re-running is safe.
 4. `python migrations/001_users_phone_to_string.py` — only needed for a dataset
@@ -41,6 +42,11 @@ Complete web scraping solution for Lankabangla financial portal stock market dat
    and signup 400s on every phone number while it is INTEGER (#51). Idempotent;
    `--dry-run` reports without writing. It leaves a `users_backup_pre51` table
    behind — drop it once satisfied.
+5. `python migrations/002_price_alerts_to_alerts.py` — only for a dataset with
+   pre-#66 `price_alerts` rows. Rebuilds them into the type-discriminated
+   `alerts` table (append, not DML — #52), baselining each alert's edge state
+   against the live price so an already-met alert does not fire on the first
+   sweep. Idempotent; `--dry-run` reports without writing.
 5. `uvicorn api:app --reload`
 
 ### Tests

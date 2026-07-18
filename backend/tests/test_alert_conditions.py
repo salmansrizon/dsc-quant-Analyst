@@ -53,6 +53,16 @@ def test_is_met_is_none_for_a_not_yet_implemented_type():
     assert ac.is_met("volume", ac.price_condition("above", 100), 150.0) is None
 
 
+# ── describe ─────────────────────────────────────────────────────────────────
+
+def test_describe_renders_a_condition_phrase():
+    assert ac.describe("GP", ac.price_condition("above", 100.0)) == "GP above 100.0"
+
+
+def test_describe_tolerates_a_malformed_condition():
+    assert ac.describe("GP", "not json") == "GP None None"
+
+
 # ── is_crossing ──────────────────────────────────────────────────────────────
 
 def test_up_crossing_fires():

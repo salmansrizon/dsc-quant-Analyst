@@ -95,6 +95,22 @@ def price_history(symbol: str, days: int = 365):
     return db.query_rows(sql, params)
 
 
+def _bonus_factors(symbol: str) -> list[tuple]:
+    """Bonus/stock-dividend price-adjustment factors for one symbol (#63).
+
+    Cash-only declarations and rows with no record_date are filtered by
+    `price_series.adjustment_factors` itself; this just supplies the raw
+    declarations from the one table that has them.
+    """
+    sql = f"""
+        SELECT record_date, stock_dividend_pct
+        FROM {db.current_view('fundamentals_dividends')}
+        WHERE symbol = @symbol AND stock_dividend_pct IS NOT NULL AND stock_dividend_pct > 0
+    """
+    params = [bigquery.ScalarQueryParameter("symbol", "STRING", symbol.upper())]
+    return price_series.adjustment_factors(db.query_rows(sql, params))
+
+
 def technical_indicators(symbol: str, days: int = 365):
     """Compute the v1 technical-indicator bundle (spec 4) from price history.
 
@@ -102,9 +118,14 @@ def technical_indicators(symbol: str, days: int = 365):
     precomputed BigQuery table — see ticket #31. This is the canonical indicator
     source; the raw SMA_20/RSI columns in lankabd_price_archive are left as
     scraped passthrough on price_history and are not reconciled here.
+
+    Prices are adjusted on-read for bonus/stock-dividend actions (#63) before
+    indicators.py ever sees them — a 50% bonus otherwise reads as a -31% crash
+    (EASTRNLUB, 2025-12-23). indicators.py never learns adjustment exists.
     """
     rows = price_history(symbol, days=days)
-    closes, highs, lows, volumes = price_series.from_price_history(rows)
+    factors = _bonus_factors(symbol)
+    closes, highs, lows, volumes = price_series.from_price_history(rows, factors)
     if not closes:
         return {"symbol": symbol.upper(), "indicators": None, "points": 0}
 

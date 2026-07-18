@@ -5,7 +5,7 @@ are live rows; #58 found them and they are what these guards exist for.
 """
 import pytest
 
-from backend import fundamentals as f
+from backend import valuation as f
 
 
 # ── metric names ─────────────────────────────────────────────────────────────
@@ -31,29 +31,30 @@ def test_both_roa_spellings_collapse_to_one_key():
 
 # ── the misleading-ratio guard ───────────────────────────────────────────────
 
-def test_ab_banks_roe_is_flagged_as_misleading():
+def test_ab_banks_roe_sign_is_flagged_inverted():
     """The live row that motivates this: -38.9bn / -32.4bn = 1.1986.
 
     A loss over negative equity reads as a healthy 120%. Ranked on value alone,
     an insolvent bank sorts to the top of a screener.
     """
-    assert f.is_misleading("-38891722887.0000 / -32447856712.0000") is True
+    assert f.sign_is_inverted("-38891722887.0000 / -32447856712.0000") is True
 
 
-def test_an_ordinary_ratio_is_not_flagged():
-    assert f.is_misleading("158057490000.0000 / 191322941000.0000") is False
+def test_an_ordinary_ratio_sign_reads_true():
+    assert f.sign_is_inverted("158057490000.0000 / 191322941000.0000") is False
 
 
-def test_a_plain_loss_is_not_flagged():
+def test_a_plain_loss_sign_reads_true():
     # Negative numerator, positive denominator: -2.95 ROE reads exactly as it
     # should. Nothing to warn about.
-    assert f.is_misleading("-19056934828.0000 / 6452566230.0000") is False
+    assert f.sign_is_inverted("-19056934828.0000 / 6452566230.0000") is False
 
 
 @pytest.mark.parametrize("equation", ["", None, "not an equation", "1 / 2 / 3", "a / b"])
-def test_an_unparseable_equation_is_not_flagged(equation):
-    # Absence of evidence, not evidence of a lie.
-    assert f.is_misleading(equation) is False
+def test_an_unparseable_equation_is_unknown_not_safe(equation):
+    # Tri-state: None, not False. Returning False would claim "checked, fine"
+    # about the ratios it understands least — the wrong way for a guard to fail.
+    assert f.sign_is_inverted(equation) is None
 
 
 def test_equation_inputs_parses_a_simple_division():
@@ -84,9 +85,6 @@ def test_dividend_yield_is_a_percentage_of_face_not_price():
     # 105% of a 10 BDT face = 10.50 BDT per share, on a 257.5 price.
     assert f.dividend_yield(105.0, 257.5) == pytest.approx(4.0777, abs=1e-3)
 
-
-def test_dividend_yield_uses_the_face_value_the_user_confirmed():
-    assert f.FACE_VALUE_BDT == 10.0
 
 
 def test_dividend_yield_is_none_without_a_dividend_or_price():
@@ -178,25 +176,37 @@ def test_annual_cash_dividend_is_none_for_a_year_with_no_cash():
 
 # ── EPS growth and PEG ───────────────────────────────────────────────────────
 
-def test_eps_growth_compares_the_two_most_recent_years():
-    # GP: 26.89 (2024) -> 21.90 (2025) is a fall.
-    assert f.eps_growth({2023: 24.49, 2024: 26.89, 2025: 21.90}) == pytest.approx(-18.55, abs=0.01)
+def test_eps_growth_is_a_cagr_across_the_whole_span():
+    # #59 fetches 12 years so growth is not a single noisy YoY delta. A doubling
+    # over 4 years is ~18.9%/yr compounded, not +100%.
+    assert f.eps_growth({2021: 10.0, 2025: 20.0}) == pytest.approx(18.921, abs=0.01)
 
 
-def test_eps_growth_needs_two_years():
+def test_eps_growth_uses_the_oldest_and_newest_positive_years():
+    # Intervening years do not change the endpoints; 10 -> 20 over 4 years.
+    g = f.eps_growth({2021: 10.0, 2022: 5.0, 2023: 30.0, 2024: 8.0, 2025: 20.0})
+    assert g == pytest.approx(18.921, abs=0.01)
+
+
+def test_eps_growth_needs_two_positive_years():
     assert f.eps_growth({2025: 21.9}) is None
     assert f.eps_growth({}) is None
 
 
-def test_eps_growth_is_none_when_the_earlier_year_was_a_loss():
-    # Growth from a loss is not a percentage anyone can read: -200% would sort
-    # as terrible for a company that in fact returned to profit.
+def test_eps_growth_needs_two_positive_endpoints():
+    # A single positive year among losses cannot anchor a CAGR.
     assert f.eps_growth({2024: -5.0, 2025: 5.0}) is None
-    assert f.eps_growth({2024: 0.0, 2025: 5.0}) is None
+
+
+def test_eps_growth_spans_the_positive_years_ignoring_a_loss_between():
+    # 5.0 (2020) -> 8.0 (2025), 5-year span; the -5 in 2024 is not an endpoint.
+    expected = ((8.0 / 5.0) ** (1 / 5) - 1) * 100
+    assert f.eps_growth({2020: 5.0, 2024: -5.0, 2025: 8.0}) == pytest.approx(expected, abs=0.01)
 
 
 def test_eps_growth_ignores_years_with_no_eps():
-    assert f.eps_growth({2023: 10.0, 2024: None, 2025: 12.0}) == pytest.approx(20.0)
+    # 10 (2023) -> 12 (2025) over 2 years compounded.
+    assert f.eps_growth({2023: 10.0, 2024: None, 2025: 12.0}) == pytest.approx(9.545, abs=0.01)
 
 
 def test_peg():

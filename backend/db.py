@@ -154,7 +154,7 @@ def current_view(table: str) -> str:
     return table_id(f"{table}{CURRENT_SUFFIX}")
 
 
-def price_join(alias: str, symbol_column: str = "symbol") -> str:
+def price_join(alias: str) -> str:
     """A LEFT JOIN onto the datamatrix for a live price, aliased `d`.
 
     Five callers hand-wrote this join, and its failure mode is not theoretical:
@@ -167,7 +167,7 @@ def price_join(alias: str, symbol_column: str = "symbol") -> str:
     """
     return (
         f"LEFT JOIN {table_id('lankabd_datamatrix')} d "
-        f"ON {alias}.{symbol_column} = d.Symbol"
+        f"ON {alias}.symbol = d.Symbol"
     )
 
 

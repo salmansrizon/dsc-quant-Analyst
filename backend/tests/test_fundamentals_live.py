@@ -104,3 +104,26 @@ def test_ratio_names_carry_no_stray_whitespace():
         WHERE name != TRIM(name)
     """)
     assert r["untrimmed"] == 0
+
+
+# ── the #59 endpoint, against live data (the claims were prose before) ────────
+
+def test_fundamentals_endpoint_returns_the_spec_5_metrics_for_gp():
+    from backend import fundamentals_service as fs
+    d = fs.get_fundamentals("GP")
+    assert d["symbol"] == "GP" and d["price"]
+    # All of spec §5, keyed by stable name (code is sector-scoped, #58).
+    assert {"ROE", "ROA", "NET_MARGIN", "CURRENT_RATIO"} <= set(d["reported"])
+    # GP pays cash; the yield is off the last complete year, not a mid-cycle one.
+    assert d["derived"]["dividend_yield_pct"] > 0
+    assert d["derived"]["dividend_year"] < 2026
+
+
+def test_ab_bank_negative_equity_is_flagged_not_ranked_as_healthy():
+    # The live trap #58 found: ROE 1.1986 is a loss over negative equity.
+    from backend import fundamentals_service as fs
+    d = fs.get_fundamentals("ABBANK")
+    roe = d["reported"]["ROE"]
+    assert roe["value"] > 1, "the raw ratio really does read as a healthy 120%"
+    assert roe["sign_inverted"] is True, "but its sign is flagged inverted"
+    assert d["derived"]["price_to_book"] is None, "negative equity is not 'cheap'"

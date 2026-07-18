@@ -1,5 +1,8 @@
 """Valuation maths over reported fundamentals (#59).
 
+Named for what it does: `scrapers/fundamentals.py` already parses fundamentals,
+and two modules called the same thing is one too many.
+
 Pure: numbers in, numbers out, no BigQuery import — the same shape as
 indicators.py (#31), and for the same reason. These are computed on read, not
 stored: they all depend on a live price, and a stored copy would need its own
@@ -60,21 +63,30 @@ def equation_inputs(equation: str) -> tuple[float, float] | None:
         return None
 
 
-def is_misleading(equation: str) -> bool:
-    """Whether a ratio's sign lies about its meaning.
+def sign_is_inverted(equation: str) -> bool | None:
+    """Whether a negative denominator has flipped the ratio's sign.
+
+    True  — the denominator is negative; the number cannot be read at face value.
+    False — checked, and the sign reads true.
+    None  — the equation is not a simple division, so this cannot say.
 
     **AB Bank's 2025 ROE is 1.1986** — a healthy-looking 120%. Its equation is
     `-38,891,722,887 / -32,447,856,712`: a loss over *negative equity*. The bank
     is insolvent and two negatives make it look excellent. Its 2024 ROE, on
     positive equity, is -2.95.
 
-    A negative denominator inverts the sign of the whole ratio, so the number
-    cannot be read or ranked at face value. Screening and scoring must exclude
-    these rather than sort them to the top.
+    Tri-state on purpose. Returning False for an equation it could not parse
+    would claim "checked, fine" about the ratios it understands least, which is
+    the wrong way for a guard to fail. A negative numerator over a positive
+    denominator is a plain loss and reads true — not flagged.
+
+    This does not catch every unreadable ratio. GP's Gross Profit Margin is 1.0
+    because a telco reports no COGS line, and its denominator is positive, so
+    this says False. The sign is genuinely not the problem there.
     """
     inputs = equation_inputs(equation)
     if inputs is None:
-        return False
+        return None
     _, denominator = inputs
     return denominator < 0
 
@@ -106,20 +118,28 @@ def dividend_yield(cash_dividend_pct: float | None, price: float | None,
 
 
 def eps_growth(eps_by_year: dict[int, float]) -> float | None:
-    """Year-on-year EPS growth between the two most recent years, as a
-    percentage. None when there is no comparable pair.
+    """Annualised EPS growth (CAGR) across the available history, as a percent.
 
-    Returns None when the earlier EPS is <= 0: growth from a loss is not a
-    percentage anyone can read, and -200% would sort as terrible when the
-    company in fact returned to profit.
+    A single year-on-year delta is the noisiest possible growth estimate, and
+    #59 fetches 12 years precisely so growth need not rest on the last two. This
+    compounds the oldest and newest positive-EPS years:
+
+        CAGR = (latest / earliest) ** (1 / span_years) - 1
+
+    Both endpoints must be positive EPS, and there must be a span. Returns None
+    otherwise — growth measured from a loss year is not a percentage anyone can
+    read (a company returning from -5 to +5 is not "+200%", it is a turnaround),
+    and PEG built on it would sort backwards.
     """
-    years = sorted(y for y, e in eps_by_year.items() if e is not None)
-    if len(years) < 2:
+    positive = sorted(y for y, e in eps_by_year.items() if e is not None and e > 0)
+    if len(positive) < 2:
         return None
-    latest, previous = eps_by_year[years[-1]], eps_by_year[years[-2]]
-    if previous is None or previous <= 0 or latest is None:
+    earliest, latest = positive[0], positive[-1]
+    span = latest - earliest
+    if span <= 0:
         return None
-    return round(((latest - previous) / previous) * 100.0, 4)
+    ratio = eps_by_year[latest] / eps_by_year[earliest]
+    return round((ratio ** (1 / span) - 1) * 100.0, 4)
 
 
 def peg(pe: float | None, growth_pct: float | None) -> float | None:
@@ -178,8 +198,12 @@ def annual_cash_dividend(declarations: Iterable[dict], year: int) -> float | Non
     """
     for_year = [d for d in declarations if d.get("year") == year and d.get("cash_dividend_pct")]
 
-    totals = [d["cash_dividend_pct"] for d in for_year if d.get("dividend_type") == "ANNUAL"]
+    totals = [d for d in for_year if d.get("dividend_type") == "ANNUAL"]
     if totals:
-        return max(totals)
+        # More than one total means a restatement, so the newest wins — picking
+        # the larger would be a guess, and a restatement can revise downwards.
+        # publish_date can be None; those sort first and lose.
+        newest = max(totals, key=lambda d: (d.get("publish_date") is not None, d.get("publish_date")))
+        return newest["cash_dividend_pct"]
 
     return sum(d["cash_dividend_pct"] for d in for_year) or None

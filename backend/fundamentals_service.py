@@ -1,14 +1,14 @@
 """Assemble one company's fundamentals for the API (#59).
 
 Reads the four fundamentals tables plus the price archive, and hands the pure
-maths in fundamentals.py the numbers it needs. Mirrors
+maths in valuation.py the numbers it needs. Mirrors
 market_service.technical_indicators (#31): the query lives here, the arithmetic
 lives behind a seam with no BigQuery import.
 """
 from google.cloud import bigquery
 
 from . import db
-from . import fundamentals
+from . import valuation
 
 
 def _reported(symbol: str, limit: int = 12) -> list[dict]:
@@ -85,13 +85,15 @@ def _latest_price(symbol: str) -> dict:
 def _reported_metrics(ratios: list[dict]) -> dict:
     """The spec-§5 ratios, keyed by a stable metric name.
 
-    Each carries `misleading` — see fundamentals.is_misleading. AB Bank's ROE
+    Each carries `sign_inverted` — see valuation.sign_is_inverted. AB Bank's ROE
     reads as a healthy 120% because it is a loss over negative equity, and a
-    consumer that ranks on `value` alone will put it first.
+    consumer that ranks on `value` alone will put it first. The flag is
+    tri-state: True / False / None (the equation was not a simple division and
+    the guard cannot say), so a consumer must not read a missing flag as "safe".
     """
     out = {}
     for r in ratios:
-        key = fundamentals.normalise_metric(r["name"])
+        key = valuation.normalise_metric(r["name"])
         if not key:
             continue
         out[key] = {
@@ -100,7 +102,7 @@ def _reported_metrics(ratios: list[dict]) -> dict:
             "category": r["category"],
             "year": r["year"],
             "equation": r["equation"],
-            "misleading": fundamentals.is_misleading(r["equation"]),
+            "sign_inverted": valuation.sign_is_inverted(r["equation"]),
         }
     return out
 
@@ -111,7 +113,7 @@ def get_fundamentals(symbol: str) -> dict:
     `reported` comes from the company API as-is. `derived` is computed here on
     read (#31's decision) because it all depends on a live price. A derived
     figure is None when the inputs make it meaningless rather than merely
-    absent — see fundamentals.py.
+    absent — see valuation.py.
     """
     symbol = symbol.upper()
     reported_years = _reported(symbol)
@@ -128,12 +130,12 @@ def get_fundamentals(symbol: str) -> dict:
     pe = price_row.get("forward_pe") or price_row.get("audited_pe")
 
     eps_by_year = {r["year"]: r["eps"] for r in reported_years if r.get("eps") is not None}
-    growth = fundamentals.eps_growth(eps_by_year)
+    growth = valuation.eps_growth(eps_by_year)
 
     # Yield reads off the latest year that has FINISHED declaring — the current
     # year is usually mid-cycle, and taking it would halve the number.
-    dividend_year = fundamentals.latest_complete_dividend_year(declarations)
-    cash_pct = fundamentals.annual_cash_dividend(declarations, dividend_year) if dividend_year else None
+    dividend_year = valuation.latest_complete_dividend_year(declarations)
+    cash_pct = valuation.annual_cash_dividend(declarations, dividend_year) if dividend_year else None
 
     return {
         "symbol": symbol,
@@ -142,21 +144,17 @@ def get_fundamentals(symbol: str) -> dict:
         "pe": pe,
         "reported": _reported_metrics(ratios),
         "derived": {
-            "price_to_book": fundamentals.price_to_book(price, nav),
-            "dividend_yield_pct": fundamentals.dividend_yield(cash_pct, price),
+            "price_to_book": valuation.price_to_book(price, nav),
+            "dividend_yield_pct": valuation.dividend_yield(cash_pct, price),
             "dividend_year": dividend_year,
             "cash_dividend_pct": cash_pct,
             "eps_growth_pct": growth,
-            "peg": fundamentals.peg(pe, growth),
+            "peg": valuation.peg(pe, growth),
         },
-        "latest_annual": {
-            "year": latest.get("year"),
-            "eps": latest.get("eps"),
-            "nav": nav,
-        },
+        # eps_history[0] is the latest annual — one canonical copy, not two.
         "eps_history": [
             {"year": r["year"], "eps": r["eps"], "nav": r["nav"]} for r in reported_years
         ],
         "dividends": declarations,
-        "caveats": [fundamentals.MUTUAL_FUND_CAVEAT] if cash_pct else [],
+        "caveats": [valuation.MUTUAL_FUND_CAVEAT] if cash_pct else [],
     }

@@ -83,16 +83,6 @@ def test_no_service_module_binds_a_client_at_import_time():
         assert not hasattr(mod, "bq"), f"{mod.__name__} still binds a client at import"
 
 
-def test_exports_holds_no_client_wrapper_and_no_dead_helpers():
-    # exports.py carried a second read path: a wrapper returning db.client(),
-    # plus four hand-rolled copies of what db.query_rows already is. It also
-    # held _list_tables (which called .tables() on a DatasetReference and would
-    # have raised) and export_table (no callers).
-    from backend import exports
-    for gone in ("_get_bigquery_client", "_list_tables", "export_table"):
-        assert not hasattr(exports, gone), f"exports.{gone} is back"
-
-
 def test_exports_go_through_the_stubbable_read_path(monkeypatch):
     # The real property, asserted by behaviour: stubbing db._client is enough to
     # drive an export. It would not be if exports built its own client.

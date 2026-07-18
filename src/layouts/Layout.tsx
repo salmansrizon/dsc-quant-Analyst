@@ -6,6 +6,7 @@ const navItems = [
   { to: '/', label: 'Dashboard', end: true },
   { to: '/portfolio', label: 'Portfolio' },
   { to: '/watchlist', label: 'Watchlist' },
+  { to: '/screener', label: 'Screener' },
   { to: '/alerts', label: 'Alerts' },
 ];
 

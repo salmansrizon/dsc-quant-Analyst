@@ -12,6 +12,8 @@ import Portfolio from './pages/Portfolio';
 import Watchlist from './pages/Watchlist';
 import AlertsPage from './pages/AlertsPage';
 import AdminPanel from './pages/AdminPanel';
+import Screener from './pages/Screener';
+import StockDetail from './pages/StockDetail';
 
 interface AppProps {
   client?: AxiosInstance;
@@ -36,6 +38,8 @@ function App({ client = defaultClient }: AppProps) {
             <Route path="/portfolio" element={<Portfolio client={client} />} />
             <Route path="/watchlist" element={<Watchlist client={client} />} />
             <Route path="/alerts" element={<AlertsPage client={client} />} />
+            <Route path="/screener" element={<Screener client={client} />} />
+            <Route path="/stock/:symbol" element={<StockDetail client={client} />} />
           </Route>
 
           <Route

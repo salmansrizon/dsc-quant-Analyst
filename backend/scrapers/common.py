@@ -9,6 +9,7 @@ import logging
 from datetime import datetime, timedelta
 
 import requests
+from bs4 import BeautifulSoup
 from google.cloud import bigquery
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
@@ -68,6 +69,27 @@ def referer_headers(referer: str | None = None) -> dict:
     headers = HEADERS.copy()
     headers["Referer"] = referer or (BASE + "/")
     return headers
+
+
+def csrf_token(session: requests.Session, url: str, headers: dict | None = None) -> str:
+    """GET `url` and return its `__RequestVerificationToken`, or raise (#61).
+
+    lankabd answers a tokenless API call with a 400 and an *empty body* — no
+    message, no clue — so a missing token must fail loudly here, where the cause
+    ("the page markup changed") is obvious, rather than surfacing as an empty
+    400 at every one of hundreds of downstream requests. company_api already did
+    this; announcement.py used to send the request with token=None anyway.
+    """
+    page = session.get(url, headers=headers or HEADERS, timeout=30)
+    field = BeautifulSoup(page.text, "lxml").find(
+        "input", {"name": "__RequestVerificationToken"}
+    )
+    if not field or not field.get("value"):
+        raise RuntimeError(
+            f"No __RequestVerificationToken at {url} — the API returns 400 "
+            "without it. The page markup has probably changed."
+        )
+    return field["value"]
 
 
 def get_date_range(years: int = 3) -> tuple[str, str]:

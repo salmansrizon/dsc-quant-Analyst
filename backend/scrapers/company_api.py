@@ -44,10 +44,10 @@ from bs4 import BeautifulSoup
 
 try:
     from backend import db
-    from backend.scrapers.common import BASE, HEADERS, referer_headers, warm_session
+    from backend.scrapers.common import BASE, HEADERS, csrf_token, referer_headers, warm_session
 except ImportError:  # standalone: cwd=backend
     import db
-    from scrapers.common import BASE, HEADERS, referer_headers, warm_session
+    from scrapers.common import BASE, HEADERS, csrf_token, referer_headers, warm_session
 
 logger = logging.getLogger(__name__)
 
@@ -72,15 +72,8 @@ def open_session():
     the session, not the company.
     """
     session = warm_session()
-    page = session.get(f"{BASE}/Company/OverviewV2?cid=160",
-                       headers=referer_headers(), timeout=30)
-    field = BeautifulSoup(page.text, "lxml").find("input", {"name": "__RequestVerificationToken"})
-    if not field or not field.get("value"):
-        raise RuntimeError(
-            "No __RequestVerificationToken on the company page — the API will "
-            "return 400 without it. The page markup has probably changed."
-        )
-    return session, field["value"]
+    token = csrf_token(session, f"{BASE}/Company/OverviewV2?cid=160", referer_headers())
+    return session, token
 
 
 def symbol_by_cid(session) -> dict[int, str]:

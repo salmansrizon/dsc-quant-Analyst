@@ -95,9 +95,10 @@ def test_announcement_parses_list_group_items(monkeypatch):
     assert df.iloc[0]["Link"] == "https://lankabd.com/Company/Overview?cid=1"  # relative → absolute
 
 
-def test_announcement_tolerates_a_missing_csrf_token(monkeypatch):
-    # No token input on the init page: the scraper must still post (#61), not crash.
+def test_announcement_raises_on_a_missing_csrf_token(monkeypatch):
+    # No token input on the init page: fail loudly (#61) rather than posting
+    # token=None and getting an opaque empty 400.
     monkeypatch.setattr(announcement, "get_session",
                         lambda: _Session(get_html="<html></html>", post_html=ANNOUNCEMENTS))
-    df = announcement.scrape_announcement("GP", "2025-01-01", "2025-01-31")
-    assert df is not None and len(df) == 2
+    with pytest.raises(RuntimeError, match="RequestVerificationToken"):
+        announcement.scrape_announcement("GP", "2025-01-01", "2025-01-31")

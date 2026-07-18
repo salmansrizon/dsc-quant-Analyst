@@ -10,7 +10,7 @@ import requests
 # logging utility
 from utils.logger import Log
 from utils.bigquery_helper import BigQueryHelper
-from scrapers.common import HEADERS, get_session, get_date_range, get_symbol_universe
+from scrapers.common import HEADERS, get_session, get_date_range, get_symbol_universe, csrf_token
 
 # Create a module-level logger with timestamped file output in logs/ directory
 log_filename = f"logs/announcement_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log"
@@ -24,14 +24,11 @@ def scrape_announcement(sn, fromdate, todate, page=None, page_size=None):
         headers = HEADERS.copy()
         headers.update({'Referer': 'https://lankabd.com/', 'Dnt': '1', 'X-Requested-With': 'XMLHttpRequest'})
 
-        # 1. Initial GET to obtain cookies and CSRF token
+        # 1. Initial GET for cookies + the CSRF token. A missing token now raises
+        # (#61) rather than posting token=None and getting an opaque empty 400.
         initial_url = "https://lankabd.com/Home/MarketAnnouncements?catName=Archive"
         logger.debug(f"Making initial request to {initial_url}")
-        init_resp = session.get(initial_url, headers=headers, timeout=30)
-        init_soup = BeautifulSoup(init_resp.text, 'lxml')
-        
-        token_input = init_soup.find('input', {'name': '__RequestVerificationToken'})
-        token = token_input.get('value') if token_input else None
+        token = csrf_token(session, initial_url, headers)
 
         # 2. Prepare POST payload
         payload = {

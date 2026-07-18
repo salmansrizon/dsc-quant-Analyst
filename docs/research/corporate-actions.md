@@ -132,3 +132,22 @@ actions.
 3. **price_archive data quality: duplicate rows + zero closes** — dedupe on
    `(Symbol, Date)` and drop non-positive closes in `price_series`. Relates to #55
    (scraper tests) and the price archive scraper.
+
+## Ex-date convention CONFIRMED against live data (#73, 2026-07-18)
+
+The `record_date` = last-cum-day boundary was read off one example (EASTRNLUB).
+#73 confirmed it against four more bonus events, all showing the price full
+*through* `record_date` and dropping on the *next* trading day — so adjusting
+bars with `Date <= record_date` is correct, **no off-by-one**:
+
+| Symbol | Bonus | Factor 1/(1+X/100) | record_date close | ex-day (next) close | observed ratio |
+|---|---|---|---|---|---|
+| BRACBANK | 15% | 0.870 | 73.1 (2026/05/17) | 63.8 (2026/05/18) | 0.873 — near exact |
+| UTTARABANK | 25% | 0.800 | 25.4 (2026/05/20) | 20.8 (2026/05/21) | 0.819 |
+| PUBALIBANK | 20% | 0.833 | 38.7 (2026/05/20) | 33.2 (2026/05/21) | 0.858 |
+| MTB | 12% | 0.893 | 13.9 (2026/06/18) | 12.9 (2026/06/21) | 0.928 (low price, noisy) |
+
+Deviations from the theoretical factor are real ex-day price moves (bonus stocks
+commonly bounce) plus rounding on low-priced shares — the direction and boundary
+are unambiguous in every case. `backend/price_series.adjust_rows` and
+`market_service._adjustment_actions` (#63) need no change.

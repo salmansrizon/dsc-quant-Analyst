@@ -89,6 +89,20 @@ TABLES: dict[str, TableSpec] = {
         ("fs_value", "FLOAT64"), ("fs_order", "INT64"),
         ("updated_at", _TS), ("is_deleted", "BOOL"),
     )),
+    # Rights issues from /Home/RightArchive (#65). Ingest-only for now — the v2
+    # ex-rights price adjustment (needs the theoretical ex-rights value, more
+    # than a single factor) is deferred (#33). Grain: one rights issue.
+    "rights_archive": TableSpec("id", (
+        ("id", _STR),                      # symbol|record_date
+        ("symbol", _STR),
+        ("right_offer", _STR),             # raw "1R:2"
+        ("offer_new", "INT64"), ("offer_held", "INT64"),  # 1 new per 2 held
+        ("issue_price", "FLOAT64"), ("right_premium", "FLOAT64"),
+        ("record_date", "DATE"), ("year", "INT64"),
+        ("subscription_open", "DATE"), ("subscription_close", "DATE"),
+        ("source", _STR),
+        ("updated_at", _TS), ("is_deleted", "BOOL"),
+    )),
     # One dividend DECLARATION (#57). A company declares several a year, so
     # symbol|year would collapse them.
     "fundamentals_dividends": TableSpec("id", (

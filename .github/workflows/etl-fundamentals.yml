@@ -38,16 +38,27 @@ jobs:
           BIGQUERY_DATASET_ID: ${{ vars.BIGQUERY_DATASET_ID }}
         run: python -m backend.bootstrap_tables
 
+      # scrapers/-level scripts run as `-m scrapers.X` from backend/: Python
+      # puts the script's *directory* on the path, so `python scrapers/x.py`
+      # would leave `import db` / `from scrapers.common` unresolvable; `-m` puts
+      # the cwd (backend) on the path instead (#65 found this).
       - name: Company API (ratios + statements)
         working-directory: backend
         env:
           GCP_SERVICE_ACCOUNT_JSON: ${{ secrets.GCP_SERVICE_ACCOUNT_JSON }}
           BIGQUERY_DATASET_ID: ${{ vars.BIGQUERY_DATASET_ID }}
-        run: python scrapers/company_api.py
+        run: python -m scrapers.company_api
 
       - name: Dividend archive (earnings + dividends)
         working-directory: backend
         env:
           GCP_SERVICE_ACCOUNT_JSON: ${{ secrets.GCP_SERVICE_ACCOUNT_JSON }}
           BIGQUERY_DATASET_ID: ${{ vars.BIGQUERY_DATASET_ID }}
-        run: python scrapers/fundamentals.py
+        run: python -m scrapers.fundamentals
+
+      - name: Rights archive (#65)
+        working-directory: backend
+        env:
+          GCP_SERVICE_ACCOUNT_JSON: ${{ secrets.GCP_SERVICE_ACCOUNT_JSON }}
+          BIGQUERY_DATASET_ID: ${{ vars.BIGQUERY_DATASET_ID }}
+        run: python -m scrapers.rights_archive

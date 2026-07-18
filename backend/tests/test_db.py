@@ -68,8 +68,19 @@ def test_qualified_name_has_no_backticks():
     assert db.qualified_name("watchlists") == f"{db.PROJECT}.{db.DATASET}.watchlists"
 
 
-def test_client_is_a_singleton():
-    assert db.client() is db.client()
+def test_client_is_a_singleton(monkeypatch):
+    # Built once, then reused — proven without real credentials by counting
+    # constructor calls (the live build needs a service-account key CI lacks).
+    monkeypatch.setattr(db, "_client", None)
+    builds = []
+
+    class _Fake:
+        pass
+
+    monkeypatch.setattr(db.bigquery, "Client", lambda *a, **k: (builds.append(1), _Fake())[1])
+    first = db.client()
+    assert db.client() is first
+    assert len(builds) == 1
 
 
 def test_no_service_module_binds_a_client_at_import_time():

@@ -16,7 +16,6 @@ import os
 import tempfile
 from datetime import datetime, timezone
 
-import pandas as pd
 from google.cloud import bigquery
 from dotenv import load_dotenv
 
@@ -184,13 +183,25 @@ def query_rows(sql: str, params: list["bigquery.ScalarQueryParameter"] | None = 
     return [dict(r) for r in client().query(sql, job_config=job_config).result()]
 
 
+def _json_safe(row: dict) -> dict:
+    """A row with datetime/date values isoformatted for load_table_from_json.
+
+    load_table_from_dataframe needs pyarrow to serialize a DataFrame, and
+    pyarrow alone is ~500MB — it single-handedly pushed the Vercel function
+    bundle over the platform's 500MB limit. load_table_from_json does the same
+    free-tier-eligible load job from plain dicts instead (this was fixed once
+    before, in bq_service.py pre-#41, and reintroduced when insert_rows moved
+    to db.py — fixed here for good this time).
+    """
+    return {k: v.isoformat() if hasattr(v, "isoformat") else v for k, v in row.items()}
+
+
 def insert_rows(table: str, rows: list[dict]) -> None:
     """Append rows via a load job (WRITE_APPEND, free-tier eligible)."""
     if not rows:
         return
-    df = pd.DataFrame(rows)
-    job = client().load_table_from_dataframe(
-        df, qualified_name(table),
+    job = client().load_table_from_json(
+        [_json_safe(r) for r in rows], qualified_name(table),
         job_config=bigquery.LoadJobConfig(
             write_disposition=bigquery.WriteDisposition.WRITE_APPEND,
             schema_update_options=[bigquery.SchemaUpdateOption.ALLOW_FIELD_ADDITION],

@@ -15,10 +15,10 @@ class _RecordingClient:
         self.loaded = []
         self.queries = []
 
-    def load_table_from_dataframe(self, df, table, job_config=None):
+    def load_table_from_json(self, rows, table, job_config=None):
         self.loaded.append({
             "table": table,
-            "rows": df.to_dict("records"),
+            "rows": list(rows),
             "disposition": job_config.write_disposition if job_config else None,
         })
         return _Done()
@@ -72,7 +72,7 @@ def test_append_version_keeps_explicit_version_columns(client):
     ])
     row = client.loaded[0]["rows"][0]
     assert row["is_deleted"] is True
-    assert row["updated_at"] == stamp
+    assert row["updated_at"] == stamp.isoformat(), "load_table_from_json needs isoformat, not a datetime object"
 
 
 def test_append_version_rejects_a_row_without_an_id(client):

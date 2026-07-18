@@ -1,7 +1,9 @@
 """Edge-trigger alert sweep (ticket #66, reworked from #48/#34).
 
     python -m backend.alert_checker          # from the repo root
-    python alert_checker.py                  # from backend/
+
+Run as a module, not a bare script: its dependencies import package-relative
+(#56), so `python alert_checker.py` from backend/ cannot resolve them.
 
 **Edge-trigger (the #34 decision).** An alert fires on the *crossing* — the
 sweep it goes from unmet to met — not on merely being met. Each alert's
@@ -30,14 +32,14 @@ a 6h budget instead of a function timeout. Nothing here changes; only the
 trigger does.
 """
 import logging
-import os
 import sys
 from typing import Callable, Optional
 
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-
-from backend import alerts_service  # noqa: E402
-from backend import alert_conditions  # noqa: E402
+# Package-qualified imports (#56): the service modules this pulls in use
+# `from . import db` relative imports, so they only resolve when loaded as
+# members of the `backend` package — which is why this runs as `python -m
+# backend.alert_checker` (or is imported by the API), never as a bare script.
+from backend import alerts_service, alert_conditions
 
 logging.basicConfig(level=logging.INFO, format="%(message)s")
 logger = logging.getLogger(__name__)

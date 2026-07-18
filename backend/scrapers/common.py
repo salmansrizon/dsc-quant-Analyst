@@ -23,7 +23,10 @@ _logger = logging.getLogger(__name__)
 BASE = "https://lankabd.com"
 
 HEADERS = {
-    'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+    # Identifiable per #55: a bot tag appended to a browser base — honest about
+    # who is scraping on an unattended schedule, without dropping the browser
+    # string the site serves content to.
+    'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36 (+dsc-quant-analyst ETL bot)',
     'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
     'Accept-Language': 'en-US,en;q=0.5',
     'Accept-Encoding': 'gzip, deflate, br',

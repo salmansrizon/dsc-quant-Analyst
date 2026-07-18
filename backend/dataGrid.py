@@ -10,7 +10,7 @@ import sys
 # logging utility
 from utils.logger import Log
 from utils.bigquery_helper import BigQueryHelper
-from scrapers.common import HEADERS, get_session
+from scrapers.common import HEADERS, get_session, header_keyed_rows
 from datetime import datetime as _dt
 
 # module logger
@@ -95,19 +95,12 @@ def scrape_lankabd(sector=None):
             logger.warning("No data table found on the page")
             return None
             
-        # Extract table headers
-        headers_list = [th.text.strip() for th in table.find('thead').find_all('th')]
-        
-        # Extract table rows
-        data = []
-        rows = table.find('tbody').find_all('tr')
-        
-        for row in rows:
-            cols = row.find_all('td')
-            data.append([col.text.strip() for col in cols])
-        
-        # Create a DataFrame
-        df = pd.DataFrame(data, columns=headers_list)
+        # Header-zip via the shared helper (#60).
+        rows = header_keyed_rows(table)
+        if not rows:
+            logger.warning("Data table had no header-keyed rows")
+            return None
+        df = pd.DataFrame(rows)
         
         # Standardize column naming and drop unnamed columns
         df.rename(columns={

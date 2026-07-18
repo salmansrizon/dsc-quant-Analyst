@@ -95,6 +95,28 @@ def test_announcement_parses_list_group_items(monkeypatch):
     assert df.iloc[0]["Link"] == "https://lankabd.com/Company/Overview?cid=1"  # relative → absolute
 
 
+ANNOUNCEMENTS_TABLE = """
+<html><body>
+  <table>
+    <thead><tr><th>Symbol</th><th>Date</th><th>Details</th></tr></thead>
+    <tbody>
+      <tr><td>GP</td><td>2025-01-02</td><td>Board meeting</td></tr>
+    </tbody>
+  </table>
+</body></html>
+"""
+
+
+def test_announcement_falls_back_to_the_shared_table_parser(monkeypatch):
+    # No list-group items: the legacy table path uses common.header_keyed_rows (#60).
+    monkeypatch.setattr(announcement, "get_session",
+                        lambda: _Session(get_html=INIT_WITH_TOKEN, post_html=ANNOUNCEMENTS_TABLE))
+    df = announcement.scrape_announcement("GP", "2025-01-01", "2025-01-31")
+    assert df is not None and len(df) == 1
+    assert (df["Symbol"] == "GP").all()
+    assert df.iloc[0]["Details"] == "Board meeting"
+
+
 def test_announcement_raises_on_a_missing_csrf_token(monkeypatch):
     # No token input on the init page: fail loudly (#61) rather than posting
     # token=None and getting an opaque empty 400.

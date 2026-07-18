@@ -71,6 +71,41 @@ def referer_headers(referer: str | None = None) -> dict:
     return headers
 
 
+def biggest_table(html):
+    """The <table> with the most rows, or None. Accepts HTML text or a soup.
+
+    The table-selection strategy fundamentals uses; the other scrapers select by
+    id/class instead, but all of them then header-zip the same way — see
+    header_keyed_rows (#60).
+    """
+    soup = html if hasattr(html, "find_all") else BeautifulSoup(html, "lxml")
+    tables = soup.find_all("table")
+    return max(tables, key=lambda t: len(t.find_all("tr")), default=None)
+
+
+def header_keyed_rows(table) -> list[dict]:
+    """Header-keyed row dicts from a <table>: the th's are the keys, each td row
+    a value set (#60). The one home for the header-zip the four scrapers each
+    hand-rolled — they differ only in *how the table is chosen*, not in this.
+
+    A row with no <td> is the header row (or a spacer) and is skipped — so this
+    works whether the headers sit in a <thead>/<tr> or as bare <th>. Rows whose
+    cell count doesn't match the header count are also skipped (a colspan'd
+    sub-header). Returns [] when there is no table or no header.
+    """
+    if table is None:
+        return []
+    headers = [th.get_text(strip=True) for th in table.find_all("th")]
+    if not headers:
+        return []
+    out = []
+    for tr in table.find_all("tr"):
+        cells = [td.get_text(strip=True) for td in tr.find_all("td")]
+        if cells and len(cells) == len(headers):
+            out.append(dict(zip(headers, cells)))
+    return out
+
+
 def csrf_token(session: requests.Session, url: str, headers: dict | None = None) -> str:
     """GET `url` and return its `__RequestVerificationToken`, or raise (#61).
 

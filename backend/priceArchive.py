@@ -10,7 +10,7 @@ from urllib.parse import urlencode
 # logging utility
 from utils.logger import Log
 from utils.bigquery_helper import BigQueryHelper
-from scrapers.common import HEADERS, get_session, get_date_range, get_symbol_universe
+from scrapers.common import HEADERS, get_session, get_date_range, get_symbol_universe, header_keyed_rows
 
 # create a module-level logger with file output
 from datetime import datetime as _dt
@@ -66,39 +66,13 @@ def scrape_price_archive(symbol, from_date, to_date):
             logger.warning(f"No table found for {symbol}")
             return None
         
-        # Extract headers
-        thead = table.find('thead')
-        if thead:
-            headers_list = [th.text.strip() for th in thead.find_all('th')]
-        else:
-            headers_list = None
-        
-        # Extract data rows
-        tbody = table.find('tbody')
-        if not tbody:
+        # Header-zip the chosen table via the shared helper (#60).
+        rows = header_keyed_rows(table)
+        if not rows:
+            logger.warning(f"Parsed table but no header-keyed rows for {symbol}")
             return None
-        
-        rows = tbody.find_all('tr')
-        
-        if len(rows) == 0:
-            return None
-        
-        data = []
-        for row in rows:
-            cols = row.find_all('td')
-            if cols:
-                data.append([col.text.strip() for col in cols])
-        
-        if not data:
-            logger.warning(f"Parsed table but no rows present for {symbol}")
-            return None
-        
-        # Create DataFrame
-        if headers_list and len(headers_list) == len(data[0]):
-            df = pd.DataFrame(data, columns=headers_list)
-        else:
-            df = pd.DataFrame(data)
-        
+        df = pd.DataFrame(rows)
+
         # Standardize column names to match migration and CSV headers
         df.rename(columns={
             'symbol': 'Symbol',

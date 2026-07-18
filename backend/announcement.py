@@ -10,7 +10,7 @@ import requests
 # logging utility
 from utils.logger import Log
 from utils.bigquery_helper import BigQueryHelper
-from scrapers.common import HEADERS, get_session, get_date_range, get_symbol_universe, csrf_token
+from scrapers.common import HEADERS, get_session, get_date_range, get_symbol_universe, csrf_token, header_keyed_rows
 
 # Create a module-level logger with timestamped file output in logs/ directory
 log_filename = f"logs/announcement_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log"
@@ -101,37 +101,11 @@ def scrape_announcement(sn, fromdate, todate, page=None, page_size=None):
         # This handles legacy HTML table structures if the site used table-based layout previously
         table = soup.find('table')
         if table:
-            # Extract column headers from thead if present
-            thead = table.find('thead')
-            if thead:
-                headers_list = [th.text.strip() for th in thead.find_all('th')]
-            else:
-                headers_list = None
-
-            # Extract table rows from tbody or tr elements
-            tbody = table.find('tbody')
-            rows = tbody.find_all('tr') if tbody else table.find_all('tr')
-
+            rows = header_keyed_rows(table)  # shared header-zip (#60)
             if not rows:
-                logger.warning(f"No rows found in announcement table for {sn}")
+                logger.warning(f"Announcement table had no header-keyed rows for {sn}")
                 return None
-
-            # Parse each table row into a list of column values
-            tab_data = []
-            for row in rows:
-                cols = row.find_all('td')
-                if cols:
-                    tab_data.append([col.text.strip() for col in cols])
-
-            if not tab_data:
-                logger.warning(f"Parsed table but no data rows for {sn}")
-                return None
-
-            # Create DataFrame with or without headers depending on availability
-            if headers_list and len(headers_list) == len(tab_data[0]):
-                df = pd.DataFrame(tab_data, columns=headers_list)
-            else:
-                df = pd.DataFrame(tab_data)
+            df = pd.DataFrame(rows)
 
             # Add symbol column to match list-based layout output format
             df['Symbol'] = sn

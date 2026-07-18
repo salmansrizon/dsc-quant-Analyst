@@ -30,10 +30,10 @@ from bs4 import BeautifulSoup
 
 try:
     from backend import db
-    from backend.scrapers.common import BASE, referer_headers, warm_session
+    from backend.scrapers.common import BASE, referer_headers, warm_session, biggest_table, header_keyed_rows
 except ImportError:  # standalone: cwd=backend
     import db
-    from scrapers.common import BASE, referer_headers, warm_session
+    from scrapers.common import BASE, referer_headers, warm_session, biggest_table, header_keyed_rows
 
 logger = logging.getLogger(__name__)
 
@@ -167,27 +167,9 @@ def _row_id(symbol: str, year: int, discriminator: str, publish: date | None) ->
     return f"{symbol}|{year}|{discriminator}|{publish or 'nodate'}"
 
 
-def _biggest_table(html: str):
-    tables = BeautifulSoup(html, "lxml").find_all("table")
-    if not tables:
-        return None
-    return max(tables, key=lambda t: len(t.find_all("tr")))
-
-
 def _rows(html: str) -> list[dict]:
-    """Header-keyed dicts from the page's largest table."""
-    table = _biggest_table(html)
-    if table is None:
-        return []
-    headers = [th.get_text(strip=True) for th in table.find_all("th")]
-    if not headers:
-        return []
-    out = []
-    for tr in table.find_all("tr")[1:]:
-        cells = [td.get_text(strip=True) for td in tr.find_all("td")]
-        if len(cells) == len(headers):
-            out.append(dict(zip(headers, cells)))
-    return out
+    """Header-keyed dicts from the page's largest table (#60 shared helper)."""
+    return header_keyed_rows(biggest_table(html))
 
 
 def parse_dividend_archive(html: str) -> tuple[list[dict], list[dict]]:

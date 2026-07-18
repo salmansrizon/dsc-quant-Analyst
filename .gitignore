@@ -39,3 +39,7 @@ gcp-key.json
 !vercel.json
 !filters.json
 !pyproject.toml
+
+# stray local artifacts
+graphify-out/
+*copy.md

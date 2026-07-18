@@ -1,22 +1,22 @@
-"""Checks price alerts against the latest market data (ticket #48).
+"""Edge-trigger alert sweep (ticket #66, reworked from #48/#34).
 
     python -m backend.alert_checker          # from the repo root
     python alert_checker.py                  # from backend/
 
-**This does not notify anyone.** There is no notification channel yet — that
-decision is #34. Marking an alert triggered is what consumes it (the user never
-sees it again), so an alert is only marked once a notifier accepts it. With no
-notifier, nothing is marked and matched alerts stay pending.
+**Edge-trigger (the #34 decision).** An alert fires on the *crossing* — the
+sweep it goes from unmet to met — not on merely being met. Each alert's
+`last_met` records where it was; a fire happens only on a False->True flip, and
+`last_met` is written back only when it actually flips. This is what dissolves
+#48's old accumulation problem: there is no growing backlog of "still met"
+alerts to expire, because a crossing is by definition a fresh event.
 
-**What that costs, plainly.** A met alert now stays pending indefinitely: every
-run re-reports it, and the pending set only grows until #34 lands. When a
-channel does land it will find every alert matched since today still waiting,
-against prices that are long stale — so #34 needs a cutoff rule for old pending
-alerts, not just a transport. This trades a silent loss for a visible backlog;
-the backlog is the better problem, but it is a real one.
+**One-shot.** A fired alert is marked inactive (`is_active=False`) and does not
+re-arm in Phase 1. A down-crossing (met->unmet) just rebaselines `last_met`.
 
-The exit code says so: non-zero while alerts are met and undeliverable, because
-"nobody is being told" is not a healthy run.
+**Delivery is the notifier's job**, injected as a seam so the pure crossing
+logic here never imports the email provider. An undelivered crossing is *not*
+recorded as fired, so the next sweep retries it — a delivery failure never
+consumes an alert (the #48 guarantee, kept).
 """
 import logging
 import os
@@ -26,95 +26,114 @@ from typing import Callable, Optional
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from backend import alerts_service  # noqa: E402
+from backend import alert_conditions  # noqa: E402
 
 logging.basicConfig(level=logging.INFO, format="%(message)s")
 logger = logging.getLogger(__name__)
 
-# A notifier takes an alert and returns whether it was delivered. Nothing
-# implements this yet — see #34.
+# A notifier takes an alert and returns whether it was delivered.
 Notifier = Callable[[dict], bool]
 
 
-def is_met(alert: dict) -> bool:
-    """Whether the alert's condition holds at the current price."""
-    price = alert.get("current_price")
-    target = alert.get("target_price")
-    if price is None or target is None:
-        return False  # no price for that symbol — cannot say
+def check_alerts(notifier: Optional[Notifier] = None) -> dict:
+    """Sweep active alerts, fire the up-crossings, rebaseline the down-crossings.
 
+    Returns counts, explicitly separating what *fired and was delivered* from
+    what crossed but *could not be delivered* — different questions, and a
+    single list cannot answer both.
+    """
+    alerts = alerts_service.active_alerts()
+    fired, undelivered, rebaselined = [], [], []
+
+    for alert in alerts:
+        met = alert_conditions.is_met(
+            alert.get("type"), alert.get("condition_json"), alert.get("current_price"),
+        )
+        if met is None:
+            continue  # no price / unevaluable this sweep — say nothing
+
+        last_met = alert.get("last_met")
+        if alert_conditions.is_crossing(last_met, met):
+            logger.info("CROSSING: alert %s (%s) met at price %s",
+                        alert["id"], alert["symbol"], alert.get("current_price"))
+            delivered = _deliver(alert, notifier)
+            if delivered:
+                alerts_service.record_state(alert, met=True, fired=True)
+                fired.append(alert)
+            else:
+                # Not recorded as fired: last_met stays False, so the next sweep
+                # sees the same crossing and retries. A failure never consumes it.
+                undelivered.append(alert)
+        elif met != bool(last_met):
+            # A down-crossing (met->unmet): just rebaseline, no fire.
+            alerts_service.record_state(alert, met=met, fired=False)
+            rebaselined.append(alert)
+
+    logger.info("Swept %d active alert(s): %d fired, %d undelivered, %d rebaselined.",
+                len(alerts), len(fired), len(undelivered), len(rebaselined))
+    return {"fired": fired, "undelivered": undelivered, "rebaselined": rebaselined}
+
+
+def _deliver(alert: dict, notifier: Optional[Notifier]) -> bool:
+    """Hand an alert to the notifier; a raise or a None notifier is non-delivery."""
+    if notifier is None:
+        logger.warning("Alert %s crossed but no notifier is wired — leaving it to retry.",
+                       alert["id"])
+        return False
     try:
-        price = float(price)
-        target = float(target)
-    except (TypeError, ValueError):
+        return bool(notifier(alert))
+    except Exception:
+        logger.exception("Notifier raised for alert %s — leaving it to retry.", alert["id"])
         return False
 
-    direction = (alert.get("direction") or "").lower()
-    if direction == "above":
-        return price >= target
-    if direction == "below":
-        return price <= target
-    logger.warning("Alert %s has an unknown direction %r — skipping.",
-                   alert.get("id"), alert.get("direction"))
-    return False
 
+def build_email_notifier() -> Notifier:
+    """A notifier that emails the alert's owner via Resend, with log-before-send.
 
-def check_alerts(notifier: Optional[Notifier] = None) -> dict:
-    """Find alerts whose condition is met and try to deliver them.
-
-    Returns {"delivered": [...], "undelivered": [...]} — both, explicitly,
-    because "what fired" and "who still has not been told" are different
-    questions and a single list cannot answer both.
-
-    Only delivered alerts are marked triggered; see the module docstring.
+    Local imports so the pure sweep above is importable (and testable) without
+    pulling in the email provider or the user service.
     """
-    pending = alerts_service.pending_alerts()
-    if not pending:
-        logger.info("No pending alerts to check.")
-        return {"delivered": [], "undelivered": []}
+    from backend import notifications_service, email_sender
+    from backend.user_service import get_user_by_id
 
-    met = [a for a in pending if is_met(a)]
-    for a in met:
-        logger.info("ALERT MET: %s at %s (target: %s %s)",
-                    a["symbol"], a["current_price"], a["target_price"], a["direction"])
+    def notify(alert: dict) -> bool:
+        user = get_user_by_id(alert["user_id"])
+        if not user or not user.email:
+            logger.warning("Alert %s owner has no email — cannot deliver.", alert["id"])
+            return False
 
-    if not met:
-        logger.info("Checked %d pending alert(s); none met their condition.", len(pending))
-        return {"delivered": [], "undelivered": []}
+        cond = alert_conditions.parse_condition(alert.get("condition_json"))
+        subject = f"{alert['symbol']} is {cond.get('op')} {cond.get('value')}"
+        body = (f"<p>Your alert fired: <b>{alert['symbol']}</b> is "
+                f"{cond.get('op')} {cond.get('value')} "
+                f"(now {alert.get('current_price')}).</p>")
 
-    if notifier is None:
-        logger.warning(
-            "%d alert(s) met their condition but there is no notification channel "
-            "(#34). Leaving them pending — marking them now would consume them "
-            "without telling anyone.", len(met),
+        nid = notifications_service.begin(
+            user_id=alert["user_id"], alert_id=alert["id"],
+            channel="email", type_="price_alert", subject=subject,
         )
-        return {"delivered": [], "undelivered": met}
+        if nid is None:
+            # A sending/sent row already exists for this crossing — already
+            # delivered. Treat as delivered so the one-shot is marked fired.
+            return True
 
-    delivered, undelivered = [], []
-    for alert in met:
         try:
-            if notifier(alert):
-                delivered.append(alert)
-            else:
-                logger.warning("Notifier declined alert %s — leaving it pending.", alert["id"])
-                undelivered.append(alert)
-        except Exception:
-            # A delivery failure must not consume the alert.
-            logger.exception("Notifier raised for alert %s — leaving it pending.", alert["id"])
-            undelivered.append(alert)
+            ok = email_sender.send_email(user.email, subject, body)
+        except Exception as exc:
+            notifications_service.resolve(nid, notifications_service.FAILED, error=str(exc))
+            raise
+        notifications_service.resolve(
+            nid, notifications_service.SENT if ok else notifications_service.FAILED,
+        )
+        return ok
 
-    if delivered:
-        marked = alerts_service.mark_triggered([a["id"] for a in delivered])
-        logger.info("Delivered and marked %d alert(s) triggered.", marked)
-    return {"delivered": delivered, "undelivered": undelivered}
+    return notify
 
 
 def main() -> int:
-    """Entry point. Non-zero when alerts are met but nobody can be told.
-
-    dataGrid.py:main does the same for a refused partial scrape — a scheduler
-    reads the exit code, not the log.
-    """
-    return 1 if check_alerts()["undelivered"] else 0
+    """Entry point. Non-zero when a crossing could not be delivered."""
+    result = check_alerts(build_email_notifier())
+    return 1 if result["undelivered"] else 0
 
 
 if __name__ == "__main__":

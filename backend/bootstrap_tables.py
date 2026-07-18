@@ -49,6 +49,28 @@ SCHEMAS = {
         ("is_triggered", "BOOL"), ("triggered_at", _TS),
         ("created_at", _TS), ("updated_at", _TS), ("is_deleted", "BOOL"),
     ],
+    # Type-discriminated alerts (#66, from #34). One shape for all 10 alert
+    # types: `type` names the detector, `condition_json` holds its per-type
+    # condition ({"op":"above","value":250}), so adding a type is data, never an
+    # ALTER. `last_met` is the edge-trigger state (fire on the false->true flip,
+    # not on being met); `is_active` is the one-shot flag (false after firing).
+    # Supersedes `price_alerts` — see migrations/002.
+    "alerts": [
+        ("id", _STR), ("user_id", _STR), ("type", _STR), ("symbol", _STR),
+        ("condition_json", _STR), ("last_met", "BOOL"), ("is_active", "BOOL"),
+        ("created_at", _TS), ("updated_at", _TS), ("is_deleted", "BOOL"),
+    ],
+    # Delivery log (#66, from #34). Append-only; `status` is also the
+    # log-before-send lock — a `sending`/`sent` row for a crossing blocks a
+    # duplicate send. Transactional email (#39 password reset) logs here too,
+    # with type=password_reset and alert_id NULL.
+    "notifications": [
+        ("id", _STR), ("user_id", _STR), ("alert_id", _STR),
+        ("channel", _STR), ("type", _STR), ("subject", _STR),
+        ("status", _STR),        # sending | sent | failed | bounced
+        ("attempts", "INT64"), ("error", _STR),
+        ("created_at", _TS), ("updated_at", _TS), ("is_deleted", "BOOL"),
+    ],
     # Reported fundamentals (#57). Grain: one row per symbol per reporting
     # period. Fed by both DividendArchive (annual, 12y of history) and
     # GetLatestEarnings (current period).

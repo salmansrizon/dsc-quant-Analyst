@@ -1,4 +1,6 @@
-from fastapi import FastAPI, Depends, HTTPException, status, Query, Response
+import os
+
+from fastapi import FastAPI, Depends, HTTPException, status, Query, Response, Header
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import OAuth2PasswordBearer
 
@@ -176,6 +178,30 @@ def alerts_create(payload: AlertCreate, current_user: UserResponse = Depends(get
 def alerts_delete(alert_id: str, current_user: UserResponse = Depends(get_current_user)):
     alerts_service.delete_alert(alert_id, current_user.id)
     return {"status": "deleted"}
+
+
+# ── Internal (cron) ──────────────────────────────────────────────────────────
+
+@app.post("/api/internal/run-alerts")
+def run_alerts(authorization: str = Header(default="")):
+    """The edge-trigger alert sweep, triggered by Vercel Cron (#66, from #34).
+
+    Serverless has no in-process scheduler, so an external trigger drives the
+    sweep. Auth is the platform-signed `Authorization: Bearer $CRON_SECRET`
+    header Vercel Cron sends — a missing or wrong secret is a 401, and an unset
+    server-side secret fails closed (never open the endpoint to the world).
+    """
+    secret = os.environ.get("CRON_SECRET")
+    if not secret or authorization != f"Bearer {secret}":
+        raise HTTPException(status_code=401, detail="Unauthorized")
+
+    from . import alert_checker
+    result = alert_checker.check_alerts(alert_checker.build_email_notifier())
+    return {
+        "fired": len(result["fired"]),
+        "undelivered": len(result["undelivered"]),
+        "rebaselined": len(result["rebaselined"]),
+    }
 
 
 # ── Admin ────────────────────────────────────────────────────────────────────

@@ -8,5 +8,8 @@
     "api/index.py": {
       "excludeFiles": "{node_modules,backend/sample,Documantations,*.csv,*.log}"
     }
-  }
+  },
+  "crons": [
+    { "path": "/api/internal/run-alerts", "schedule": "0 10 * * *" }
+  ]
 }

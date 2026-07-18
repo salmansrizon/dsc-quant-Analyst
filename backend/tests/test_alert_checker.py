@@ -1,166 +1,127 @@
-"""Tests for the alert-checker batch job (ticket #48).
+"""The edge-trigger alert sweep (ticket #66, reworked from #48).
 
-The job had three defects and no tests at all:
-  1. It merged pandas frames on 'Symbol' while the alerts table stores 'symbol',
-     so it raised KeyError before firing a single alert. The join now happens in
-     SQL (alerts_service.pending_alerts), so the mismatch cannot recur.
-  2. It built its UPDATE by string interpolation — the only mutation bypassing
-     db. DML is now a 403 anyway on the free tier (#52).
-  3. It committed is_triggered=true and THEN reached a `# TODO: notification`
-     comment, consuming every alert it ever fired without telling anyone.
+The sweep fires on the crossing, not on being met; an undelivered crossing is
+never recorded as fired, so it retries; a fired alert is one-shot. These tests
+drive check_alerts over a controlled set of active alerts and record every
+record_state call — no BigQuery.
 """
 import pytest
 
 from backend import alert_checker
+from backend import alert_conditions as ac
 
 
 def _alert(**over):
     base = {
-        "id": "a1", "user_id": "u1", "symbol": "GP",
-        "target_price": 100.0, "direction": "above", "current_price": 150.0,
+        "id": "a1", "user_id": "u1", "type": ac.PRICE, "symbol": "GP",
+        "condition_json": ac.price_condition("above", 100.0),
+        "last_met": False, "current_price": 150.0,
     }
     base.update(over)
     return base
 
 
-# ── is_met ───────────────────────────────────────────────────────────────────
-
-@pytest.mark.parametrize("direction, target, price, expected", [
-    ("above", 100.0, 150.0, True),
-    ("above", 100.0, 100.0, True),    # at the target counts
-    ("above", 100.0, 99.9, False),
-    ("below", 100.0, 50.0, True),
-    ("below", 100.0, 100.0, True),
-    ("below", 100.0, 100.1, False),
-])
-def test_is_met_compares_against_the_target(direction, target, price, expected):
-    assert alert_checker.is_met(
-        _alert(direction=direction, target_price=target, current_price=price)
-    ) is expected
-
-
-def test_is_met_is_false_when_the_symbol_has_no_price():
-    # The LEFT JOIN yields NULL for a symbol absent from the datamatrix.
-    assert alert_checker.is_met(_alert(current_price=None)) is False
-
-
-def test_is_met_is_false_on_an_unparsable_price():
-    assert alert_checker.is_met(_alert(current_price="n/a")) is False
-
-
-def test_is_met_is_false_on_an_unknown_direction():
-    assert alert_checker.is_met(_alert(direction="sideways")) is False
-
-
-def test_is_met_tolerates_a_null_direction():
-    assert alert_checker.is_met(_alert(direction=None)) is False
-
-
-def test_is_met_accepts_numeric_strings():
-    assert alert_checker.is_met(_alert(target_price="100", current_price="150")) is True
-
-
-# ── check_alerts ─────────────────────────────────────────────────────────────
-
 @pytest.fixture
-def pending(monkeypatch):
-    """Control what pending_alerts returns; record any mark_triggered call."""
-    state = {"alerts": [], "marked": []}
+def sweep(monkeypatch):
+    """Control active_alerts; record record_state(alert, met, fired) calls."""
+    state = {"alerts": [], "recorded": []}
 
-    def _mark(ids):
-        state["marked"].extend(ids)
-        return len(ids)
+    def _record(alert, met, fired):
+        state["recorded"].append({"id": alert["id"], "met": met, "fired": fired})
 
-    monkeypatch.setattr(alert_checker.alerts_service, "pending_alerts",
+    monkeypatch.setattr(alert_checker.alerts_service, "active_alerts",
                         lambda: state["alerts"])
-    monkeypatch.setattr(alert_checker.alerts_service, "mark_triggered", _mark)
+    monkeypatch.setattr(alert_checker.alerts_service, "record_state", _record)
     return state
 
 
-def test_no_pending_alerts_is_a_noop(pending):
-    assert alert_checker.check_alerts() == {"delivered": [], "undelivered": []}
-    assert pending["marked"] == []
-
-
-def test_alerts_that_do_not_meet_their_condition_are_left_alone(pending):
-    pending["alerts"] = [_alert(current_price=50.0)]  # target 100, direction above
-    assert alert_checker.check_alerts() == {"delivered": [], "undelivered": []}
-    assert pending["marked"] == []
-
-
-def test_without_a_notifier_a_met_alert_is_reported_but_not_consumed(pending):
-    """The heart of defect 3: marking is what consumes the alert."""
-    pending["alerts"] = [_alert()]
-
-    result = alert_checker.check_alerts()
-
-    assert [a["id"] for a in result["undelivered"]] == ["a1"]
-    assert result["delivered"] == []
-    assert pending["marked"] == [], "an undelivered alert must stay pending (#34)"
-
-
-def test_a_delivered_alert_is_marked_triggered(pending):
-    pending["alerts"] = [_alert()]
+def test_no_active_alerts_is_a_noop(sweep):
     result = alert_checker.check_alerts(notifier=lambda a: True)
-    assert [a["id"] for a in result["delivered"]] == ["a1"]
-    assert result["undelivered"] == []
-    assert pending["marked"] == ["a1"]
+    assert result["fired"] == [] and result["rebaselined"] == []
+    assert sweep["recorded"] == []
 
 
-def test_a_declined_alert_stays_pending(pending):
-    pending["alerts"] = [_alert()]
+def test_an_up_crossing_fires_and_is_recorded_fired(sweep):
+    sweep["alerts"] = [_alert(last_met=False, current_price=150.0)]  # above 100
+    result = alert_checker.check_alerts(notifier=lambda a: True)
+    assert [a["id"] for a in result["fired"]] == ["a1"]
+    assert sweep["recorded"] == [{"id": "a1", "met": True, "fired": True}]
+
+
+def test_still_met_does_not_fire_and_records_nothing(sweep):
+    # last_met already True: being met is not a crossing.
+    sweep["alerts"] = [_alert(last_met=True, current_price=150.0)]
+    result = alert_checker.check_alerts(notifier=lambda a: True)
+    assert result["fired"] == [] and result["rebaselined"] == []
+    assert sweep["recorded"] == []
+
+
+def test_a_down_crossing_rebaselines_without_firing(sweep):
+    # Was met, now below the target: rebaseline last_met=False, no fire.
+    sweep["alerts"] = [_alert(last_met=True, current_price=50.0)]
+    result = alert_checker.check_alerts(notifier=lambda a: True)
+    assert result["fired"] == []
+    assert [a["id"] for a in result["rebaselined"]] == ["a1"]
+    assert sweep["recorded"] == [{"id": "a1", "met": False, "fired": False}]
+
+
+def test_an_undelivered_crossing_is_not_recorded_so_it_retries(sweep):
+    sweep["alerts"] = [_alert(last_met=False, current_price=150.0)]
     result = alert_checker.check_alerts(notifier=lambda a: False)
-    assert result["delivered"] == []
     assert [a["id"] for a in result["undelivered"]] == ["a1"]
-    assert pending["marked"] == []
+    assert sweep["recorded"] == [], "a failed delivery must not consume the crossing"
 
 
-def test_a_notifier_that_raises_does_not_consume_the_alert(pending):
+def test_a_notifier_that_raises_does_not_consume_the_crossing(sweep):
     def boom(alert):
-        raise RuntimeError("telegram is down")
+        raise RuntimeError("resend is down")
 
-    pending["alerts"] = [_alert()]
+    sweep["alerts"] = [_alert(last_met=False, current_price=150.0)]
     result = alert_checker.check_alerts(notifier=boom)
-    assert result["delivered"] == []
     assert [a["id"] for a in result["undelivered"]] == ["a1"]
-    assert pending["marked"] == [], "a delivery failure must not consume the alert"
+    assert sweep["recorded"] == []
 
 
-def test_one_failed_delivery_does_not_block_the_others(pending):
-    pending["alerts"] = [_alert(id="a1"), _alert(id="a2"), _alert(id="a3")]
+def test_an_unevaluable_alert_is_skipped_entirely(sweep):
+    # No price: met is None — neither a crossing nor a rebaseline.
+    sweep["alerts"] = [_alert(current_price=None)]
+    result = alert_checker.check_alerts(notifier=lambda a: True)
+    assert result["fired"] == [] and result["rebaselined"] == []
+    assert sweep["recorded"] == []
+
+
+def test_one_failed_delivery_does_not_block_the_others(sweep):
+    sweep["alerts"] = [
+        _alert(id="a1", current_price=150.0),
+        _alert(id="a2", current_price=150.0),
+        _alert(id="a3", current_price=150.0),
+    ]
 
     def flaky(alert):
-        if alert["id"] == "a2":
-            raise RuntimeError("nope")
-        return True
+        return alert["id"] != "a2"
 
     result = alert_checker.check_alerts(notifier=flaky)
-    assert [a["id"] for a in result["delivered"]] == ["a1", "a3"]
+    assert [a["id"] for a in result["fired"]] == ["a1", "a3"]
     assert [a["id"] for a in result["undelivered"]] == ["a2"]
-    assert pending["marked"] == ["a1", "a3"]  # a2 remains pending for the next run
+    assert [r["id"] for r in sweep["recorded"]] == ["a1", "a3"]
 
 
-def test_only_the_alerts_that_are_met_get_delivered(pending):
-    pending["alerts"] = [
-        _alert(id="hit", current_price=150.0),
-        _alert(id="miss", current_price=50.0),
-        _alert(id="noprice", current_price=None),
-    ]
-    result = alert_checker.check_alerts(notifier=lambda a: True)
-    assert [a["id"] for a in result["delivered"]] == ["hit"]
-    assert pending["marked"] == ["hit"]
+def test_no_notifier_leaves_crossings_undelivered(sweep):
+    sweep["alerts"] = [_alert(last_met=False, current_price=150.0)]
+    result = alert_checker.check_alerts()  # no notifier
+    assert [a["id"] for a in result["undelivered"]] == ["a1"]
+    assert sweep["recorded"] == []
 
 
 # ── main / exit code ─────────────────────────────────────────────────────────
 
-def test_main_exits_zero_when_nothing_is_met(pending):
-    pending["alerts"] = [_alert(current_price=50.0)]
-    assert alert_checker.main() == 0
-
-
-def test_main_exits_non_zero_when_an_alert_is_met_but_undeliverable(pending):
-    # A scheduler reads the exit code. "Alerts are firing and nobody is being
-    # told" is not a healthy run, and stays true until #34 lands.
-    pending["alerts"] = [_alert()]
+def test_main_exit_code_reflects_undelivered(sweep, monkeypatch):
+    # A scheduler reads the exit code: a crossing nobody was told about is a
+    # non-zero run.
+    monkeypatch.setattr(alert_checker, "build_email_notifier", lambda: (lambda a: False))
+    sweep["alerts"] = [_alert(last_met=False, current_price=150.0)]
     assert alert_checker.main() == 1
 
+    monkeypatch.setattr(alert_checker, "build_email_notifier", lambda: (lambda a: True))
+    sweep["alerts"] = [_alert(last_met=False, current_price=150.0)]
+    assert alert_checker.main() == 0

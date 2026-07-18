@@ -117,6 +117,8 @@ VERSIONED_TABLES = {
     "watchlists": "id",
     "portfolios": "id",
     "price_alerts": "id",
+    "alerts": "id",
+    "notifications": "id",
     "fundamentals_earnings": "id",
     "fundamentals_dividends": "id",
     "fundamentals_ratios": "id",

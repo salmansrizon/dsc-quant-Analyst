@@ -145,18 +145,33 @@ def test_add_to_watchlist_is_idempotent(monkeypatch, appended):
     assert appended.appends == [], "re-adding must not append a second version"
 
 
-def test_mark_triggered_skips_already_triggered(monkeypatch, appended):
+def test_record_state_firing_deactivates_the_one_shot(monkeypatch, appended):
+    # An up-crossing that delivered: last_met=True and is_active=False (fired,
+    # does not re-arm in Phase 1). The whole current row is carried forward.
     monkeypatch.setattr(db, "_client", FakeClient(result_rows=fake_rows(
-        {"id": "a1", "user_id": "u1", "symbol": "GP", "is_triggered": False},
+        {"id": "a1", "user_id": "u1", "symbol": "GP", "type": "price",
+         "last_met": False, "is_active": True, "is_deleted": False},
     )))
-    assert alerts_service.mark_triggered(["a1", "a2"]) == 1
+    alerts_service.record_state({"id": "a1"}, met=True, fired=True)
     row = appended.appends[0]["rows"][0]
-    assert row["is_triggered"] is True and row["triggered_at"] is not None
-    # The query itself filters out already-triggered alerts, so a re-run is safe.
+    assert row["last_met"] is True and row["is_active"] is False
+    assert row["symbol"] == "GP"  # untouched columns survive
 
 
-def test_mark_triggered_with_no_ids_does_nothing(no_rows, appended):
-    assert alerts_service.mark_triggered([]) == 0
+def test_record_state_rebaseline_keeps_the_alert_active(monkeypatch, appended):
+    # A down-crossing (met->unmet): rebaseline last_met, stay active to fire again.
+    monkeypatch.setattr(db, "_client", FakeClient(result_rows=fake_rows(
+        {"id": "a1", "user_id": "u1", "symbol": "GP", "type": "price",
+         "last_met": True, "is_active": True, "is_deleted": False},
+    )))
+    alerts_service.record_state({"id": "a1"}, met=False, fired=False)
+    row = appended.appends[0]["rows"][0]
+    assert row["last_met"] is False and row["is_active"] is True
+
+
+def test_record_state_on_a_missing_alert_is_a_noop(no_rows, appended):
+    alerts_service.record_state({"id": "gone"}, met=True, fired=True)
+    assert appended.appends == []
     assert appended.appends == []
 
 
@@ -188,7 +203,7 @@ def test_removing_user1_watchlist_item_leaves_user2_untouched(monkeypatch, store
 
 
 def test_deleting_user1_alert_leaves_user2_alerts(monkeypatch, store):
-    store.append("price_alerts", [
+    store.append("alerts", [
         {"id": "a1", "user_id": "u1", "is_deleted": False},
         {"id": "a2", "user_id": "u2", "is_deleted": False},
         {"id": "a3", "user_id": "u2", "is_deleted": False},

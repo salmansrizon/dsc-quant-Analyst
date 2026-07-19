@@ -1,15 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
 import type { AxiosInstance } from 'axios';
-import { Search, TrendingDown, TrendingUp } from 'lucide-react';
+import { Search } from 'lucide-react';
+import type { MarketRow } from '../../api/marketTypes';
+import PriceChange from '../PriceChange/PriceChange';
 
-// A market row as returned by GET /market/stocks (a subset — only what the
-// suggestion row renders).
-export interface MarketRow {
-  Symbol: string;
-  Sector?: string;
-  LTP?: number;
-  ChangePct?: number;
-}
+export type { MarketRow };
 
 interface SymbolSearchProps {
   client: AxiosInstance;
@@ -142,48 +137,36 @@ export default function SymbolSearch({
           {!loading && results.length === 0 && (
             <li className="px-3 py-2 text-sm text-gray-500">No matches for “{value.trim()}”</li>
           )}
-          {results.map((r, i) => {
-            const pct = r.ChangePct != null ? Number(r.ChangePct) : null;
-            const isUp = pct != null && pct >= 0;
-            return (
-              <li key={r.Symbol} role="option" aria-selected={i === activeIndex}>
-                <button
-                  type="button"
-                  onMouseDown={(e) => {
-                    e.preventDefault();
-                    choose(r);
-                  }}
-                  onMouseEnter={() => setActiveIndex(i)}
-                  className={`w-full flex items-center justify-between gap-3 px-3 py-2 text-left border-b last:border-b-0 ${
-                    i === activeIndex ? 'bg-indigo-50' : 'hover:bg-gray-50'
-                  }`}
-                >
-                  <span className="min-w-0">
-                    <span className="block text-sm font-semibold text-gray-900">{r.Symbol}</span>
-                    {r.Sector && (
-                      <span className="block text-xs text-gray-500 truncate">{r.Sector}</span>
-                    )}
+          {results.map((r, i) => (
+            <li key={r.Symbol} role="option" aria-selected={i === activeIndex}>
+              <button
+                type="button"
+                onMouseDown={(e) => {
+                  e.preventDefault();
+                  choose(r);
+                }}
+                onMouseEnter={() => setActiveIndex(i)}
+                className={`w-full flex items-center justify-between gap-3 px-3 py-2 text-left border-b last:border-b-0 ${
+                  i === activeIndex ? 'bg-indigo-50' : 'hover:bg-gray-50'
+                }`}
+              >
+                <span className="min-w-0">
+                  <span className="block text-sm font-semibold text-gray-900">{r.Symbol}</span>
+                  {r.Sector && (
+                    <span className="block text-xs text-gray-500 truncate">{r.Sector}</span>
+                  )}
+                </span>
+                <span className="text-right shrink-0 text-xs">
+                  {r.LTP != null && (
+                    <span className="block text-sm text-gray-900">৳{Number(r.LTP).toFixed(2)}</span>
+                  )}
+                  <span className="justify-end">
+                    <PriceChange pct={r.ChangePct} size={12} />
                   </span>
-                  <span className="text-right shrink-0">
-                    {r.LTP != null && (
-                      <span className="block text-sm text-gray-900">৳{Number(r.LTP).toFixed(2)}</span>
-                    )}
-                    {pct != null && (
-                      <span
-                        className={`flex items-center gap-1 justify-end text-xs ${
-                          isUp ? 'text-green-600' : 'text-red-600'
-                        }`}
-                      >
-                        {isUp ? <TrendingUp size={12} /> : <TrendingDown size={12} />}
-                        {isUp ? '+' : ''}
-                        {pct.toFixed(2)}%
-                      </span>
-                    )}
-                  </span>
-                </button>
-              </li>
-            );
-          })}
+                </span>
+              </button>
+            </li>
+          ))}
         </ul>
       )}
     </div>

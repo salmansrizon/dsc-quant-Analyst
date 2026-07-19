@@ -187,12 +187,21 @@ def market_summary():
 # `leaderboard`, `market_strength` and `sector_breakdown` read only pre-existing
 # columns and work today (sector_breakdown's AVG(Audited_PE) needs the scrape).
 
+def metric_pattern(names) -> str:
+    """The `^(a|b|…)$` regex the API `Query(pattern=…)` validators use, derived
+    from the service's own metric sets so the allowed list lives in one place."""
+    return "^(" + "|".join(names) + ")$"
+
+
 _LEADERBOARD_COLUMNS = {
     "value": ("Value_Turnover_", "DESC"),
     "gainer": ("__Change", "DESC"),
     "loser": ("__Change", "ASC"),
     "volume": ("Volume_Qty_", "DESC"),
 }
+# `trade` has no datamatrix column — it joins the latest price_archive trade
+# count (top_trade), so it is a metric the endpoint accepts but not a dict key.
+LEADERBOARD_METRICS = (*_LEADERBOARD_COLUMNS, "trade")
 
 
 def leaderboard(metric: str, limit: int = 10):
@@ -238,6 +247,9 @@ _EXTREMES_COLUMNS = {
     "director_holding_low": ("Director_Holdings", "ASC"),
     "director_holding_high": ("Director_Holdings", "DESC"),
 }
+# nav_price_* are computed in SQL (SAFE_DIVIDE), not plain columns — accepted
+# metrics without a _EXTREMES_COLUMNS entry.
+EXTREMES_METRICS = (*_EXTREMES_COLUMNS, "nav_price_low", "nav_price_high")
 
 
 def extremes_leaderboard(metric: str, limit: int = 10):
@@ -302,6 +314,8 @@ _TECHNICAL_COMPUTED = {
     "stochastic_low": ("stochastic", "ASC"),
     "stochastic_high": ("stochastic", "DESC"),
 }
+# rsi_* read the scraped RSI_14_ column; the rest are computed on-read.
+TECHNICAL_METRICS = ("rsi_low", "rsi_high", *_TECHNICAL_COMPUTED)
 
 
 def technical_extremes(metric: str, limit: int = 10):

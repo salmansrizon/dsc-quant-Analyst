@@ -193,7 +193,7 @@ def sectors_breakdown():
 
 @app.get("/api/market/leaderboard")
 def leaderboard(
-    metric: str = Query(pattern="^(value|gainer|loser|volume|trade)$"),
+    metric: str = Query(pattern=market_service.metric_pattern(market_service.LEADERBOARD_METRICS)),
     limit: int = Query(default=10, le=50),
 ):
     return market_service.leaderboard(metric=metric, limit=limit)
@@ -201,7 +201,7 @@ def leaderboard(
 
 @app.get("/api/market/extremes")
 def extremes(
-    metric: str = Query(pattern="^(pe_low|pe_high|director_holding_low|director_holding_high|nav_price_low|nav_price_high)$"),
+    metric: str = Query(pattern=market_service.metric_pattern(market_service.EXTREMES_METRICS)),
     limit: int = Query(default=10, le=50),
 ):
     return market_service.extremes_leaderboard(metric=metric, limit=limit)
@@ -209,7 +209,7 @@ def extremes(
 
 @app.get("/api/market/technical-extremes")
 def technical_extremes(
-    metric: str = Query(pattern="^(rsi_low|rsi_high|macd_low|macd_high|stochastic_low|stochastic_high)$"),
+    metric: str = Query(pattern=market_service.metric_pattern(market_service.TECHNICAL_METRICS)),
     limit: int = Query(default=10, le=50),
 ):
     return market_service.technical_extremes(metric=metric, limit=limit)

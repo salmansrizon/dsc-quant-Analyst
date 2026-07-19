@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react';
 import type { AxiosInstance } from 'axios';
 import { Link } from 'react-router-dom';
-import { TrendingDown, TrendingUp } from 'lucide-react';
 import MarketSummary from '../components/MarketSummary/DashboardSummary';
+import PriceChange from '../components/PriceChange/PriceChange';
 import { errorMessage } from '../api/errorMessage';
+import type { MarketRow as LeaderRow } from '../api/marketTypes';
 
 interface DashboardProps {
   client: AxiosInstance;
@@ -13,15 +14,6 @@ interface Strength {
   Gainers: number;
   Losers: number;
   Unchanged: number;
-}
-
-interface LeaderRow {
-  Symbol: string;
-  Sector?: string;
-  LTP?: number;
-  ChangePct?: number;
-  Value?: number;
-  MetricValue?: number;
 }
 
 // Compact top-N table, reused by the leaderboard widgets (PRD-12, #82). With
@@ -43,33 +35,23 @@ function LeaderTable({
         <p className="text-sm text-gray-400">No data yet.</p>
       ) : (
         <ul className="divide-y divide-gray-100">
-          {rows.map((r) => {
-            const pct = r.ChangePct != null ? Number(r.ChangePct) : null;
-            const isUp = pct != null && pct >= 0;
-            return (
-              <li key={r.Symbol} className="flex items-center justify-between py-2 text-sm">
-                <Link to={`/stock/${r.Symbol}`} className="font-medium text-indigo-600 hover:underline">
-                  {r.Symbol}
-                </Link>
-                <span className="flex items-center gap-3">
-                  {r.LTP != null && <span className="text-gray-900">৳{Number(r.LTP).toFixed(2)}</span>}
-                  {metricLabel != null && r.MetricValue != null ? (
-                    <span className="text-gray-700">
-                      {metricLabel} {Number(r.MetricValue).toFixed(2)}
-                    </span>
-                  ) : (
-                    pct != null && (
-                      <span className={`flex items-center gap-1 ${isUp ? 'text-green-600' : 'text-red-600'}`}>
-                        {isUp ? <TrendingUp size={14} /> : <TrendingDown size={14} />}
-                        {isUp ? '+' : ''}
-                        {pct.toFixed(2)}%
-                      </span>
-                    )
-                  )}
-                </span>
-              </li>
-            );
-          })}
+          {rows.map((r) => (
+            <li key={r.Symbol} className="flex items-center justify-between py-2 text-sm">
+              <Link to={`/stock/${r.Symbol}`} className="font-medium text-indigo-600 hover:underline">
+                {r.Symbol}
+              </Link>
+              <span className="flex items-center gap-3">
+                {r.LTP != null && <span className="text-gray-900">৳{Number(r.LTP).toFixed(2)}</span>}
+                {metricLabel != null && r.MetricValue != null ? (
+                  <span className="text-gray-700">
+                    {metricLabel} {Number(r.MetricValue).toFixed(2)}
+                  </span>
+                ) : (
+                  <PriceChange pct={r.ChangePct} />
+                )}
+              </span>
+            </li>
+          ))}
         </ul>
       )}
     </div>

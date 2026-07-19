@@ -85,9 +85,22 @@ class BigQueryHelper:
         if not truncate:
             job_config.schema_update_options = [bigquery.SchemaUpdateOption.ALLOW_FIELD_ADDITION]
 
+        # load_table_from_json, not load_table_from_dataframe: the dataframe path
+        # requires pyarrow (~500MB), which is deliberately excluded from
+        # requirements.txt because it blew the Vercel bundle past its 500MB limit
+        # (same reason db.insert_rows uses the JSON path). It "worked" locally
+        # only because a dev machine happens to have pyarrow; CI does not, so the
+        # scheduled ETL failed with "requires pyarrow to be installed". Serialize
+        # to JSON-safe records: NaN -> None (not valid JSON), Timestamp -> ISO.
+        safe = df.astype(object).where(pd.notnull(df), None)
+        rows = [
+            {k: (v.isoformat() if hasattr(v, "isoformat") else v) for k, v in rec.items()}
+            for rec in safe.to_dict("records")
+        ]
+
         print(f"Uploading {len(df)} records to BigQuery {full_table_id}...")
         try:
-            job = self.client.load_table_from_dataframe(df, full_table_id, job_config=job_config)
+            job = self.client.load_table_from_json(rows, full_table_id, job_config=job_config)
             job.result()
             print(f"  Successfully loaded {len(df)} rows into {full_table_id}.")
         except Exception as e:

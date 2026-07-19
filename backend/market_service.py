@@ -180,8 +180,12 @@ def market_summary():
 #
 # The extremes/technical leaderboards read datamatrix columns that only land
 # once dataGrid's widened allowlist re-scrapes: NAV_Quarter_End_, Audited_PE,
-# Director_Holdings, RSI_14_. Before that scrape they return [] (the columns are
-# absent / NULL), not an error.
+# Director_Holdings, RSI_14_. Until that scrape runs, those columns do not exist
+# on the live table, so BigQuery fails these queries at compile time (a 5xx) —
+# they are NOT gracefully empty. The re-scrape is the load-bearing prerequisite
+# (#82 comment); wiring the extremes UI before it would surface those errors.
+# `leaderboard`, `market_strength` and `sector_breakdown` read only pre-existing
+# columns and work today (sector_breakdown's AVG(Audited_PE) needs the scrape).
 
 _LEADERBOARD_COLUMNS = {
     "value": ("Value_Turnover_", "DESC"),

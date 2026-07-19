@@ -1,6 +1,8 @@
 import { useContext } from 'react';
 import { Outlet, NavLink, useNavigate } from 'react-router-dom';
+import { Moon, Sun } from 'lucide-react';
 import { AuthContext } from '../context/AuthContext';
+import { useTheme } from '../context/ThemeContext';
 
 const navItems = [
   { to: '/', label: 'Dashboard', end: true },
@@ -8,6 +10,7 @@ const navItems = [
   { to: '/watchlist', label: 'Watchlist' },
   { to: '/screener', label: 'Screener' },
   { to: '/alerts', label: 'Alerts' },
+  { to: '/settings', label: 'Settings' },
 ];
 
 const linkClass = ({ isActive }: { isActive: boolean }) =>
@@ -19,6 +22,7 @@ const linkClass = ({ isActive }: { isActive: boolean }) =>
 
 function Layout() {
   const { user, logout } = useContext(AuthContext);
+  const { theme, toggleTheme } = useTheme();
   const navigate = useNavigate();
 
   const handleLogout = () => {
@@ -55,6 +59,14 @@ function Layout() {
               {user?.email && (
                 <span className="text-sm text-gray-500">{user.email}</span>
               )}
+              <button
+                type="button"
+                onClick={toggleTheme}
+                aria-label={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+                className="p-2 rounded-md text-gray-700 hover:bg-indigo-50"
+              >
+                {theme === 'dark' ? <Sun size={18} /> : <Moon size={18} />}
+              </button>
               <button
                 type="button"
                 onClick={handleLogout}

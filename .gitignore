@@ -24,10 +24,6 @@ logs/
 *.csv
 *.tmp
 
-# Playwright
-test-results/
-playwright-report/
-
 # IDE / OS
 .DS_Store
 .vscode/
@@ -43,4 +39,12 @@ gcp-key.json
 !vercel.json
 !filters.json
 !pyproject.toml
+
+# stray local artifacts
+graphify-out/
+*copy.md
+
+# Playwright
+test-results/
+playwright-report/
 .env*

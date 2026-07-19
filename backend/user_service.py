@@ -2,34 +2,29 @@ import uuid
 from datetime import datetime, timezone
 from typing import Optional
 from google.cloud import bigquery
-from google.api_core.exceptions import NotFound
-from dotenv import load_dotenv
-from .utils import bigquery_helper  # noqa: F401 — bootstraps GOOGLE_APPLICATION_CREDENTIALS from GCP_SERVICE_ACCOUNT_JSON
 from .models import UserResponse
+from . import db
 
-load_dotenv()
+# All BigQuery access goes through db (tickets #41/#46/#52): reads via
+# db.query_rows against the `users_current` view, writes via db.append_version.
+# No module-level client and no hardcoded project/dataset.
 
-PROJECT = "dbt-test-420614"
-DATASET = "lankabd_dataset"
-bq = bigquery.Client(project=PROJECT)
-
-def _uid(table: str) -> str:
-    return f"`{PROJECT}.{DATASET}.{table}`"
-
-
-def _row_to_json(row: dict) -> dict:
-    return {k: v.isoformat() if hasattr(v, "isoformat") else v for k, v in row.items()}
+# Whitelist of admin-editable user columns. Anything outside this (id, email,
+# password_hash, created_at) is not editable through the admin endpoint.
+_USER_UPDATE_FIELDS = frozenset({"full_name", "phone", "role"})
 
 
-def _insert_user_row(row: dict):
-    full = f"{PROJECT}.{DATASET}.users"
-    bq.load_table_from_json(
-        [_row_to_json(row)], full,
-        job_config=bigquery.LoadJobConfig(
-            write_disposition=bigquery.WriteDisposition.WRITE_APPEND,
-            schema_update_options=[bigquery.SchemaUpdateOption.ALLOW_FIELD_ADDITION],
-        )
-    ).result()
+def _to_user_response(r: dict) -> UserResponse:
+    # `or ""` rather than .get(col, ""): the column exists but can be NULL, and
+    # a default only applies to a missing key.
+    return UserResponse(
+        id=r["id"],
+        email=r["email"],
+        phone=r.get("phone") or "",
+        full_name=r.get("full_name") or "",
+        role=r.get("role") or "user",
+        created_at=str(r["created_at"]) if r.get("created_at") else None,
+    )
 
 
 def create_user(payload) -> UserResponse:
@@ -44,16 +39,17 @@ def create_user(payload) -> UserResponse:
     now = datetime.now(timezone.utc)
     hashed = hash_password(payload.password)
 
-    _insert_user_row({
+    db.append_version("users", [{
         "id": user_id,
         "email": email,
         "phone": payload.phone,
         "password_hash": hashed,
         "full_name": payload.full_name,
         "role": "user",
+        "token_version": 0,
         "created_at": now,
         "updated_at": now,
-    })
+    }])
 
     return UserResponse(
         id=user_id,
@@ -68,107 +64,158 @@ def create_user(payload) -> UserResponse:
 def get_user_by_email(email: str) -> Optional[UserResponse]:
     sql = f"""
         SELECT id, email, phone, full_name, role, created_at
-        FROM {_uid('users')}
+        FROM {db.current_view('users')}
         WHERE LOWER(email) = @email
         LIMIT 1
     """
     params = [bigquery.ScalarQueryParameter("email", "STRING", email.strip().lower())]
-    try:
-        rows = list(bq.query(sql, job_config=bigquery.QueryJobConfig(query_parameters=params)).result())
-    except NotFound:
-        return None
+    rows = db.query_rows(sql, params)
     if not rows:
         return None
-    r = dict(rows[0])
-    return UserResponse(
-        id=r["id"],
-        email=r["email"],
-        phone=str(r.get("phone") or ""),
-        full_name=r.get("full_name", ""),
-        role=r.get("role", "user"),
-        created_at=str(r["created_at"]) if r.get("created_at") else None,
-    )
+    return _to_user_response(rows[0])
 
 
 def get_user_by_id(user_id: str) -> Optional[UserResponse]:
     sql = f"""
         SELECT id, email, phone, full_name, role, created_at
-        FROM {_uid('users')}
+        FROM {db.current_view('users')}
         WHERE id = @uid
         LIMIT 1
     """
     params = [bigquery.ScalarQueryParameter("uid", "STRING", user_id)]
-    rows = list(bq.query(sql, job_config=bigquery.QueryJobConfig(query_parameters=params)).result())
+    rows = db.query_rows(sql, params)
     if not rows:
         return None
-    r = dict(rows[0])
-    return UserResponse(
-        id=r["id"],
-        email=r["email"],
-        phone=str(r.get("phone") or ""),
-        full_name=r.get("full_name", ""),
-        role=r.get("role", "user"),
-        created_at=str(r["created_at"]) if r.get("created_at") else None,
-    )
+    return _to_user_response(rows[0])
 
 
 def get_user_credentials(email: str) -> Optional[dict]:
     sql = f"""
-        SELECT id, email, phone, password_hash, full_name, role
-        FROM {_uid('users')}
+        SELECT id, email, phone, password_hash, full_name, role, token_version
+        FROM {db.current_view('users')}
         WHERE LOWER(email) = @email
         LIMIT 1
     """
     params = [bigquery.ScalarQueryParameter("email", "STRING", email.strip().lower())]
-    try:
-        rows = list(bq.query(sql, job_config=bigquery.QueryJobConfig(query_parameters=params)).result())
-    except NotFound:
-        return None
+    rows = db.query_rows(sql, params)
     if not rows:
         return None
-    r = dict(rows[0])
+    r = rows[0]
     return {
         "id": r["id"],
         "email": r["email"],
-        "password_hash": r.get("password_hash", ""),
-        "role": r.get("role", "user"),
+        "password_hash": r.get("password_hash") or "",
+        "role": r.get("role") or "user",
+        # NULL for every row appended before #68 added the column — 0 is the
+        # documented default, not a guess.
+        "token_version": r.get("token_version") or 0,
+    }
+
+
+def get_user_session(user_id: str) -> Optional[dict]:
+    """password_hash + token_version for the session flows (#68): /refresh
+    compares token_version, /reset-password checks the fingerprint against
+    password_hash. Not exposed through UserResponse — those are session-only,
+    not profile data.
+    """
+    row = _find_user_row(user_id)
+    if not row:
+        return None
+    return {
+        "id": row["id"],
+        "email": row["email"],
+        "password_hash": row.get("password_hash") or "",
+        "token_version": row.get("token_version") or 0,
     }
 
 
 def list_users():
     sql = f"""
         SELECT id, email, phone, full_name, role, created_at
-        FROM {_uid('users')}
+        FROM {db.current_view('users')}
         ORDER BY created_at DESC
     """
-    return [dict(r) for r in bq.query(sql).result()]
+    return db.query_rows(sql)
 
 
-def update_user(user_id: str, updates: dict):
-    rows = list(bq.query(f"SELECT * FROM {_uid('users')}").result())
-    now = datetime.now(timezone.utc)
-    updated = []
-    for r in rows:
-        d = dict(r)
-        if d["id"] == user_id:
-            for col in ("full_name", "phone", "role"):
-                if col in updates:
-                    d[col] = updates[col]
-            d["updated_at"] = now
-        updated.append(_row_to_json(d))
-    full = f"{PROJECT}.{DATASET}.users"
-    bq.load_table_from_json(
-        updated, full,
-        job_config=bigquery.LoadJobConfig(write_disposition=bigquery.WriteDisposition.WRITE_TRUNCATE)
-    ).result()
+def _find_user_row(user_id: str) -> dict | None:
+    """The user's full current row (including password_hash), or None."""
+    return db.find_current("users", id=user_id)
 
 
-def delete_user(user_id: str):
-    rows = list(bq.query(f"SELECT * FROM {_uid('users')}").result())
-    remaining = [_row_to_json(dict(r)) for r in rows if r["id"] != user_id]
-    full = f"{PROJECT}.{DATASET}.users"
-    if remaining:
-        bq.load_table_from_json(
-            remaining, full,
-            job_config=bigquery.LoadJobConfig(write_disposition=bigquery.WriteDisposition.WRITE_TRUNCATE)
-        ).result()
+def update_user(user_id: str, updates: dict) -> bool:
+    """Update one user's editable columns. Returns whether a row changed.
+
+    Appends a new version (#50, #52). This used to read the whole table and
+    reload it with WRITE_TRUNCATE — the pattern #40 removed everywhere else —
+    which erased any signup landing between the read and the load, and applied
+    its edit to a copy that was then discarded, so it never changed anything.
+    """
+    changes = {k: v for k, v in updates.items() if k in _USER_UPDATE_FIELDS and v is not None}
+    if not changes:
+        return False
+
+    row = _find_user_row(user_id)
+    if not row:
+        return False
+
+    db.append_version("users", [{
+        **row,
+        **changes,
+        "updated_at": datetime.now(timezone.utc),
+    }])
+    return True
+
+
+def bump_token_version(user_id: str) -> bool:
+    """Invalidate every outstanding refresh token for a user (#68).
+
+    Used by logout-all. A refresh token carries the token_version it was
+    issued under; /refresh compares that against the user's current value, so
+    bumping it here fails every token issued before this call without a
+    separate revocation list.
+    """
+    row = _find_user_row(user_id)
+    if not row:
+        return False
+
+    db.append_version("users", [{
+        **row,
+        "token_version": (row.get("token_version") or 0) + 1,
+        "updated_at": datetime.now(timezone.utc),
+    }])
+    return True
+
+
+def reset_password(user_id: str, new_password_hash: str) -> bool:
+    """Set a new password hash and bump token_version in the same version (#68).
+
+    One append, not two: reset-password and logout-all both want the version
+    bump, and a password reset should also kill every existing session, so the
+    two changes land together rather than racing across separate writes.
+    """
+    row = _find_user_row(user_id)
+    if not row:
+        return False
+
+    db.append_version("users", [{
+        **row,
+        "password_hash": new_password_hash,
+        "token_version": (row.get("token_version") or 0) + 1,
+        "updated_at": datetime.now(timezone.utc),
+    }])
+    return True
+
+
+def delete_user(user_id: str) -> bool:
+    """Tombstone one user. Returns whether they existed.
+
+    The old whole-table reload dropped concurrent signups, and truncated the
+    table with an empty DataFrame when the last user was removed (#50).
+    """
+    row = _find_user_row(user_id)
+    if not row:
+        return False
+
+    db.tombstone("users", row)
+    return True

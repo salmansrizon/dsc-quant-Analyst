@@ -1,0 +1,90 @@
+name: ETL — daily market chain
+
+# The scheduler #55 decided: dataGrid → priceArchive → announcement, run daily
+# after the DSE close. GitHub Actions, not Vercel Cron — a ~4-min per-symbol
+# scrape exceeds a serverless function's timeout, and Actions keeps the scraper
+# deps (bs4/lxml/pyarrow) out of the API bundle.
+#
+# Ordering is load-bearing: priceArchive and announcement read the symbol
+# universe dataGrid builds (SELECT DISTINCT Symbol FROM lankabd_datamatrix).
+# Each scraper is its own step, so dataGrid's non-zero exit on a partial scrape
+# (#45) fails the job before the consumers ever read a stale/partial universe.
+#
+# The alert sweep is chained here as the final step (#80, ADR-0001): LTP only
+# refreshes in this job, so the edge-trigger sweep must run on its *completion*,
+# not on a fixed-time cron that races the scrape. It runs the #66/#78 engine
+# unchanged and is `continue-on-error` — a delivery failure never turns the ETL
+# red, and the next day's sweep retries the still-active alert (#48). This
+# replaced the retired Vercel Cron. The Phase-3 digest step slots in after it.
+
+on:
+  schedule:
+    # DSE trades Sun–Thu, closes 14:30 Asia/Dhaka (UTC+6) = 08:30 UTC.
+    # Run ~1h after close. Cron is UTC; 0-4 is Sun–Thu.
+    - cron: '30 9 * * 0-4'
+  workflow_dispatch:
+
+jobs:
+  market-chain:
+    name: Scrape datamatrix, prices, announcements
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+          cache: pip
+      - run: pip install -r requirements.txt
+
+      - name: Check the secret is configured
+        env:
+          KEY: ${{ secrets.GCP_SERVICE_ACCOUNT_JSON }}
+        run: |
+          if [ -z "$KEY" ]; then
+            echo "::error::GCP_SERVICE_ACCOUNT_JSON is not set. The ETL cannot run without it."
+            exit 1
+          fi
+
+      - name: Ensure tables and views exist
+        env:
+          GCP_SERVICE_ACCOUNT_JSON: ${{ secrets.GCP_SERVICE_ACCOUNT_JSON }}
+          BIGQUERY_DATASET_ID: ${{ vars.BIGQUERY_DATASET_ID }}
+        run: python -m backend.bootstrap_tables
+
+      # The scrapers are bare scripts that import `from scrapers.common` /
+      # `from utils.logger` — they run from the backend/ cwd (see the
+      # etl-runs-from-backend-cwd note). Credentials resolve from either cwd.
+      - name: Symbol universe (dataGrid)
+        working-directory: backend
+        env:
+          GCP_SERVICE_ACCOUNT_JSON: ${{ secrets.GCP_SERVICE_ACCOUNT_JSON }}
+          BIGQUERY_DATASET_ID: ${{ vars.BIGQUERY_DATASET_ID }}
+        run: python dataGrid.py
+
+      - name: Price archive (incremental)
+        working-directory: backend
+        env:
+          GCP_SERVICE_ACCOUNT_JSON: ${{ secrets.GCP_SERVICE_ACCOUNT_JSON }}
+          BIGQUERY_DATASET_ID: ${{ vars.BIGQUERY_DATASET_ID }}
+        run: python priceArchive.py
+
+      - name: Announcements (incremental)
+        working-directory: backend
+        env:
+          GCP_SERVICE_ACCOUNT_JSON: ${{ secrets.GCP_SERVICE_ACCOUNT_JSON }}
+          BIGQUERY_DATASET_ID: ${{ vars.BIGQUERY_DATASET_ID }}
+        run: python announcement.py
+
+      # #80 (ADR-0001): the edge-trigger alert sweep, chained after the scrape so
+      # it evaluates crossings against the LTP that just landed. Runs as a module
+      # from the repo root (its deps import package-relative, #56) — the same
+      # entry the API's manual endpoint calls. continue-on-error: a notifier
+      # failure must not fail the ETL; the still-active alert retries next run.
+      - name: Alert sweep (#80)
+        continue-on-error: true
+        env:
+          GCP_SERVICE_ACCOUNT_JSON: ${{ secrets.GCP_SERVICE_ACCOUNT_JSON }}
+          BIGQUERY_DATASET_ID: ${{ vars.BIGQUERY_DATASET_ID }}
+          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+          RESEND_FROM: ${{ vars.RESEND_FROM }}
+        run: python -m backend.alert_checker

@@ -1,104 +1,182 @@
+"""Edge-trigger alert sweep (ticket #66, reworked from #48/#34).
+
+    python -m backend.alert_checker          # from the repo root
+
+Run as a module, not a bare script: its dependencies import package-relative
+(#56), so `python alert_checker.py` from backend/ cannot resolve them.
+
+**Edge-trigger (the #34 decision).** An alert fires on the *crossing* — the
+sweep it goes from unmet to met — not on merely being met. Each alert's
+`last_met` records where it was; a fire happens only on a False->True flip, and
+`last_met` is written back only when it actually flips. This is what dissolves
+#48's old accumulation problem: there is no growing backlog of "still met"
+alerts to expire, because a crossing is by definition a fresh event.
+
+**One-shot.** A fired alert is marked inactive (`is_active=False`) and does not
+re-arm in Phase 1. A down-crossing (met->unmet) just rebaselines `last_met`.
+
+**Delivery is the notifier's job**, injected as a seam so the pure crossing
+logic here never imports the email provider. An undelivered crossing is *not*
+recorded as fired, so the next sweep retries it — a delivery failure never
+consumes an alert (the #48 guarantee, kept).
+
+**Where it runs, and the scale-out (#34 dec.6).** The sweep is triggered by
+Vercel Cron hitting POST /api/internal/run-alerts — serverless has no
+in-process scheduler. Two ceilings come with that: Vercel Cron on Hobby is
+daily / two-crons-max, and a large crossing batch × ~300ms/email can exceed the
+function timeout. Both are scale risks, not now risks (single-digit users, ms
+sweeps). **The scale-out, when sweep time approaches the function budget:** move
+this exact entry point to a standalone GitHub Actions cron (as the ETL scrapers
+do, #55) — check_alerts + build_email_notifier run unchanged off a runner with
+a 6h budget instead of a function timeout. Nothing here changes; only the
+trigger does.
 """
-Checks price alerts against latest market data and triggers notifications.
-"""
-import pandas as pd
-from datetime import datetime, timezone
+import logging
+import sys
+from typing import Callable, Optional
 
-from .utils.bigquery_helper import BigQueryHelper
-from .notifications.messages import build_alert_message
-from .notifications.channels import send_telegram, send_whatsapp, send_web_push
+# Package-qualified imports (#56): the service modules this pulls in use
+# `from . import db` relative imports, so they only resolve when loaded as
+# members of the `backend` package — which is why this runs as `python -m
+# backend.alert_checker` (or is imported by the API), never as a bare script.
+from backend import alerts_service, alert_conditions
 
+logging.basicConfig(level=logging.INFO, format="%(message)s")
+logger = logging.getLogger(__name__)
 
-def _deliver_alert(row, ltp: float, prefs: dict):
-    symbol = row["Symbol"]
-    target = float(row["target_price"])
-    direction = row["direction"]
-    msg = build_alert_message(symbol=symbol, ltp=ltp, target=target, direction=direction)
-    channels = prefs.get("channels_enabled") or []
-    if "telegram" in channels and prefs.get("telegram_chat_id"):
-        send_telegram(prefs["telegram_chat_id"], msg)
-    if "whatsapp" in channels and prefs.get("whatsapp_number"):
-        send_whatsapp(prefs["whatsapp_number"], msg)
-    if "web_push" in channels and prefs.get("web_push_subscription"):
-        send_web_push(prefs["web_push_subscription"], {"title": f"Alert: {symbol}", "body": msg})
+# A notifier takes an alert and returns whether it was delivered.
+Notifier = Callable[[dict], bool]
 
 
-def _fetch_alert_caps(bq) -> dict:
-    """Maps user_id -> alert_cap for users with an active subscription.
-    Users with no active subscription are absent (uncapped)."""
-    subs_table = bq._get_full_table_id("subscription_packages")
-    sql = f"SELECT user_id, alert_cap FROM `{subs_table}` WHERE status = 'active'"
-    rows = bq.client.query(sql).result()
-    return {row["user_id"]: row["alert_cap"] for row in rows}
+def check_alerts(notifier: Optional[Notifier] = None) -> dict:
+    """Sweep active alerts, fire the up-crossings, rebaseline the down-crossings.
+
+    Returns counts, explicitly separating what *fired and was delivered* from
+    what crossed but *could not be delivered* — different questions, and a
+    single list cannot answer both.
+    """
+    alerts = alerts_service.active_alerts()
+    fired, undelivered, rebaselined = [], [], []
+
+    for alert in alerts:
+        met = alert_conditions.is_met(
+            alert.get("type"), alert.get("condition_json"), alert.get("current_price"),
+        )
+        if met is None:
+            continue  # no price / unevaluable this sweep — say nothing
+
+        last_met = alert.get("last_met")
+        if alert_conditions.is_crossing(last_met, met):
+            logger.info("CROSSING: alert %s (%s) met at price %s",
+                        alert["id"], alert["symbol"], alert.get("current_price"))
+            delivered = _deliver(alert, notifier)
+            if delivered:
+                alerts_service.record_state(alert, met=True, fired=True)
+                fired.append(alert)
+            else:
+                # Not recorded as fired: last_met stays False, so the next sweep
+                # sees the same crossing and retries. A failure never consumes it.
+                undelivered.append(alert)
+        elif met != bool(last_met):
+            # A down-crossing (met->unmet): just rebaseline, no fire.
+            alerts_service.record_state(alert, met=met, fired=False)
+            rebaselined.append(alert)
+
+    logger.info("Swept %d active alert(s): %d fired, %d undelivered, %d rebaselined.",
+                len(alerts), len(fired), len(undelivered), len(rebaselined))
+    return {"fired": fired, "undelivered": undelivered, "rebaselined": rebaselined}
 
 
-def check_alerts():
-    bq = BigQueryHelper()
+def _deliver(alert: dict, notifier: Optional[Notifier]) -> bool:
+    """Hand an alert to the notifier; a raise or a None notifier is non-delivery."""
+    if notifier is None:
+        logger.warning("Alert %s crossed but no notifier is wired — leaving it to retry.",
+                       alert["id"])
+        return False
+    try:
+        return bool(notifier(alert))
+    except Exception:
+        logger.exception("Notifier raised for alert %s — leaving it to retry.", alert["id"])
+        return False
 
-    # 1. Fetch active alerts
-    alerts_table = bq._get_full_table_id("price_alerts")
-    sql_alerts = f"SELECT * FROM `{alerts_table}` WHERE is_triggered = false"
-    alerts = bq.client.query(sql_alerts).to_dataframe()
 
-    if alerts.empty:
-        print("No active alerts to check.")
-        return []
+def _coerce(value) -> float:
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return 0.0
 
-    # 2. Fetch latest prices from datamatrix
-    dm_table = bq._get_full_table_id("lankabd_datamatrix")
-    sql_prices = f"SELECT Symbol, LTP FROM `{dm_table}`"
-    prices = bq.client.query(sql_prices).to_dataframe()
 
-    df = alerts.merge(prices, on="Symbol", how="left")
-    df["LTP"] = pd.to_numeric(df["LTP"], errors="coerce")
+def build_notifier() -> Notifier:
+    """A notifier that fans an alert out to the owner's enabled channels (#78).
 
-    triggered_ids = []
-    triggered_rows = []
+    Keeps the log-before-send discipline *per channel* (the notifications lock is
+    keyed by channel), so the same crossing reaches email AND telegram without
+    either being sent twice. Channels the user has enabled but not configured
+    (no chat_id etc.) simply don't deliver. Default is email if no prefs exist.
+    Local imports so the pure sweep above stays importable without the providers.
+    """
+    from backend import notifications_service, email_sender, notification_prefs_service
+    from backend.notifications import channels, messages
+    from backend.user_service import get_user_by_id
 
-    for _, row in df.iterrows():
-        if pd.isna(row["LTP"]):
-            continue
-        target = float(row["target_price"])
-        ltp = float(row["LTP"])
-        triggered = (row["direction"] == "above" and ltp >= target) or \
-                    (row["direction"] == "below" and ltp <= target)
-        if triggered:
-            triggered_ids.append(row["id"])
-            triggered_rows.append((row, ltp))
-            print(f"ALERT TRIGGERED: {row['Symbol']} hit {ltp} (Target: {target} {row['direction']})")
+    def _send(channel: str, user, prefs: dict, subject: str, text: str, html: str) -> bool:
+        if channel == "email":
+            to = prefs.get("email") or (user.email if user else None)
+            return bool(to) and email_sender.send_email(to, subject, html)
+        if channel == "telegram":
+            cid = prefs.get("telegram_chat_id")
+            return bool(cid) and channels.send_telegram(cid, text)
+        if channel == "whatsapp":
+            wa = prefs.get("whatsapp_number")
+            return bool(wa) and channels.send_whatsapp(wa, text)
+        if channel == "web_push":
+            sub = prefs.get("web_push_subscription")
+            return bool(sub) and channels.send_web_push(sub, {"title": subject, "body": text})
+        logger.warning("Alert %s: unknown channel %r — skipping.", "?", channel)
+        return False
 
-    # 3. Mark alerts triggered and deliver notifications
-    if triggered_ids:
-        now = datetime.now(timezone.utc).isoformat()
-        ids_str = ", ".join([f"'{i}'" for i in triggered_ids])
-        sql_update = f"""
-        UPDATE `{alerts_table}`
-        SET is_triggered = true, triggered_at = '{now}'
-        WHERE id IN ({ids_str})
-        """
-        bq.client.query(sql_update).result()
-        print(f"Updated {len(triggered_ids)} alerts as triggered.")
+    def notify(alert: dict) -> bool:
+        user = get_user_by_id(alert["user_id"])
+        prefs = notification_prefs_service.get_prefs(alert["user_id"]) or {}
+        enabled = prefs.get("channels_enabled") or ["email"]  # email is the default
 
-        prefs_table = bq._get_full_table_id("notification_preferences")
-        alert_caps = _fetch_alert_caps(bq)
-        delivered_count = {}
-        for row, ltp in triggered_rows:
-            user_id = row.get("user_id", "")
-            cap = alert_caps.get(user_id)
-            if cap is not None and delivered_count.get(user_id, 0) >= cap:
+        cond = alert_conditions.parse_condition(alert.get("condition_json"))
+        subject = f"Alert: {alert_conditions.describe(alert['symbol'], alert.get('condition_json'))}"
+        text = messages.build_alert_message(
+            alert["symbol"], _coerce(alert.get("current_price")),
+            _coerce(cond.get("value")), cond.get("op"),
+        )
+        html = "<p>" + text.replace("\n", "<br>") + "</p>"
+
+        delivered_any = False
+        for channel in enabled:
+            nid = notifications_service.begin(
+                user_id=alert["user_id"], alert_id=alert["id"],
+                channel=channel, type_="price_alert", subject=subject,
+            )
+            if nid is None:
+                delivered_any = True  # already delivered on this channel for this crossing
                 continue
             try:
-                prefs_rows = list(bq.client.query(
-                    f"SELECT * FROM `{prefs_table}` WHERE user_id = '{user_id}' LIMIT 1"
-                ).result())
-                prefs = dict(prefs_rows[0]) if prefs_rows else {}
-                _deliver_alert(row, ltp, prefs)
-                delivered_count[user_id] = delivered_count.get(user_id, 0) + 1
-            except Exception as e:
-                print(f"Notification failed for user {user_id}: {e}")
+                ok = _send(channel, user, prefs, subject, text, html)
+            except Exception as exc:
+                notifications_service.resolve(nid, notifications_service.FAILED, error=str(exc))
+                continue
+            notifications_service.resolve(
+                nid, notifications_service.SENT if ok else notifications_service.FAILED,
+            )
+            delivered_any = delivered_any or ok
+        return delivered_any
 
-    return triggered_ids
+    return notify
+
+
+def main() -> int:
+    """Entry point. Non-zero when a crossing could not be delivered."""
+    result = check_alerts(build_notifier())
+    return 1 if result["undelivered"] else 0
 
 
 if __name__ == "__main__":
-    check_alerts()
+    sys.exit(main())

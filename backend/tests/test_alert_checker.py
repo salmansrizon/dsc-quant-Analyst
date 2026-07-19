@@ -1,93 +1,127 @@
-from unittest.mock import patch, MagicMock
-import pandas as pd
-from backend.alert_checker import check_alerts
+"""The edge-trigger alert sweep (ticket #66, reworked from #48).
+
+The sweep fires on the crossing, not on being met; an undelivered crossing is
+never recorded as fired, so it retries; a fired alert is one-shot. These tests
+drive check_alerts over a controlled set of active alerts and record every
+record_state call — no BigQuery.
+"""
+import pytest
+
+from backend import alert_checker
+from backend import alert_conditions as ac
 
 
-def _mock_bq(alerts_df, prices_df, caps_rows, prefs_by_user):
-    bq = MagicMock()
-    bq._get_full_table_id.side_effect = lambda name: name
-
-    def query_side_effect(sql, *args, **kwargs):
-        m = MagicMock()
-        if "price_alerts" in sql and "is_triggered = false" in sql:
-            m.to_dataframe.return_value = alerts_df
-        elif "lankabd_datamatrix" in sql:
-            m.to_dataframe.return_value = prices_df
-        elif "subscription_packages" in sql:
-            m.result.return_value = caps_rows
-        elif "UPDATE" in sql:
-            m.result.return_value = []
-        elif "notification_preferences" in sql:
-            for uid, prefs in prefs_by_user.items():
-                if f"user_id = '{uid}'" in sql:
-                    m.result.return_value = [prefs]
-                    return m
-            m.result.return_value = []
-        return m
-
-    bq.client.query.side_effect = query_side_effect
-    return bq
+def _alert(**over):
+    base = {
+        "id": "a1", "user_id": "u1", "type": ac.PRICE, "symbol": "GP",
+        "condition_json": ac.price_condition("above", 100.0),
+        "last_met": False, "current_price": 150.0,
+    }
+    base.update(over)
+    return base
 
 
-def test_alerts_beyond_alert_cap_are_marked_triggered_but_not_delivered():
-    alerts_df = pd.DataFrame([
-        {"id": "a1", "user_id": "u1", "Symbol": "ACI", "target_price": 100.0, "direction": "above"},
-        {"id": "a2", "user_id": "u1", "Symbol": "BRAC", "target_price": 50.0, "direction": "above"},
-    ])
-    prices_df = pd.DataFrame([
-        {"Symbol": "ACI", "LTP": "105.0"},
-        {"Symbol": "BRAC", "LTP": "55.0"},
-    ])
-    caps_rows = [{"user_id": "u1", "alert_cap": 1}]
-    prefs_by_user = {"u1": {"channels_enabled": ["telegram"], "telegram_chat_id": "999"}}
+@pytest.fixture
+def sweep(monkeypatch):
+    """Control active_alerts; record record_state(alert, met, fired) calls."""
+    state = {"alerts": [], "recorded": []}
 
-    bq = _mock_bq(alerts_df, prices_df, caps_rows, prefs_by_user)
+    def _record(alert, met, fired):
+        state["recorded"].append({"id": alert["id"], "met": met, "fired": fired})
 
-    with patch("backend.alert_checker.BigQueryHelper", return_value=bq), \
-         patch("backend.alert_checker.send_telegram") as mock_send:
-        triggered_ids = check_alerts()
-
-    assert sorted(triggered_ids) == ["a1", "a2"]
-    assert mock_send.call_count == 1
+    monkeypatch.setattr(alert_checker.alerts_service, "active_alerts",
+                        lambda: state["alerts"])
+    monkeypatch.setattr(alert_checker.alerts_service, "record_state", _record)
+    return state
 
 
-def test_alerts_under_alert_cap_are_all_delivered():
-    alerts_df = pd.DataFrame([
-        {"id": "a1", "user_id": "u1", "Symbol": "ACI", "target_price": 100.0, "direction": "above"},
-        {"id": "a2", "user_id": "u1", "Symbol": "BRAC", "target_price": 50.0, "direction": "above"},
-    ])
-    prices_df = pd.DataFrame([
-        {"Symbol": "ACI", "LTP": "105.0"},
-        {"Symbol": "BRAC", "LTP": "55.0"},
-    ])
-    caps_rows = [{"user_id": "u1", "alert_cap": 5}]
-    prefs_by_user = {"u1": {"channels_enabled": ["telegram"], "telegram_chat_id": "999"}}
-
-    bq = _mock_bq(alerts_df, prices_df, caps_rows, prefs_by_user)
-
-    with patch("backend.alert_checker.BigQueryHelper", return_value=bq), \
-         patch("backend.alert_checker.send_telegram") as mock_send:
-        check_alerts()
-
-    assert mock_send.call_count == 2
+def test_no_active_alerts_is_a_noop(sweep):
+    result = alert_checker.check_alerts(notifier=lambda a: True)
+    assert result["fired"] == [] and result["rebaselined"] == []
+    assert sweep["recorded"] == []
 
 
-def test_alerts_with_no_active_subscription_are_uncapped():
-    alerts_df = pd.DataFrame([
-        {"id": "a1", "user_id": "u2", "Symbol": "ACI", "target_price": 100.0, "direction": "above"},
-        {"id": "a2", "user_id": "u2", "Symbol": "BRAC", "target_price": 50.0, "direction": "above"},
-    ])
-    prices_df = pd.DataFrame([
-        {"Symbol": "ACI", "LTP": "105.0"},
-        {"Symbol": "BRAC", "LTP": "55.0"},
-    ])
-    caps_rows = []  # no active subscription for u2
-    prefs_by_user = {"u2": {"channels_enabled": ["telegram"], "telegram_chat_id": "999"}}
+def test_an_up_crossing_fires_and_is_recorded_fired(sweep):
+    sweep["alerts"] = [_alert(last_met=False, current_price=150.0)]  # above 100
+    result = alert_checker.check_alerts(notifier=lambda a: True)
+    assert [a["id"] for a in result["fired"]] == ["a1"]
+    assert sweep["recorded"] == [{"id": "a1", "met": True, "fired": True}]
 
-    bq = _mock_bq(alerts_df, prices_df, caps_rows, prefs_by_user)
 
-    with patch("backend.alert_checker.BigQueryHelper", return_value=bq), \
-         patch("backend.alert_checker.send_telegram") as mock_send:
-        check_alerts()
+def test_still_met_does_not_fire_and_records_nothing(sweep):
+    # last_met already True: being met is not a crossing.
+    sweep["alerts"] = [_alert(last_met=True, current_price=150.0)]
+    result = alert_checker.check_alerts(notifier=lambda a: True)
+    assert result["fired"] == [] and result["rebaselined"] == []
+    assert sweep["recorded"] == []
 
-    assert mock_send.call_count == 2
+
+def test_a_down_crossing_rebaselines_without_firing(sweep):
+    # Was met, now below the target: rebaseline last_met=False, no fire.
+    sweep["alerts"] = [_alert(last_met=True, current_price=50.0)]
+    result = alert_checker.check_alerts(notifier=lambda a: True)
+    assert result["fired"] == []
+    assert [a["id"] for a in result["rebaselined"]] == ["a1"]
+    assert sweep["recorded"] == [{"id": "a1", "met": False, "fired": False}]
+
+
+def test_an_undelivered_crossing_is_not_recorded_so_it_retries(sweep):
+    sweep["alerts"] = [_alert(last_met=False, current_price=150.0)]
+    result = alert_checker.check_alerts(notifier=lambda a: False)
+    assert [a["id"] for a in result["undelivered"]] == ["a1"]
+    assert sweep["recorded"] == [], "a failed delivery must not consume the crossing"
+
+
+def test_a_notifier_that_raises_does_not_consume_the_crossing(sweep):
+    def boom(alert):
+        raise RuntimeError("resend is down")
+
+    sweep["alerts"] = [_alert(last_met=False, current_price=150.0)]
+    result = alert_checker.check_alerts(notifier=boom)
+    assert [a["id"] for a in result["undelivered"]] == ["a1"]
+    assert sweep["recorded"] == []
+
+
+def test_an_unevaluable_alert_is_skipped_entirely(sweep):
+    # No price: met is None — neither a crossing nor a rebaseline.
+    sweep["alerts"] = [_alert(current_price=None)]
+    result = alert_checker.check_alerts(notifier=lambda a: True)
+    assert result["fired"] == [] and result["rebaselined"] == []
+    assert sweep["recorded"] == []
+
+
+def test_one_failed_delivery_does_not_block_the_others(sweep):
+    sweep["alerts"] = [
+        _alert(id="a1", current_price=150.0),
+        _alert(id="a2", current_price=150.0),
+        _alert(id="a3", current_price=150.0),
+    ]
+
+    def flaky(alert):
+        return alert["id"] != "a2"
+
+    result = alert_checker.check_alerts(notifier=flaky)
+    assert [a["id"] for a in result["fired"]] == ["a1", "a3"]
+    assert [a["id"] for a in result["undelivered"]] == ["a2"]
+    assert [r["id"] for r in sweep["recorded"]] == ["a1", "a3"]
+
+
+def test_no_notifier_leaves_crossings_undelivered(sweep):
+    sweep["alerts"] = [_alert(last_met=False, current_price=150.0)]
+    result = alert_checker.check_alerts()  # no notifier
+    assert [a["id"] for a in result["undelivered"]] == ["a1"]
+    assert sweep["recorded"] == []
+
+
+# ── main / exit code ─────────────────────────────────────────────────────────
+
+def test_main_exit_code_reflects_undelivered(sweep, monkeypatch):
+    # A scheduler reads the exit code: a crossing nobody was told about is a
+    # non-zero run.
+    monkeypatch.setattr(alert_checker, "build_notifier", lambda: (lambda a: False))
+    sweep["alerts"] = [_alert(last_met=False, current_price=150.0)]
+    assert alert_checker.main() == 1
+
+    monkeypatch.setattr(alert_checker, "build_notifier", lambda: (lambda a: True))
+    sweep["alerts"] = [_alert(last_met=False, current_price=150.0)]
+    assert alert_checker.main() == 0

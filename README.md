@@ -31,7 +31,55 @@ Complete web scraping solution for Lankabangla financial portal stock market dat
 ### Backend Setup
 1. `cd backend`
 2. `pip install -r requirements.txt`
-3. `uvicorn api:app --reload`
+3. `python bootstrap_tables.py` — **required once per environment.** Creates the
+   append-only tables (`users`, `watchlists`, `portfolios`, `price_alerts`,
+   `alerts`, `notifications`, and the `fundamentals_*` set) and
+   their `_current` views. Without it every read fails with
+   `404 Not found: Table ..._current`. Idempotent, so re-running is safe.
+4. `python migrations/001_users_phone_to_string.py` — only needed for a dataset
+   whose `users` table predates the fix. `bootstrap_tables.py` declares `phone`
+   as STRING for tables it creates, but cannot change an existing column's type,
+   and signup 400s on every phone number while it is INTEGER (#51). Idempotent;
+   `--dry-run` reports without writing. It leaves a `users_backup_pre51` table
+   behind — drop it once satisfied.
+5. `python migrations/002_price_alerts_to_alerts.py` — only for a dataset with
+   pre-#66 `price_alerts` rows. Rebuilds them into the type-discriminated
+   `alerts` table (append, not DML — #52), baselining each alert's edge state
+   against the live price so an already-met alert does not fire on the first
+   sweep. Idempotent; `--dry-run` reports without writing.
+5. `uvicorn api:app --reload`
+
+### Tests
+
+| Command | What it runs |
+|---|---|
+| `pip install -r requirements-dev.txt` | runtime deps + pytest/httpx |
+| `pytest -m "not integration"` | 132 offline tests, ~0.5s, no credentials |
+| `pytest -m integration` | 10 tests against real BigQuery, ~3min |
+| `npx vitest run` | 16 frontend tests |
+
+**The offline suite stubs BigQuery, so it cannot see a schema drift, a missing
+table, or a permissions failure.** Every serious defect in this codebase was
+invisible to it. `-m integration` is what catches those.
+
+CI (`.github/workflows/`): `ci.yml` runs the offline + frontend checks on every
+push. `integration.yml` runs the BigQuery tests nightly and on demand
+(`workflow_dispatch`); it needs a `GCP_SERVICE_ACCOUNT_JSON` repo secret and
+fails loudly rather than skipping when it is absent.
+
+The integration job runs against the **shared dev dataset**, not a throwaway
+one: the export and market tests read the ETL tables (~870k rows in
+`lankabd_price_archive` alone), which would mean re-scraping lankabd.com per
+run. The trade is that those tests write real rows into the dataset you are
+using — they tombstone their users afterwards, but the tables are append-only,
+so the version rows accumulate. Point the `BIGQUERY_DATASET_ID` repo variable
+elsewhere to override; the workflow bootstraps whatever dataset it is given.
+
+> **Why append-only?** BigQuery's free tier forbids DML — `UPDATE`/`DELETE`
+> return `403 Billing has not been enabled`. So nothing is edited in place: a
+> change appends a new version of the row, a delete appends a tombstone, and
+> `<table>_current` resolves the latest live version. Load jobs and views are
+> free. See ticket #52.
 
 ### Frontend Setup
 1. `cd frontend`

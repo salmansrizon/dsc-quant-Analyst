@@ -1,0 +1,40 @@
+name: CI
+
+# The fast, credential-free checks — every push. The tests that talk to real
+# BigQuery are in integration.yml; this file passing does not mean the app works
+# against a real dataset (#54).
+
+on:
+  push:
+    branches: [main, staging]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  backend:
+    name: Backend (offline)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+          cache: pip
+      - run: pip install -r requirements-dev.txt
+      # No credentials and no .env, deliberately: this suite stubs db._client and
+      # must never reach BigQuery. If it starts needing a key, the test is wrong.
+      - run: pytest -m "not integration"
+
+  frontend:
+    name: Frontend
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+      - run: npm ci
+      - run: npx tsc --noEmit
+      - run: npm run test:run
+      - run: npm run build

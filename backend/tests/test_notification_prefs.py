@@ -1,71 +1,37 @@
-from unittest.mock import patch
+"""Append-only notification preferences (#78)."""
+import json
+
 import pytest
-from fastapi.testclient import TestClient
-from backend.api import app
-from backend.auth import create_access_token
-from backend.models import UserResponse
 
-USER_ID = "pref-user-id"
+from backend import db, notification_prefs_service as nps
+from backend.tests.fakes import AppendLog, FakeClient, rows as fake_rows
 
 
 @pytest.fixture
-def client():
-    return TestClient(app)
+def appended(monkeypatch):
+    log = AppendLog()
+    monkeypatch.setattr(db, "append_version", log)
+    return log
 
 
-@pytest.fixture
-def user_token():
-    return create_access_token(USER_ID, "user")
+def test_update_prefs_appends_a_version_keyed_by_user(appended, monkeypatch):
+    # get_prefs (called at the end) reads the row back.
+    monkeypatch.setattr(db, "_client", FakeClient(result_rows=fake_rows(
+        {"id": "u1", "user_id": "u1", "channels_enabled": '["email","telegram"]',
+         "telegram_chat_id": "c1"})))
+    nps.update_prefs("u1", {"channels_enabled": ["email", "telegram"],
+                            "telegram_chat_id": "c1"})
+    row = appended.appends[0]["rows"][0]
+    assert row["id"] == "u1"                                  # upsert key = user_id
+    assert row["channels_enabled"] == '["email", "telegram"]'  # stored as JSON string
 
 
-@pytest.fixture
-def mock_user():
-    return UserResponse(
-        id=USER_ID, email="pref@test.com", phone="01700000002",
-        full_name="Pref User", role="user",
-    )
+def test_get_prefs_parses_channels_enabled_to_a_list(monkeypatch):
+    monkeypatch.setattr(db, "_client", FakeClient(result_rows=fake_rows(
+        {"id": "u1", "user_id": "u1", "channels_enabled": '["email"]'})))
+    assert nps.get_prefs("u1")["channels_enabled"] == ["email"]
 
 
-PREFS = {
-    "telegram_chat_id": "12345678",
-    "whatsapp_number": "8801700000000",
-    "email": "user@example.com",
-    "web_push_subscription": None,
-    "channels_enabled": ["telegram", "email"],
-}
-
-
-# ── Behavior 7: GET /api/settings/notifications requires auth ─────────────────
-
-def test_get_notification_prefs_requires_auth(client):
-    resp = client.get("/api/settings/notifications")
-    assert resp.status_code in (401, 403)
-
-
-def test_get_notification_prefs_returns_preferences(client, user_token, mock_user):
-    with patch("backend.user_service.get_user_by_id", return_value=mock_user), \
-         patch("backend.bq_service.get_notification_preferences", return_value=PREFS):
-        resp = client.get(
-            "/api/settings/notifications",
-            headers={"Authorization": f"Bearer {user_token}"},
-        )
-    assert resp.status_code == 200
-    data = resp.json()
-    assert "channels_enabled" in data
-    assert "telegram" in data["channels_enabled"]
-
-
-# ── Behavior 8: PUT /api/settings/notifications updates preferences ───────────
-
-def test_update_notification_prefs_returns_updated_data(client, user_token, mock_user):
-    updated = {**PREFS, "channels_enabled": ["telegram", "email", "web_push"]}
-    with patch("backend.user_service.get_user_by_id", return_value=mock_user), \
-         patch("backend.bq_service.update_notification_preferences", return_value=updated):
-        resp = client.put(
-            "/api/settings/notifications",
-            json=PREFS,
-            headers={"Authorization": f"Bearer {user_token}"},
-        )
-    assert resp.status_code == 200
-    data = resp.json()
-    assert "channels_enabled" in data
+def test_get_prefs_is_none_when_absent(monkeypatch):
+    monkeypatch.setattr(db, "_client", FakeClient(result_rows=[]))
+    assert nps.get_prefs("nobody") is None

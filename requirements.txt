@@ -1,8 +1,28 @@
+# API
 fastapi
 uvicorn
-pandas
-google-cloud-bigquery
+python-multipart
+pydantic
+
+# Auth
 pyjwt
 bcrypt
-python-multipart
+
+# Config
 python-dotenv
+
+# BigQuery. Plain (no [pandas] extra): that extra pulls pyarrow, which is
+# ~500MB on its own and single-handedly pushed the Vercel function bundle
+# over the platform's 500MB limit (#72) — the same failure mode a82931f fixed
+# once before, pre-#41. db.py writes via load_table_from_json, not
+# load_table_from_dataframe, so pyarrow is not needed; to_dataframe() (which
+# would need db-dtypes) is never called.
+google-cloud-bigquery
+pandas
+numpy
+
+# ETL scrapers. lxml is not optional — it is the parser BeautifulSoup is asked
+# for by name: BeautifulSoup(html, 'lxml').
+requests
+beautifulsoup4
+lxml

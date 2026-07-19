@@ -1,22 +1,41 @@
+"""Auth endpoint tests.
+
+These sign up against real BigQuery, so they are marked `integration`. They are
+also the only thing that catches a schema/type drift between the table and the
+models — #51 (phone was INTEGER in BigQuery, a string in models.UserCreate) was
+visible here and nowhere else. If CI ever runs only `-m "not integration"`, that
+class of bug ships silently.
+"""
+import pytest
+
+pytestmark = pytest.mark.integration
+
+
 def test_signup_returns_token_and_user(client, test_email):
+    from backend.user_service import delete_user
+
     resp = client.post("/api/auth/signup", json={
         "email": test_email,
-        "phone": "1234567890",
+        "phone": "01700000000",
         "password": "testpass123",
         "full_name": "Test User",
     })
-    assert resp.status_code == 200
+    assert resp.status_code == 200, resp.text
     data = resp.json()
-    assert "access_token" in data
-    assert data["token_type"] == "bearer"
-    assert data["user"]["email"] == test_email
-    assert data["user"]["full_name"] == "Test User"
-    assert data["user"]["role"] == "user"
-    assert "id" in data["user"]
-
-    # Cleanup
-    from backend.user_service import delete_user
-    delete_user(data["user"]["id"])
+    # try/finally, not cleanup-after-asserts: a failing assertion is exactly when
+    # a real bug is present, and it must not also leave a live user behind in the
+    # shared dataset.
+    try:
+        assert "access_token" in data
+        assert "refresh_token" in data, "the session model (#68) issues both on signup"
+        assert data["token_type"] == "bearer"
+        assert data["user"]["email"] == test_email
+        assert data["user"]["full_name"] == "Test User"
+        assert data["user"]["role"] == "user"
+        assert "id" in data["user"]
+        assert data["user"]["phone"] == "01700000000", "the leading zero must survive (#51)"
+    finally:
+        delete_user(data["user"]["id"])
 
 
 def test_login_valid_credentials_returns_token(client, created_user):
@@ -27,6 +46,7 @@ def test_login_valid_credentials_returns_token(client, created_user):
     assert resp.status_code == 200
     data = resp.json()
     assert "access_token" in data
+    assert "refresh_token" in data
     assert data["token_type"] == "bearer"
     assert data["user"]["email"] == created_user["email"]
 
@@ -50,7 +70,7 @@ def test_login_unknown_email_returns_401(client):
 def test_signup_duplicate_email_returns_400(client, created_user):
     resp = client.post("/api/auth/signup", json={
         "email": created_user["email"],
-        "phone": "1234567890",
+        "phone": "01700000000",
         "password": "testpass123",
         "full_name": "Another User",
     })

@@ -1,0 +1,62 @@
+name: Integration (real BigQuery)
+
+# The tests that stub nothing. The offline suite cannot see a schema drift, a
+# missing table, or a permissions failure — every serious defect in this
+# codebase was invisible to it. See #54.
+#
+# Dataset: the SHARED dev dataset, not a throwaway per run.
+#   #54 offered a throwaway dataset as the clean option, and it is not viable:
+#   the export and market tests read lankabd_price_archive (~870k rows),
+#   lankabd_announcements (~17k) and lankabd_datamatrix, which are ETL output.
+#   Recreating them per run means re-scraping lankabd.com — slow, and rude to
+#   someone else's server. Seeding them is a bigger job than this ticket.
+#   The cost: these tests write real rows into the dataset a developer is using.
+#   They tombstone their users afterwards, but the tables are append-only (#52),
+#   so those version rows accumulate. That is acceptable for a log-shaped table
+#   and is the trade being made knowingly.
+#   Override with a repo variable BIGQUERY_DATASET_ID to point somewhere else;
+#   the bootstrap step below makes a fresh dataset work.
+
+on:
+  schedule:
+    - cron: '0 2 * * *'   # 02:00 UTC daily
+  workflow_dispatch:       # and on demand, e.g. before a merge
+
+jobs:
+  integration:
+    name: Integration tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+          cache: pip
+      - run: pip install -r requirements-dev.txt
+
+      - name: Check the secret is configured
+        # Fail, don't skip: a silently-skipped integration run is how green CI
+        # starts lying, which is the whole reason for #54.
+        env:
+          KEY: ${{ secrets.GCP_SERVICE_ACCOUNT_JSON }}
+        run: |
+          if [ -z "$KEY" ]; then
+            echo "::error::GCP_SERVICE_ACCOUNT_JSON is not set. These tests cannot run without it."
+            exit 1
+          fi
+
+      - name: Ensure tables and views exist
+        # Idempotent. Without it a fresh dataset 404s on every _current view,
+        # and the failure blames the query rather than the missing setup.
+        env:
+          GCP_SERVICE_ACCOUNT_JSON: ${{ secrets.GCP_SERVICE_ACCOUNT_JSON }}
+          BIGQUERY_DATASET_ID: ${{ vars.BIGQUERY_DATASET_ID }}
+        run: python -m backend.bootstrap_tables
+
+      - name: Run integration tests
+        env:
+          # db._resolve_credentials reads this and writes it to a temp file.
+          GCP_SERVICE_ACCOUNT_JSON: ${{ secrets.GCP_SERVICE_ACCOUNT_JSON }}
+          # Unset resolves to "", which db.py already falls back to its default on.
+          BIGQUERY_DATASET_ID: ${{ vars.BIGQUERY_DATASET_ID }}
+        run: pytest -m integration -v

@@ -9,7 +9,7 @@ load_dotenv()
 
 bq = BigQueryHelper()
 
-def upload_csv(file_path, table_name, chunk_size=500, truncate=False):
+def upload_csv(file_path, table_name, truncate=False):
     print(f"Uploading {file_path} to {table_name}...")
     if not os.path.exists(file_path):
         print(f"File {file_path} not found. Skipping.")

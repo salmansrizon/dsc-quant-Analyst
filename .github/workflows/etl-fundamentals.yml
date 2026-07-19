@@ -1,0 +1,64 @@
+name: ETL — weekly fundamentals
+
+# The second scheduler #55 decided: fundamentals move on quarterly earnings and
+# dividend declarations, not daily, so a weekly run catches new rows for near-
+# zero cost. No dependency on the market chain (company_api walks the API's own
+# company list; DividendArchive is one bulk pull), so order between the two
+# scripts is irrelevant.
+
+on:
+  schedule:
+    - cron: '0 3 * * 5'   # Friday 03:00 UTC — a non-trading day
+  workflow_dispatch:
+
+jobs:
+  fundamentals:
+    name: Scrape company API + dividend archive
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+          cache: pip
+      - run: pip install -r requirements.txt
+
+      - name: Check the secret is configured
+        env:
+          KEY: ${{ secrets.GCP_SERVICE_ACCOUNT_JSON }}
+        run: |
+          if [ -z "$KEY" ]; then
+            echo "::error::GCP_SERVICE_ACCOUNT_JSON is not set. The ETL cannot run without it."
+            exit 1
+          fi
+
+      - name: Ensure tables and views exist
+        env:
+          GCP_SERVICE_ACCOUNT_JSON: ${{ secrets.GCP_SERVICE_ACCOUNT_JSON }}
+          BIGQUERY_DATASET_ID: ${{ vars.BIGQUERY_DATASET_ID }}
+        run: python -m backend.bootstrap_tables
+
+      # scrapers/-level scripts run as `-m scrapers.X` from backend/: Python
+      # puts the script's *directory* on the path, so `python scrapers/x.py`
+      # would leave `import db` / `from scrapers.common` unresolvable; `-m` puts
+      # the cwd (backend) on the path instead (#65 found this).
+      - name: Company API (ratios + statements)
+        working-directory: backend
+        env:
+          GCP_SERVICE_ACCOUNT_JSON: ${{ secrets.GCP_SERVICE_ACCOUNT_JSON }}
+          BIGQUERY_DATASET_ID: ${{ vars.BIGQUERY_DATASET_ID }}
+        run: python -m scrapers.company_api
+
+      - name: Dividend archive (earnings + dividends)
+        working-directory: backend
+        env:
+          GCP_SERVICE_ACCOUNT_JSON: ${{ secrets.GCP_SERVICE_ACCOUNT_JSON }}
+          BIGQUERY_DATASET_ID: ${{ vars.BIGQUERY_DATASET_ID }}
+        run: python -m scrapers.fundamentals
+
+      - name: Rights archive (#65)
+        working-directory: backend
+        env:
+          GCP_SERVICE_ACCOUNT_JSON: ${{ secrets.GCP_SERVICE_ACCOUNT_JSON }}
+          BIGQUERY_DATASET_ID: ${{ vars.BIGQUERY_DATASET_ID }}
+        run: python -m scrapers.rights_archive

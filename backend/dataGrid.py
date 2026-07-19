@@ -4,40 +4,19 @@ import pandas as pd
 pd.set_option('future.no_silent_downcasting', True)
 import time
 import json
+import sys
 
 
 # logging utility
 from utils.logger import Log
 from utils.bigquery_helper import BigQueryHelper
+from scrapers.common import HEADERS, get_session, header_keyed_rows
 from datetime import datetime as _dt
 
 # module logger
 log_filename = f"logs/main_{_dt.now().strftime('%Y%m%d_%H%M%S')}.log"
 logger = Log(name="main", filename=log_filename)
 
-# Headers to mimic a real browser
-HEADERS = {
-    'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
-    'Accept-Language': 'en-US,en;q=0.5',
-    'Accept-Encoding': 'gzip, deflate, br',
-    'Connection': 'keep-alive',
-    'Upgrade-Insecure-Requests': '1',
-    'Cache-Control': 'max-age=0',
-}
-
-def get_session():
-    session = requests.Session()
-    # Add retry strategy
-    retry_strategy = requests.adapters.Retry(
-        total=3,
-        backoff_factor=1,
-        status_forcelist=[429, 500, 502, 503, 504]
-    )
-    adapter = requests.adapters.HTTPAdapter(max_retries=retry_strategy)
-    session.mount("http://", adapter)
-    session.mount("https://", adapter)
-    return session
 
 def get_available_sectors():
     """Fetch all available sectors from the DataMatrix page"""
@@ -116,22 +95,23 @@ def scrape_lankabd(sector=None):
             logger.warning("No data table found on the page")
             return None
             
-        # Extract table headers
-        headers_list = [th.text.strip() for th in table.find('thead').find_all('th')]
+        # Header-zip via the shared helper (#60).
+        rows = header_keyed_rows(table)
+        if not rows:
+            logger.warning("Data table had no header-keyed rows")
+            return None
+        df = pd.DataFrame(rows)
         
-        # Extract table rows
-        data = []
-        rows = table.find('tbody').find_all('tr')
-        
-        for row in rows:
-            cols = row.find_all('td')
-            data.append([col.text.strip() for col in cols])
-        
-        # Create a DataFrame
-        df = pd.DataFrame(data, columns=headers_list)
+        # Standardize column naming and drop unnamed columns
+        df.rename(columns={
+            'Symbol': 'Symbol',
+            'Sector': 'Sector',
+            'LTP': 'LTP',
+            'Volume(Qty)': 'Volume(Qty)',
+            'Value(Turnover)': 'Value(Turnover)',
+        }, inplace=True, errors='ignore')
 
-        # Drop truly empty or "Unnamed" columns (e.g. the Buy/Sell action-button
-        # column, which has no header text) that confuse SQL importers
+        # Drop truly empty or "Unnamed" columns that confuse SQL importers
         df = df.loc[:, ~df.columns.astype(str).str.contains('^Unnamed|^$', case=False, na=False)]
         df = df.loc[:, df.columns.astype(str) != ""] # Extra check for literally empty names
 
@@ -139,21 +119,18 @@ def scrape_lankabd(sector=None):
         import numpy as np
         df = df.replace(['-', 'N/A', 'n/a', 'nan', 'inf', '-inf'], np.nan)
 
-        # Non-numeric columns: identifiers, category labels, and date strings
-        NON_NUMERIC_COLUMNS = {
-            'Symbol', 'Sector', 'Market Category',
-            'Last Dividend Declaration Date', 'Last AGM Date',
-            'Date', 'captured_at_timestamp',
-        }
-
         # Convert numeric columns to match BigQuery schema
         for col in df.columns:
-            if col not in NON_NUMERIC_COLUMNS:
+            if col not in ['Symbol', 'Sector', 'Trade', 'Market Category', 'Last Dividend Declaration Date', 'Last AGM Date', 'Date', 'captured_at_timestamp']:
                 df[col] = pd.to_numeric(df[col].astype(str).str.replace(',', ''), errors='coerce')
 
-        # Keep all real data columns the site exposes (the "FILTERS" checkboxes
-        # on the page are a client-side display toggle only — the full set is
-        # always present in the page HTML, all checked by default).
+        # Keep the full data column set the site exposes (#82, ported from main's
+        # 07ccc77). The old trimmed list dropped Audited PE / Director Holdings /
+        # NAV(Quarter End) / RSI(14) — the very columns the dashboard extremes
+        # leaderboards read (they become Audited_PE / Director_Holdings /
+        # NAV_Quarter_End_ / RSI_14_ once BigQuery autodetect sanitizes the
+        # headers). The FILTERS checkboxes on the page are a client-side display
+        # toggle only; the full set is always present in the page HTML.
         allowed_columns = [
             "Symbol", "Sector", "LTP", "Open", "High", "Low", "Close", "YCP",
             "Change", "% Change", "Volume(Qty)", "Value(Turnover)",
@@ -168,12 +145,16 @@ def scrape_lankabd(sector=None):
 
         # Apply sector filter if specified
         if sector:
-            if 'Sector' in df.columns:
-                df = df[df['Sector'] == sector]
-                logger.info(f"Filtered data for sector: {sector} ({len(df)} rows)")
-            else:
-                logger.warning("'Sector' column not found in data")
-        
+            if 'Sector' not in df.columns:
+                # Without the column there is nothing to filter on, and returning
+                # the unfiltered frame would hand every sector a copy of the whole
+                # table — which scrape_all_sectors would then concat into an N-way
+                # duplicate and truncate the universe with. Fail instead.
+                logger.error("'Sector' column not found in data — cannot filter")
+                return None
+            df = df[df['Sector'] == sector]
+            logger.info(f"Filtered data for sector: {sector} ({len(df)} rows)")
+
         return df
         
     except requests.exceptions.RequestException as e:
@@ -183,52 +164,115 @@ def scrape_lankabd(sector=None):
         logger.error(f"An error occurred: {e}")
         return None
 
+# Sectors the site lists but which carry no equity listings. They are empty on
+# every run (23 sectors offered, 21 with rows), so an empty result for these is
+# expected rather than a failed scrape. Any OTHER sector coming back empty is
+# treated as a failure: scrape_lankabd fetches one page and filters it
+# client-side, so "empty" only means no row carried this sector's label — a
+# truncated page or a renamed label is indistinguishable from a genuinely empty
+# sector, and both must block the replace.
+EXPECTED_EMPTY_SECTORS = frozenset({"Debenture", "G-SEC (T.Bond)"})
+
+
+class PartialScrapeError(RuntimeError):
+    """Raised when some sectors failed, so the universe must not be replaced.
+
+    Carries the sector names and the CSV path so a caller can act on them
+    without parsing the message.
+    """
+
+    def __init__(self, failed_sectors, total_sectors, output_file):
+        self.failed_sectors = list(failed_sectors)
+        self.total_sectors = total_sectors
+        self.output_file = output_file
+        super().__init__(
+            f"{len(self.failed_sectors)} of {total_sectors} sectors failed to scrape "
+            f"({', '.join(self.failed_sectors)}). Refusing to replace "
+            f"lankabd_datamatrix with a partial universe; the existing table is "
+            f"untouched and {output_file} holds what was scraped."
+        )
+
+
 def scrape_all_sectors():
-    """Fetch and save data for all sectors"""
+    """Fetch every sector and replace lankabd_datamatrix with the result.
+
+    The upload is a full replace, and this table is the symbol universe: both
+    other scrapers take their symbol list from it and the watchlist/portfolio/
+    alert queries join against it. Replacing it with a partial scrape silently
+    shrinks the universe everywhere downstream, with no way to tell that it
+    happened and no way back except a successful rerun (ticket #45). So a
+    partial scrape must not be allowed to land — a stale but complete universe
+    beats a fresh but partial one.
+
+    Raises PartialScrapeError unless every sector yields rows, except the ones
+    in EXPECTED_EMPTY_SECTORS, which never have any.
+    """
     sectors = get_available_sectors()
-    
+
     if not sectors:
         logger.error("No sectors found")
         return None
-    
+
     all_data = []
-    
+    failed_sectors = []
+
     for sector in sectors:
         logger.info(f"\n--- Fetching data for sector: {sector} ---")
         df = scrape_lankabd(sector=sector)
-        
+
         if df is not None and len(df) > 0:
             all_data.append(df)
             logger.info(f"Successfully fetched {len(df)} rows")
+        elif sector in EXPECTED_EMPTY_SECTORS and df is not None:
+            logger.info(f"Sector is empty as expected: {sector}")
         else:
-            logger.warning(f"No data for sector: {sector}")
-        
+            failed_sectors.append(sector)
+            logger.warning(f"Failed to scrape sector: {sector}")
+
         time.sleep(1)  # Be polite to the server
-    
-    # Combine all data
-    if all_data:
-        combined_df = pd.concat(all_data, ignore_index=True)
-        
-        # Save to CSV (local backup)
-        output_file = 'lankabd_data_all_sectors.csv'
-        combined_df.to_csv(output_file, index=False)
-        logger.info(f"\n✓ Combined data saved to {output_file}")
-        
-        # NEW: Upload to BigQuery
-        try:
-            bq = BigQueryHelper()
-            bq.upload_dataframe(combined_df, 'lankabd_datamatrix', truncate=True)
-            logger.info("✓ Data successfully uploaded to BigQuery.")
-        except Exception as e:
-            logger.error(f"Error uploading to BigQuery: {e}")
-            raise e # Allow failure to propagate for CI/CD retry
-            
-        return combined_df
-    else:
+
+    if not all_data:
         logger.warning("\nNo data collected from any sector")
         return None
+
+    combined_df = pd.concat(all_data, ignore_index=True)
+
+    # Always keep the local backup, even when the upload is refused below —
+    # it is the only copy of a partial scrape's work.
+    output_file = 'lankabd_data_all_sectors.csv'
+    combined_df.to_csv(output_file, index=False)
+    logger.info(f"\n✓ Combined data saved to {output_file}")
+
+    if failed_sectors:
+        raise PartialScrapeError(failed_sectors, len(sectors), output_file)
+
+    try:
+        bq = BigQueryHelper()
+        bq.upload_dataframe(combined_df, 'lankabd_datamatrix', truncate=True)
+        logger.info("✓ Data successfully uploaded to BigQuery.")
+    except Exception as e:
+        logger.error(f"Error uploading to BigQuery: {e}")
+        raise e # Allow failure to propagate for CI/CD retry
+
+    return combined_df
+
+
+def main() -> int:
+    """Entry point. Returns a process exit code."""
+    try:
+        result = scrape_all_sectors()
+    except PartialScrapeError as e:
+        # Non-zero so a scheduler or CI run cannot mistake a refused partial
+        # scrape for a successful refresh.
+        logger.error(str(e))
+        return 1
+    if result is None:
+        # No sectors listed, or every sector failed — nothing was uploaded.
+        logger.error("Scrape produced no data; lankabd_datamatrix is unchanged.")
+        return 1
+    return 0
 
 
 if __name__ == "__main__":
     # Local execution support
-    scrape_all_sectors()
+    sys.exit(main())

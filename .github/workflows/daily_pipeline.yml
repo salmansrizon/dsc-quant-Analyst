@@ -21,10 +21,24 @@ jobs:
         run: pip install -r requirements.txt
         working-directory: backend
 
+      # The scrapers authenticate to BigQuery from the GCP_SERVICE_ACCOUNT_JSON
+      # secret (backend/utils/bigquery_helper.py writes it to a temp key file).
+      # It was previously wired to a GOOGLE_APPLICATION_CREDENTIALS secret that
+      # does not exist, so every run hit DefaultCredentialsError. Fail loudly if
+      # the real secret is ever missing rather than deep in a stack trace.
+      - name: Check the BigQuery secret is configured
+        env:
+          KEY: ${{ secrets.GCP_SERVICE_ACCOUNT_JSON }}
+        run: |
+          if [ -z "$KEY" ]; then
+            echo "::error::GCP_SERVICE_ACCOUNT_JSON is not set. The ETL cannot run without it."
+            exit 1
+          fi
+
       - name: Refresh datamatrix (full replace)
         working-directory: backend
         env:
-          GOOGLE_APPLICATION_CREDENTIALS: ${{ secrets.GOOGLE_APPLICATION_CREDENTIALS }}
+          GCP_SERVICE_ACCOUNT_JSON: ${{ secrets.GCP_SERVICE_ACCOUNT_JSON }}
           BIGQUERY_PROJECT_ID: ${{ secrets.BIGQUERY_PROJECT_ID }}
           BIGQUERY_DATASET_ID: ${{ secrets.BIGQUERY_DATASET_ID }}
         run: python dataGrid.py
@@ -32,7 +46,7 @@ jobs:
       - name: Update price archive (incremental)
         working-directory: backend
         env:
-          GOOGLE_APPLICATION_CREDENTIALS: ${{ secrets.GOOGLE_APPLICATION_CREDENTIALS }}
+          GCP_SERVICE_ACCOUNT_JSON: ${{ secrets.GCP_SERVICE_ACCOUNT_JSON }}
           BIGQUERY_PROJECT_ID: ${{ secrets.BIGQUERY_PROJECT_ID }}
           BIGQUERY_DATASET_ID: ${{ secrets.BIGQUERY_DATASET_ID }}
         run: python priceArchive.py
@@ -41,7 +55,7 @@ jobs:
       - name: Update announcements (incremental)
         working-directory: backend
         env:
-          GOOGLE_APPLICATION_CREDENTIALS: ${{ secrets.GOOGLE_APPLICATION_CREDENTIALS }}
+          GCP_SERVICE_ACCOUNT_JSON: ${{ secrets.GCP_SERVICE_ACCOUNT_JSON }}
           BIGQUERY_PROJECT_ID: ${{ secrets.BIGQUERY_PROJECT_ID }}
           BIGQUERY_DATASET_ID: ${{ secrets.BIGQUERY_DATASET_ID }}
         run: python announcement.py
@@ -50,7 +64,7 @@ jobs:
       - name: Refresh summary and sectors cache tables
         working-directory: backend
         env:
-          GOOGLE_APPLICATION_CREDENTIALS: ${{ secrets.GOOGLE_APPLICATION_CREDENTIALS }}
+          GCP_SERVICE_ACCOUNT_JSON: ${{ secrets.GCP_SERVICE_ACCOUNT_JSON }}
           BIGQUERY_PROJECT_ID: ${{ secrets.BIGQUERY_PROJECT_ID }}
           BIGQUERY_DATASET_ID: ${{ secrets.BIGQUERY_DATASET_ID }}
         run: python refresh_cache.py

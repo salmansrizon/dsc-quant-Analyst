@@ -89,6 +89,39 @@ TABLES: dict[str, TableSpec] = {
         ("fs_value", "FLOAT64"), ("fs_order", "INT64"),
         ("updated_at", _TS), ("is_deleted", "BOOL"),
     )),
+    # Subscription packages (#77, ported from main). A user's à-la-carte or
+    # bundle-based notification subscription, pending -> admin-approved/rejected.
+    # main mutated these with UPDATE DML (403 on the free tier); here they are
+    # append-only versions like everything else.
+    "subscription_packages": TableSpec("id", (
+        ("id", _STR), ("user_id", _STR),
+        ("medium", "ARRAY<STRING>"),
+        ("alert_channel", "BOOL"), ("digest_channel", "BOOL"),
+        ("alert_cap", "INT64"), ("digest_cadence", _STR),
+        ("bundle_id", _STR), ("status", _STR),           # pending|active|rejected
+        ("transaction_id", _STR), ("submitted_at", _TS),
+        ("decided_at", _TS), ("decided_by", _STR),
+        ("last_digest_sent_at", _TS),
+        ("created_at", _TS), ("updated_at", _TS), ("is_deleted", "BOOL"),
+    )),
+    # Admin-defined bundle presets (#77). main's update/deactivate used
+    # read-all + WRITE_TRUNCATE (the #40 data-loss pattern) — now db.revise.
+    "admin_bundles": TableSpec("id", (
+        ("id", _STR), ("name", _STR),
+        ("medium", "ARRAY<STRING>"),
+        ("alert_channel", "BOOL"), ("digest_channel", "BOOL"),
+        ("alert_cap", "INT64"), ("digest_cadence", _STR),
+        ("price", "FLOAT64"), ("is_active", "BOOL"),
+        ("created_by", _STR),
+        ("created_at", _TS), ("updated_at", _TS), ("is_deleted", "BOOL"),
+    )),
+    # Pricing lookup for the custom-subscription estimator (#77). A static seed
+    # table; id = dimension|key so it fits the append-only/_current shape.
+    "pricing_weights": TableSpec("id", (
+        ("id", _STR), ("dimension", _STR), ("key", _STR),
+        ("weight_price", "FLOAT64"),
+        ("updated_at", _TS), ("is_deleted", "BOOL"),
+    )),
     # Rights issues from /Home/RightArchive (#65). Ingest-only for now — the v2
     # ex-rights price adjustment (needs the theoretical ex-rights value, more
     # than a single factor) is deferred (#33). Grain: one rights issue.

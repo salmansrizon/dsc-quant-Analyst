@@ -14,6 +14,7 @@ from .models import (
     RefreshRequest, ForgotPasswordRequest, ResetPasswordRequest, MessageResponse,
     WatchlistAdd, PortfolioAdd, PortfolioUpdate, AlertCreate,
     ScreenerRequest, ScreenerResponse, ScreenerWatchlistAdd,
+    SubscriptionCreate, BundleCreate,
 )
 from .user_service import (
     create_user, get_user_by_email, get_user_credentials,
@@ -24,6 +25,7 @@ from . import account_recovery
 from . import market_service, watchlist_service, portfolio_service, alerts_service
 from . import fundamentals_service
 from . import screener_service
+from . import subscriptions_service
 
 FRONTEND_URL = os.environ.get("FRONTEND_URL", "http://localhost:5173")
 
@@ -309,6 +311,61 @@ def alerts_create(payload: AlertCreate, current_user: UserResponse = Depends(get
 def alerts_delete(alert_id: str, current_user: UserResponse = Depends(get_current_user)):
     alerts_service.delete_alert(alert_id, current_user.id)
     return {"status": "deleted"}
+
+
+# ── Subscriptions & bundles (#77) ────────────────────────────────────────────
+
+@app.post("/api/subscriptions")
+def subscription_create(payload: SubscriptionCreate, current_user: UserResponse = Depends(get_current_user)):
+    return subscriptions_service.create_subscription(current_user.id, payload.model_dump())
+
+
+@app.post("/api/subscriptions/{subscription_id}/transaction")
+def subscription_attach_transaction(subscription_id: str, body: dict, current_user: UserResponse = Depends(get_current_user)):
+    txn_id = body.get("transaction_id")
+    if not txn_id:
+        raise HTTPException(status_code=400, detail="transaction_id is required")
+    return subscriptions_service.attach_transaction_id(subscription_id, txn_id)
+
+
+@app.get("/api/subscriptions/pricing")
+def subscription_pricing():
+    return subscriptions_service.get_pricing()
+
+
+@app.get("/api/admin/subscriptions")
+def admin_subscriptions_list(admin: UserResponse = Depends(require_admin)):
+    return subscriptions_service.list_subscriptions()
+
+
+@app.post("/api/admin/subscriptions/{subscription_id}/approve")
+def admin_approve_subscription(subscription_id: str, admin: UserResponse = Depends(require_admin)):
+    return subscriptions_service.decide_subscription(subscription_id, admin.id, approved=True)
+
+
+@app.post("/api/admin/subscriptions/{subscription_id}/reject")
+def admin_reject_subscription(subscription_id: str, admin: UserResponse = Depends(require_admin)):
+    return subscriptions_service.decide_subscription(subscription_id, admin.id, approved=False)
+
+
+@app.post("/api/admin/bundles")
+def admin_create_bundle(payload: BundleCreate, admin: UserResponse = Depends(require_admin)):
+    return subscriptions_service.create_bundle(admin.id, payload.model_dump())
+
+
+@app.get("/api/admin/bundles")
+def admin_list_bundles(admin: UserResponse = Depends(require_admin)):
+    return subscriptions_service.list_bundles()
+
+
+@app.put("/api/admin/bundles/{bundle_id}")
+def admin_update_bundle(bundle_id: str, payload: BundleCreate, admin: UserResponse = Depends(require_admin)):
+    return subscriptions_service.update_bundle(bundle_id, payload.model_dump())
+
+
+@app.post("/api/admin/bundles/{bundle_id}/deactivate")
+def admin_deactivate_bundle(bundle_id: str, admin: UserResponse = Depends(require_admin)):
+    return subscriptions_service.deactivate_bundle(bundle_id)
 
 
 # ── Internal (cron) ──────────────────────────────────────────────────────────

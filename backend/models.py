@@ -107,6 +107,27 @@ class PortfolioItem(BaseModel):
     pnl_percent: Optional[float] = None
 
 
+# ─── Subscriptions & bundles (#77, ported from main) ─────────────────────────
+
+class SubscriptionCreate(BaseModel):
+    medium: list[str]
+    alert_channel: bool
+    digest_channel: bool
+    alert_cap: int = Field(..., ge=0)
+    digest_cadence: str = Field(..., pattern="^(daily|alternate|weekly)$")
+    bundle_id: Optional[str] = None
+
+
+class BundleCreate(BaseModel):
+    name: str
+    medium: list[str]
+    alert_channel: bool
+    digest_channel: bool
+    alert_cap: int = Field(..., ge=0)
+    digest_cadence: str = Field(..., pattern="^(daily|alternate|weekly)$")
+    price: float = Field(..., ge=0)
+
+
 # ─── Screener (#71) ───────────────────────────────────────────────────────────
 
 class ScreenerFilter(BaseModel):

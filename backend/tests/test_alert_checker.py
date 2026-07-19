@@ -118,10 +118,10 @@ def test_no_notifier_leaves_crossings_undelivered(sweep):
 def test_main_exit_code_reflects_undelivered(sweep, monkeypatch):
     # A scheduler reads the exit code: a crossing nobody was told about is a
     # non-zero run.
-    monkeypatch.setattr(alert_checker, "build_email_notifier", lambda: (lambda a: False))
+    monkeypatch.setattr(alert_checker, "build_notifier", lambda: (lambda a: False))
     sweep["alerts"] = [_alert(last_met=False, current_price=150.0)]
     assert alert_checker.main() == 1
 
-    monkeypatch.setattr(alert_checker, "build_email_notifier", lambda: (lambda a: True))
+    monkeypatch.setattr(alert_checker, "build_notifier", lambda: (lambda a: True))
     sweep["alerts"] = [_alert(last_met=False, current_price=150.0)]
     assert alert_checker.main() == 0

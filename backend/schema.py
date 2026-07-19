@@ -89,6 +89,15 @@ TABLES: dict[str, TableSpec] = {
         ("fs_value", "FLOAT64"), ("fs_order", "INT64"),
         ("updated_at", _TS), ("is_deleted", "BOOL"),
     )),
+    # Per-user notification channel preferences (#78, ported from main). One row
+    # per user (id = user_id), append-versioned; channels_enabled is a JSON
+    # array string. main mutated this with UPDATE DML.
+    "notification_preferences": TableSpec("id", (
+        ("id", _STR), ("user_id", _STR),
+        ("telegram_chat_id", _STR), ("whatsapp_number", _STR), ("email", _STR),
+        ("web_push_subscription", _STR), ("channels_enabled", _STR),
+        ("updated_at", _TS), ("is_deleted", "BOOL"),
+    )),
     # Subscription packages (#77, ported from main). A user's à-la-carte or
     # bundle-based notification subscription, pending -> admin-approved/rejected.
     # main mutated these with UPDATE DML (403 on the free tier); here they are

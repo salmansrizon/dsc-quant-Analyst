@@ -128,6 +128,16 @@ class BundleCreate(BaseModel):
     price: float = Field(..., ge=0)
 
 
+# ─── Notification preferences (#78, ported from main) ────────────────────────
+
+class NotificationPreferences(BaseModel):
+    telegram_chat_id: Optional[str] = None
+    whatsapp_number: Optional[str] = None
+    email: Optional[str] = None
+    web_push_subscription: Optional[str] = None
+    channels_enabled: list[str] = []
+
+
 # ─── Screener (#71) ───────────────────────────────────────────────────────────
 
 class ScreenerFilter(BaseModel):

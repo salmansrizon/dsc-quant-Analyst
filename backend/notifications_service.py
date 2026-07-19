@@ -22,24 +22,26 @@ FAILED = "failed"
 BOUNCED = "bounced"
 
 
-def _has_open_delivery(alert_id: str, type_: str) -> bool:
+def _has_open_delivery(alert_id: str, type_: str, channel: str) -> bool:
     """Whether a sending/sent notification already exists for this crossing.
 
-    The lock: a fired alert produces one delivery (one-shot). If a `sending` or
-    `sent` row is already current for it, a re-run must not send again. Keyed on
-    alert_id + type so a password_reset (alert_id NULL) never collides with an
-    alert's delivery.
+    The lock: a fired alert produces one delivery per channel. If a `sending` or
+    `sent` row is already current for it *on this channel*, a re-run must not
+    re-send. Keyed on alert_id + type + channel — so the same crossing can fan
+    out to email AND telegram (#78), but neither is sent twice, and a
+    password_reset (alert_id NULL) never collides with an alert's delivery.
     """
     rows = db.query_rows(
         f"""
         SELECT id FROM {db.current_view('notifications')}
-        WHERE alert_id = @aid AND type = @type
+        WHERE alert_id = @aid AND type = @type AND channel = @channel
           AND status IN UNNEST(@open)
         LIMIT 1
         """,
         [
             bigquery.ScalarQueryParameter("aid", "STRING", alert_id),
             bigquery.ScalarQueryParameter("type", "STRING", type_),
+            bigquery.ScalarQueryParameter("channel", "STRING", channel),
             bigquery.ArrayQueryParameter("open", "STRING", [SENDING, SENT]),
         ],
     )
@@ -54,7 +56,7 @@ def begin(user_id: str, alert_id: str | None, channel: str, type_: str,
     caller must then skip the send. `alert_id` is None for transactional email,
     which is never deduplicated this way (each reset is its own event).
     """
-    if alert_id is not None and _has_open_delivery(alert_id, type_):
+    if alert_id is not None and _has_open_delivery(alert_id, type_, channel):
         return None
 
     nid = str(uuid.uuid4())

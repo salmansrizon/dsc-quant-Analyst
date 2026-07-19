@@ -100,51 +100,81 @@ def _deliver(alert: dict, notifier: Optional[Notifier]) -> bool:
         return False
 
 
-def build_email_notifier() -> Notifier:
-    """A notifier that emails the alert's owner via Resend, with log-before-send.
+def _coerce(value) -> float:
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return 0.0
 
-    Local imports so the pure sweep above is importable (and testable) without
-    pulling in the email provider or the user service.
+
+def build_notifier() -> Notifier:
+    """A notifier that fans an alert out to the owner's enabled channels (#78).
+
+    Keeps the log-before-send discipline *per channel* (the notifications lock is
+    keyed by channel), so the same crossing reaches email AND telegram without
+    either being sent twice. Channels the user has enabled but not configured
+    (no chat_id etc.) simply don't deliver. Default is email if no prefs exist.
+    Local imports so the pure sweep above stays importable without the providers.
     """
-    from backend import notifications_service, email_sender
+    from backend import notifications_service, email_sender, notification_prefs_service
+    from backend.notifications import channels, messages
     from backend.user_service import get_user_by_id
+
+    def _send(channel: str, user, prefs: dict, subject: str, text: str, html: str) -> bool:
+        if channel == "email":
+            to = prefs.get("email") or (user.email if user else None)
+            return bool(to) and email_sender.send_email(to, subject, html)
+        if channel == "telegram":
+            cid = prefs.get("telegram_chat_id")
+            return bool(cid) and channels.send_telegram(cid, text)
+        if channel == "whatsapp":
+            wa = prefs.get("whatsapp_number")
+            return bool(wa) and channels.send_whatsapp(wa, text)
+        if channel == "web_push":
+            sub = prefs.get("web_push_subscription")
+            return bool(sub) and channels.send_web_push(sub, {"title": subject, "body": text})
+        logger.warning("Alert %s: unknown channel %r — skipping.", "?", channel)
+        return False
 
     def notify(alert: dict) -> bool:
         user = get_user_by_id(alert["user_id"])
-        if not user or not user.email:
-            logger.warning("Alert %s owner has no email — cannot deliver.", alert["id"])
-            return False
+        prefs = notification_prefs_service.get_prefs(alert["user_id"]) or {}
+        enabled = prefs.get("channels_enabled") or ["email"]  # email is the default
 
-        phrase = alert_conditions.describe(alert["symbol"], alert.get("condition_json"))
-        subject = f"Alert: {phrase}"
-        body = (f"<p>Your alert fired: <b>{phrase}</b> "
-                f"(now {alert.get('current_price')}).</p>")
-
-        nid = notifications_service.begin(
-            user_id=alert["user_id"], alert_id=alert["id"],
-            channel="email", type_="price_alert", subject=subject,
+        cond = alert_conditions.parse_condition(alert.get("condition_json"))
+        subject = f"Alert: {alert_conditions.describe(alert['symbol'], alert.get('condition_json'))}"
+        text = messages.build_alert_message(
+            alert["symbol"], _coerce(alert.get("current_price")),
+            _coerce(cond.get("value")), cond.get("op"),
         )
-        if nid is None:
-            # A sending/sent row already exists for this crossing — already
-            # delivered. Treat as delivered so the one-shot is marked fired.
-            return True
+        html = "<p>" + text.replace("\n", "<br>") + "</p>"
 
-        try:
-            ok = email_sender.send_email(user.email, subject, body)
-        except Exception as exc:
-            notifications_service.resolve(nid, notifications_service.FAILED, error=str(exc))
-            raise
-        notifications_service.resolve(
-            nid, notifications_service.SENT if ok else notifications_service.FAILED,
-        )
-        return ok
+        delivered_any = False
+        for channel in enabled:
+            nid = notifications_service.begin(
+                user_id=alert["user_id"], alert_id=alert["id"],
+                channel=channel, type_="price_alert", subject=subject,
+            )
+            if nid is None:
+                delivered_any = True  # already delivered on this channel for this crossing
+                continue
+            try:
+                ok = _send(channel, user, prefs, subject, text, html)
+            except Exception as exc:
+                notifications_service.resolve(nid, notifications_service.FAILED, error=str(exc))
+                continue
+            notifications_service.resolve(
+                nid, notifications_service.SENT if ok else notifications_service.FAILED,
+            )
+            delivered_any = delivered_any or ok
+        return delivered_any
 
     return notify
 
 
 def main() -> int:
     """Entry point. Non-zero when a crossing could not be delivered."""
-    result = check_alerts(build_email_notifier())
+    result = check_alerts(build_notifier())
     return 1 if result["undelivered"] else 0
 
 

@@ -14,7 +14,7 @@ from .models import (
     RefreshRequest, ForgotPasswordRequest, ResetPasswordRequest, MessageResponse,
     WatchlistAdd, PortfolioAdd, PortfolioUpdate, AlertCreate,
     ScreenerRequest, ScreenerResponse, ScreenerWatchlistAdd,
-    SubscriptionCreate, BundleCreate,
+    SubscriptionCreate, BundleCreate, NotificationPreferences,
 )
 from .user_service import (
     create_user, get_user_by_email, get_user_credentials,
@@ -26,6 +26,7 @@ from . import market_service, watchlist_service, portfolio_service, alerts_servi
 from . import fundamentals_service
 from . import screener_service
 from . import subscriptions_service
+from . import notification_prefs_service
 
 FRONTEND_URL = os.environ.get("FRONTEND_URL", "http://localhost:5173")
 
@@ -368,6 +369,21 @@ def admin_deactivate_bundle(bundle_id: str, admin: UserResponse = Depends(requir
     return subscriptions_service.deactivate_bundle(bundle_id)
 
 
+# ── Notification preferences (#78) ───────────────────────────────────────────
+
+@app.get("/api/settings/notifications")
+def get_notification_prefs(current_user: UserResponse = Depends(get_current_user)):
+    return notification_prefs_service.get_prefs(current_user.id) or {
+        "channels_enabled": [], "telegram_chat_id": None, "whatsapp_number": None,
+        "email": current_user.email, "web_push_subscription": None,
+    }
+
+
+@app.put("/api/settings/notifications")
+def update_notification_prefs(payload: NotificationPreferences, current_user: UserResponse = Depends(get_current_user)):
+    return notification_prefs_service.update_prefs(current_user.id, payload.model_dump())
+
+
 # ── Internal (cron) ──────────────────────────────────────────────────────────
 
 @app.post("/api/internal/run-alerts")
@@ -390,7 +406,7 @@ def run_alerts(authorization: str = Header(default="")):
         raise HTTPException(status_code=401, detail="Unauthorized")
 
     from . import alert_checker
-    result = alert_checker.check_alerts(alert_checker.build_email_notifier())
+    result = alert_checker.check_alerts(alert_checker.build_notifier())
     return {
         "fired": len(result["fired"]),
         "undelivered": len(result["undelivered"]),

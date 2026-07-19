@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import type { AxiosInstance } from 'axios';
 import { AlertCircle, Bell, CheckCircle, XCircle } from 'lucide-react';
 import { errorMessage } from '../api/errorMessage';
+import SymbolSearch from '../components/SymbolSearch/SymbolSearch';
 
 interface Alert {
   id: string;
@@ -71,12 +72,18 @@ export default function AlertsPage({ client }: { client: AxiosInstance }) {
 
         {/* New Alert Form */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 p-4 border rounded-lg bg-gray-50">
-          <input
-            type="text"
-            placeholder="Symbol"
+          <SymbolSearch
+            client={client}
             value={newAlert.symbol}
-            onChange={e => setNewAlert({ ...newAlert, symbol: e.target.value.toUpperCase() })}
-            className="border p-2 rounded"
+            onChange={symbol => setNewAlert(prev => ({ ...prev, symbol }))}
+            onSelect={row => setNewAlert(prev => ({
+              ...prev,
+              symbol: row.Symbol,
+              // Seed the target with the live price so the user edits from a
+              // sensible anchor rather than 0 (main's useMarketPrice, inlined).
+              target_price: row.LTP != null ? Number(row.LTP) : prev.target_price,
+            }))}
+            placeholder="Symbol"
           />
           <input
             type="number"

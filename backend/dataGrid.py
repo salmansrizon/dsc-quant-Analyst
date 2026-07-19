@@ -124,12 +124,22 @@ def scrape_lankabd(sector=None):
             if col not in ['Symbol', 'Sector', 'Trade', 'Market Category', 'Last Dividend Declaration Date', 'Last AGM Date', 'Date', 'captured_at_timestamp']:
                 df[col] = pd.to_numeric(df[col].astype(str).str.replace(',', ''), errors='coerce')
 
-        # Explicitly keep only common columns that exist in the database schema
+        # Keep the full data column set the site exposes (#82, ported from main's
+        # 07ccc77). The old trimmed list dropped Audited PE / Director Holdings /
+        # NAV(Quarter End) / RSI(14) — the very columns the dashboard extremes
+        # leaderboards read (they become Audited_PE / Director_Holdings /
+        # NAV_Quarter_End_ / RSI_14_ once BigQuery autodetect sanitizes the
+        # headers). The FILTERS checkboxes on the page are a client-side display
+        # toggle only; the full set is always present in the page HTML.
         allowed_columns = [
-            "Symbol", "Sector", "LTP", "Open", "High", "Low", "Close", "YCP", 
-            "Change", "% Change", "Volume(Qty)", "Value(Turnover)", "Trade", 
-            "Market_Cap", "PE", "EPS", "Div_Yield", "ROE", "Net_Asset", 
-            "SMA_20", "SMA_50", "RSI_14", "Bollinger_Upper", "Bollinger_Lower", "Volatility_20d"
+            "Symbol", "Sector", "LTP", "Open", "High", "Low", "Close", "YCP",
+            "Change", "% Change", "Volume(Qty)", "Value(Turnover)",
+            "Market Category", "Audited PE", "Forward PE", "Free Float",
+            "Director Holdings", "Govt. Holdings", "Institute Holdings",
+            "Foreign Holdings", "Public Holdings", "Market Capitalization (mn)",
+            "Paid Up Capital (mn)", "Last Dividend Declaration Date", "Last AGM Date",
+            "Dividend Yield(%)", "Cash Dividend", "Stock Dividend", "EPS",
+            "NAV(Quarter End)", "RSI(14)", "Turnover Velocity(22)", "Beta(5)",
         ]
         df = df[[col for col in allowed_columns if col in df.columns]]
 

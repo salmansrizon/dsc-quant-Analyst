@@ -1,4 +1,6 @@
 """Read-only market-data queries (split from the bq_service god module, #43)."""
+from itertools import groupby
+
 from google.cloud import bigquery
 
 from . import db
@@ -166,3 +168,192 @@ def market_summary():
     """
     rows = db.query_rows(sql)
     return rows[0] if rows else {}
+
+
+# ── Dashboard leaderboards (PRD-12, ported from main onto append-only reads, #82)
+#
+# All pure on-read queries over lankabd_datamatrix / lankabd_price_archive — no
+# cache tables. main backed these with refresh_cache.py's CREATE OR REPLACE
+# TABLE jobs; that DDL is redundant here (the free tier is append-only, and
+# list_sectors/market_summary already compute the same aggregates on-read — see
+# [[bigquery-free-tier-no-dml]]), so refresh_cache is intentionally not ported.
+#
+# The extremes/technical leaderboards read datamatrix columns that only land
+# once dataGrid's widened allowlist re-scrapes: NAV_Quarter_End_, Audited_PE,
+# Director_Holdings, RSI_14_. Before that scrape they return [] (the columns are
+# absent / NULL), not an error.
+
+_LEADERBOARD_COLUMNS = {
+    "value": ("Value_Turnover_", "DESC"),
+    "gainer": ("__Change", "DESC"),
+    "loser": ("__Change", "ASC"),
+    "volume": ("Volume_Qty_", "DESC"),
+}
+
+
+def leaderboard(metric: str, limit: int = 10):
+    """Top-N by a raw datamatrix column (value/gainer/loser/volume), or by the
+    latest trade count from price_archive (`trade`)."""
+    if metric == "trade":
+        return top_trade(limit)
+    column, direction = _LEADERBOARD_COLUMNS[metric]
+    sql = f"""
+        SELECT Symbol, Sector, LTP, ROUND(__Change, 2) AS ChangePct,
+               Volume_Qty_ AS Volume, Value_Turnover_ AS Value
+        FROM {db.table_id('lankabd_datamatrix')}
+        ORDER BY {column} {direction}
+        LIMIT {int(limit)}
+    """
+    return db.query_rows(sql)
+
+
+def top_trade(limit: int = 10):
+    sql = f"""
+        WITH latest_trade AS (
+            SELECT Symbol, Trade FROM (
+                SELECT Symbol, SAFE_CAST(Trade AS INT64) AS Trade,
+                       ROW_NUMBER() OVER (PARTITION BY Symbol ORDER BY Date DESC) AS rn
+                FROM {db.table_id('lankabd_price_archive')}
+                WHERE SAFE_CAST(Trade AS INT64) IS NOT NULL
+            )
+            WHERE rn = 1
+        )
+        SELECT d.Symbol, d.Sector, d.LTP, ROUND(d.__Change, 2) AS ChangePct,
+               d.Volume_Qty_ AS Volume, d.Value_Turnover_ AS Value, lt.Trade
+        FROM {db.table_id('lankabd_datamatrix')} d
+        JOIN latest_trade lt ON d.Symbol = lt.Symbol
+        ORDER BY lt.Trade DESC
+        LIMIT {int(limit)}
+    """
+    return db.query_rows(sql)
+
+
+_EXTREMES_COLUMNS = {
+    "pe_low": ("Audited_PE", "ASC"),
+    "pe_high": ("Audited_PE", "DESC"),
+    "director_holding_low": ("Director_Holdings", "ASC"),
+    "director_holding_high": ("Director_Holdings", "DESC"),
+}
+
+
+def extremes_leaderboard(metric: str, limit: int = 10):
+    """Fundamental extremes: PE / director-holding rankings, plus a derived
+    NAV-to-price ratio (`nav_price_*`) computed in SQL."""
+    if metric in ("nav_price_low", "nav_price_high"):
+        direction = "ASC" if metric == "nav_price_low" else "DESC"
+        sql = f"""
+            SELECT Symbol, Sector, LTP,
+                   ROUND(SAFE_DIVIDE(NAV_Quarter_End_, LTP), 2) AS MetricValue
+            FROM {db.table_id('lankabd_datamatrix')}
+            WHERE NAV_Quarter_End_ IS NOT NULL AND LTP IS NOT NULL AND LTP != 0
+            ORDER BY MetricValue {direction}
+            LIMIT {int(limit)}
+        """
+        return db.query_rows(sql)
+    column, direction = _EXTREMES_COLUMNS[metric]
+    sql = f"""
+        SELECT Symbol, Sector, LTP, {column} AS MetricValue
+        FROM {db.table_id('lankabd_datamatrix')}
+        WHERE {column} IS NOT NULL
+        ORDER BY {column} {direction}
+        LIMIT {int(limit)}
+    """
+    return db.query_rows(sql)
+
+
+def market_strength():
+    """Breadth: how many symbols are up / down / flat on the day."""
+    sql = f"""
+        SELECT
+            COUNTIF(__Change > 0) AS Gainers,
+            COUNTIF(__Change < 0) AS Losers,
+            COUNTIF(__Change = 0) AS Unchanged
+        FROM {db.table_id('lankabd_datamatrix')}
+    """
+    rows = db.query_rows(sql)
+    return rows[0] if rows else {}
+
+
+def sector_breakdown():
+    """Per-sector PE, traded value, gainer/loser counts and average change."""
+    sql = f"""
+        SELECT
+            Sector,
+            ROUND(AVG(Audited_PE), 2) AS AvgPE,
+            ROUND(SUM(Value_Turnover_), 2) AS TotalTradeValue,
+            COUNTIF(__Change > 0) AS GainersCount,
+            COUNTIF(__Change < 0) AS LosersCount,
+            ROUND(AVG(__Change), 2) AS AvgChange
+        FROM {db.table_id('lankabd_datamatrix')}
+        WHERE Sector IS NOT NULL AND Sector != ''
+        GROUP BY Sector
+        ORDER BY Sector
+    """
+    return db.query_rows(sql)
+
+
+_TECHNICAL_COMPUTED = {
+    "macd_low": ("macd", "ASC"),
+    "macd_high": ("macd", "DESC"),
+    "stochastic_low": ("stochastic", "ASC"),
+    "stochastic_high": ("stochastic", "DESC"),
+}
+
+
+def technical_extremes(metric: str, limit: int = 10):
+    """Technical-indicator extremes. `rsi_*` reads the scraped RSI_14_ column;
+    `macd_*` / `stochastic_*` are computed on-read (like technical_indicators,
+    #31) from the last 50 price_archive bars per symbol — the raw table has no
+    MACD/stochastic column, so there is nothing to read."""
+    if metric in ("rsi_low", "rsi_high"):
+        direction = "ASC" if metric == "rsi_low" else "DESC"
+        sql = f"""
+            SELECT Symbol, Sector, LTP, RSI_14_ AS MetricValue
+            FROM {db.table_id('lankabd_datamatrix')}
+            WHERE RSI_14_ IS NOT NULL
+            ORDER BY RSI_14_ {direction}
+            LIMIT {int(limit)}
+        """
+        return db.query_rows(sql)
+
+    indicator, direction = _TECHNICAL_COMPUTED[metric]
+    # Sector/LTP come from the datamatrix join so we don't assume the price
+    # archive carries them; bars are ordered ascending per symbol for the series.
+    sql = f"""
+        WITH ranked AS (
+            SELECT Symbol, Date, High, Low, Close,
+                   ROW_NUMBER() OVER (PARTITION BY Symbol ORDER BY Date DESC) AS rn
+            FROM {db.table_id('lankabd_price_archive')}
+            WHERE Close IS NOT NULL AND High IS NOT NULL AND Low IS NOT NULL
+        )
+        SELECT r.Symbol, d.Sector, d.LTP, r.Date, r.High, r.Low, r.Close
+        FROM ranked r
+        JOIN {db.table_id('lankabd_datamatrix')} d ON r.Symbol = d.Symbol
+        WHERE r.rn <= 50
+        ORDER BY r.Symbol, r.Date ASC
+    """
+    rows = db.query_rows(sql)
+
+    results = []
+    for symbol, group_iter in groupby(rows, key=lambda r: r["Symbol"]):
+        group = list(group_iter)
+        closes = [r["Close"] for r in group]
+        if indicator == "macd":
+            triple = indicators.macd(closes)
+            latest = triple["macd"] if triple else None
+        else:
+            highs = [r["High"] for r in group]
+            lows = [r["Low"] for r in group]
+            latest = indicators.stochastic(highs, lows, closes)
+        if latest is None:
+            continue
+        last_row = group[-1]
+        results.append({
+            "Symbol": symbol,
+            "Sector": last_row["Sector"],
+            "LTP": last_row["LTP"],
+            "MetricValue": round(latest, 2),
+        })
+
+    results.sort(key=lambda r: r["MetricValue"], reverse=(direction == "DESC"))
+    return results[:limit]

@@ -108,6 +108,26 @@ def macd(prices: list[float], fast: int = 12, slow: int = 26, signal: int = 9) -
     }
 
 
+# ── Stochastic oscillator (%K, spec 4.4) ──────────────────────────────────────
+
+def stochastic(highs: list[float], lows: list[float], closes: list[float],
+               period: int = 14) -> Optional[float]:
+    """Latest fast %K = 100·(close − lowest low) / (highest high − lowest low).
+
+    Needs `period` bars of each series. A flat range (high == low over the
+    window) is undefined; return 50.0 (the neutral midpoint) rather than divide
+    by zero — matches how bollinger's percent_b degrades on a zero band.
+    """
+    n = min(len(highs), len(lows), len(closes))
+    if n < period:
+        return None
+    hi = max(highs[-period:])
+    lo = min(lows[-period:])
+    if hi == lo:
+        return 50.0
+    return 100.0 * (closes[-1] - lo) / (hi - lo)
+
+
 # ── Bollinger Bands (spec 4.5) ────────────────────────────────────────────────
 
 def bollinger_bands(prices: list[float], period: int = 20, std_dev: float = 2) -> Optional[dict]:

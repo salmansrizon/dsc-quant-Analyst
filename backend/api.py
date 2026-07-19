@@ -179,6 +179,42 @@ def top_movers(limit: int = Query(default=10, le=50)):
     return market_service.top_movers(limit=limit)
 
 
+# ── Dashboard leaderboards (PRD-12, #82) ─────────────────────────────────────
+
+@app.get("/api/market/strength")
+def market_strength():
+    return market_service.market_strength()
+
+
+@app.get("/api/market/sectors/breakdown")
+def sectors_breakdown():
+    return market_service.sector_breakdown()
+
+
+@app.get("/api/market/leaderboard")
+def leaderboard(
+    metric: str = Query(pattern="^(value|gainer|loser|volume|trade)$"),
+    limit: int = Query(default=10, le=50),
+):
+    return market_service.leaderboard(metric=metric, limit=limit)
+
+
+@app.get("/api/market/extremes")
+def extremes(
+    metric: str = Query(pattern="^(pe_low|pe_high|director_holding_low|director_holding_high|nav_price_low|nav_price_high)$"),
+    limit: int = Query(default=10, le=50),
+):
+    return market_service.extremes_leaderboard(metric=metric, limit=limit)
+
+
+@app.get("/api/market/technical-extremes")
+def technical_extremes(
+    metric: str = Query(pattern="^(rsi_low|rsi_high|macd_low|macd_high|stochastic_low|stochastic_high)$"),
+    limit: int = Query(default=10, le=50),
+):
+    return market_service.technical_extremes(metric=metric, limit=limit)
+
+
 @app.get("/api/market/price-history/{symbol}")
 def price_history(symbol: str, days: int = Query(default=365, le=1095)):
     return market_service.price_history(symbol.upper(), days=days)

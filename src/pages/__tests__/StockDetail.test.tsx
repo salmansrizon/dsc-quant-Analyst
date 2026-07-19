@@ -1,8 +1,10 @@
 import { render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Routes, Route } from 'react-router-dom';
 import { vi } from 'vitest';
 import type { AxiosInstance } from 'axios';
 import StockDetail from '../StockDetail';
+import { ToastProvider } from '../../context/ToastContext';
 
 const FUND = {
   symbol: 'GP',
@@ -38,16 +40,19 @@ function makeClient(): AxiosInstance {
         ? Promise.resolve({ data: FUND })
         : Promise.resolve({ data: [{ Date: '2025-01-01', Close: 250 }] }),
     ),
+    post: vi.fn().mockResolvedValue({ data: { id: 'a1' } }),
   } as unknown as AxiosInstance;
 }
 
 function renderDetail(client: AxiosInstance) {
   return render(
-    <MemoryRouter initialEntries={['/stock/GP']}>
-      <Routes>
-        <Route path="/stock/:symbol" element={<StockDetail client={client} />} />
-      </Routes>
-    </MemoryRouter>,
+    <ToastProvider>
+      <MemoryRouter initialEntries={['/stock/GP']}>
+        <Routes>
+          <Route path="/stock/:symbol" element={<StockDetail client={client} />} />
+        </Routes>
+      </MemoryRouter>
+    </ToastProvider>,
   );
 }
 
@@ -64,6 +69,19 @@ describe('StockDetail', () => {
     expect(
       await screen.findByText(/Face value is assumed to be 10 BDT/),
     ).toBeInTheDocument();
+  });
+
+  it('seeds the alert target from the price and POSTs /alerts', async () => {
+    const client = makeClient();
+    renderDetail(client);
+    // The target input is pre-filled with the current price (257.5).
+    expect(await screen.findByLabelText('Target price')).toHaveValue(257.5);
+    await userEvent.click(screen.getByRole('button', { name: 'Set Alert' }));
+    expect(client.post).toHaveBeenCalledWith('/alerts', {
+      symbol: 'GP',
+      target_price: 257.5,
+      direction: 'above',
+    });
   });
 
   it('shows an error when the fundamentals fetch fails', async () => {

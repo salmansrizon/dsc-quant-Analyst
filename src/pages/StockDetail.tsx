@@ -1,8 +1,11 @@
 import { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import type { AxiosInstance } from 'axios';
+import { Bell } from 'lucide-react';
 import PriceChart, { type Candle } from '../components/PriceChart/PriceChart';
 import CandlestickChart from '../components/CandlestickChart/CandlestickChart';
+import { errorMessage } from '../api/errorMessage';
+import { useToast } from '../context/ToastContext';
 
 interface Ratio {
   value: number | null;
@@ -38,6 +41,70 @@ function Stat({ label, value }: { label: string; value: string }) {
     <div className="bg-white rounded-lg shadow-sm px-4 py-3">
       <div className="text-xs text-gray-500">{label}</div>
       <div className="text-lg font-semibold">{value}</div>
+    </div>
+  );
+}
+
+// Inline price-alert setter (reconciled from main's StockProfile into the trunk
+// StockDetail, #82) — seeds the target from the current price, POSTs /alerts.
+function SetPriceAlert({
+  client,
+  symbol,
+  price,
+}: {
+  client: AxiosInstance;
+  symbol: string;
+  price?: number | null;
+}) {
+  const toast = useToast();
+  const [target, setTarget] = useState(price != null ? String(price) : '');
+  const [direction, setDirection] = useState<'above' | 'below'>('above');
+  const [saving, setSaving] = useState(false);
+
+  const submit = async () => {
+    const value = Number(target);
+    if (!value || value <= 0) {
+      toast.error('Enter a valid target price');
+      return;
+    }
+    setSaving(true);
+    try {
+      await client.post('/alerts', { symbol, target_price: value, direction });
+      toast.success(`Alert set for ${symbol} ${direction} ৳${value.toFixed(2)}`);
+    } catch (err) {
+      toast.error(errorMessage(err, 'Failed to set alert'));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="bg-white rounded-lg shadow-sm p-4">
+      <h2 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
+        <Bell size={16} /> Set Price Alert
+      </h2>
+      <div className="flex flex-wrap items-center gap-2">
+        <input
+          type="number"
+          value={target}
+          onChange={(e) => setTarget(e.target.value)}
+          placeholder="Target price"
+          aria-label="Target price"
+          className="border p-2 rounded"
+        />
+        <select
+          value={direction}
+          onChange={(e) => setDirection(e.target.value as 'above' | 'below')}
+          aria-label="Direction"
+          className="border p-2 rounded"
+        >
+          <option value="above">Above</option>
+          <option value="below">Below</option>
+        </select>
+        <button type="button" onClick={submit} disabled={saving} className="btn-primary">
+          {saving ? 'Setting…' : 'Set Alert'}
+        </button>
+      </div>
     </div>
   );
 }
@@ -94,6 +161,8 @@ export default function StockDetail({ client }: { client: AxiosInstance }) {
           value={num(d.cash_dividend_pct)}
         />
       </div>
+
+      <SetPriceAlert client={client} symbol={fund.symbol} price={fund.price} />
 
       <div className="bg-white rounded-lg shadow-sm p-4">
         <div className="flex items-center justify-between mb-2">

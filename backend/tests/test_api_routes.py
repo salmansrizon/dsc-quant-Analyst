@@ -91,3 +91,33 @@ def test_post_alert_rejects_a_bad_direction(authed):
     resp = authed.post("/api/alerts",
                        json={"symbol": "GP", "target_price": 250, "direction": "sideways"})
     assert resp.status_code == 422
+
+
+# ── bootstrap-admin (#81, ported from main, secured) ─────────────────────────
+
+def test_bootstrap_admin_disabled_without_a_configured_secret(monkeypatch):
+    monkeypatch.delenv("ADMIN_BOOTSTRAP_SECRET", raising=False)
+    resp = TestClient(app).post("/api/admin/bootstrap-admin",
+                                json={"email": "x@y.com", "secret": "anything"})
+    assert resp.status_code == 500  # fail-hard, never open (main's default-secret vuln)
+
+
+def test_bootstrap_admin_rejects_a_wrong_secret(monkeypatch):
+    monkeypatch.setenv("ADMIN_BOOTSTRAP_SECRET", "real")
+    resp = TestClient(app).post("/api/admin/bootstrap-admin",
+                                json={"email": "x@y.com", "secret": "wrong"})
+    assert resp.status_code == 403
+
+
+def test_bootstrap_admin_promotes_with_the_right_secret(monkeypatch):
+    monkeypatch.setenv("ADMIN_BOOTSTRAP_SECRET", "real")
+    import backend.api as api
+    promoted = {}
+    monkeypatch.setattr(api, "get_user_by_email",
+                        lambda e: UserResponse(id="u9", email=e, phone="", full_name="",
+                                               role="user", created_at=None))
+    monkeypatch.setattr(api, "update_user", lambda uid, fields: promoted.update(fields) or True)
+    resp = TestClient(app).post("/api/admin/bootstrap-admin",
+                                json={"email": "x@y.com", "secret": "real"})
+    assert resp.status_code == 200
+    assert promoted == {"role": "admin"}

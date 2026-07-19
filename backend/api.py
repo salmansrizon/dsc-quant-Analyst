@@ -416,6 +416,26 @@ def run_alerts(authorization: str = Header(default="")):
 
 # ── Admin ────────────────────────────────────────────────────────────────────
 
+@app.post("/api/admin/bootstrap-admin")
+def bootstrap_admin(payload: dict):
+    """First-run admin setup: promote an existing user to admin (ported from
+    main, #81). Fail-hard — main's version fell back to a hardcoded default
+    secret, which is the self-promote-to-admin vuln #68 killed for JWT. Here an
+    unset ADMIN_BOOTSTRAP_SECRET disables the endpoint (500), never opens it.
+    """
+    secret = os.environ.get("ADMIN_BOOTSTRAP_SECRET")
+    if not secret:
+        raise HTTPException(status_code=500, detail="Admin bootstrap is disabled (no secret configured)")
+    if payload.get("secret") != secret:
+        raise HTTPException(status_code=403, detail="Forbidden")
+    email = payload.get("email")
+    user = get_user_by_email(email) if email else None
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    update_user(user.id, {"role": "admin"})
+    return {"status": "ok", "email": email, "role": "admin"}
+
+
 @app.get("/api/admin/ping")
 def admin_ping(admin: UserResponse = Depends(require_admin)):
     return {"msg": "admin access confirmed"}

@@ -43,3 +43,8 @@ gcp-key.json
 # stray local artifacts
 graphify-out/
 *copy.md
+
+# Playwright
+test-results/
+playwright-report/
+.env*

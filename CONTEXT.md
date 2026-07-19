@@ -26,6 +26,14 @@
 - **Incremental**: Price archive and announcements use `get_last_date()` to fetch only new records since last scrape
 - **Truncate**: Datamatrix is fully replaced each scrape (snapshot, not history)
 
+### Navigation
+- **Stock Profile / Stock Detail**: The detail page shown when a user clicks any Symbol (tables, search, watchlist, index tickers). On the trunk this is the `.tsx` `StockDetail` page (#36); main's `.jsx` `StockProfile` reconciles into it (#82). One page type for individual companies and market indices.
+
+### Subscriptions & Pricing (#77)
+- **Package (admin bundle)**: An admin-defined, named, fixed-price notification subscription preset — a fixed medium/alert_channel/digest_channel/alert_cap/digest_cadence config. Stored append-only in `admin_bundles`. Selecting one applies its config and skips to payment.
+- **Custom Subscription**: A user-built à-la-carte subscription (pick medium/channels/cap/cadence individually), priced by summing `pricing_weights`. Both Packages and Custom Subscriptions land as rows in `subscription_packages` and go through the pending → admin-approved/rejected lifecycle. All three tables are append-only versions + `_current` views (ported off main's DML in #77).
+
 ### Notifications
-- **Telegram Alert**: Price alert notification delivered via Telegram bot
-- **WhatsApp Alert**: Price alert notification delivered via WhatsApp (placeholder/ready)
+- **Notification channels (#78)**: an alert crossing fans out to the owner's enabled channels — **email** (Resend), **Telegram**, **WhatsApp**, **web-push** — each with its own log-before-send (the `notifications` lock is keyed by alert_id+type+channel). Enabled channels + addresses live in `notification_preferences` (append-only, one row per user).
+- **Dispatch Scheduler**: the cron that runs the alert sweep + digest dispatch. On the trunk the alert sweep is Vercel Cron → `POST /api/internal/run-alerts` (#66); reconciling main's GH-Actions dispatch is #80.
+- **Digest**: a periodic summary notification (portfolio P&L + top movers) per a subscription's `digest_cadence`, tracked via `last_digest_sent_at` on `subscription_packages`. Distinct from a threshold-triggered alert.

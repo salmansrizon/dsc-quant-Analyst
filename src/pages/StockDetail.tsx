@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import type { AxiosInstance } from 'axios';
 import PriceChart, { type Candle } from '../components/PriceChart/PriceChart';
+import CandlestickChart from '../components/CandlestickChart/CandlestickChart';
 
 interface Ratio {
   value: number | null;
@@ -45,6 +46,7 @@ export default function StockDetail({ client }: { client: AxiosInstance }) {
   const { symbol = '' } = useParams();
   const [fund, setFund] = useState<Fundamentals | null>(null);
   const [candles, setCandles] = useState<Candle[]>([]);
+  const [chart, setChart] = useState<'line' | 'candles'>('line');
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -94,11 +96,29 @@ export default function StockDetail({ client }: { client: AxiosInstance }) {
       </div>
 
       <div className="bg-white rounded-lg shadow-sm p-4">
-        <h2 className="text-sm font-semibold text-gray-700 mb-2">Price history</h2>
-        {candles.length > 0 ? (
+        <div className="flex items-center justify-between mb-2">
+          <h2 className="text-sm font-semibold text-gray-700">Price history</h2>
+          <div className="flex gap-2" role="group" aria-label="Chart type">
+            {(['line', 'candles'] as const).map((t) => (
+              <button
+                key={t}
+                type="button"
+                onClick={() => setChart(t)}
+                aria-pressed={chart === t}
+                className="btn-secondary text-xs"
+                style={{ padding: '4px 10px', opacity: chart === t ? 1 : 0.6 }}
+              >
+                {t === 'line' ? 'Line' : 'Candles'}
+              </button>
+            ))}
+          </div>
+        </div>
+        {candles.length === 0 ? (
+          <p className="text-gray-500 text-sm">No price history.</p>
+        ) : chart === 'line' ? (
           <PriceChart symbol={fund.symbol} data={candles} />
         ) : (
-          <p className="text-gray-500 text-sm">No price history.</p>
+          <CandlestickChart data={candles} />
         )}
       </div>
 

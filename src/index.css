@@ -7,6 +7,22 @@
   --accent-green: #10b981;
   --accent-red: #ef4444;
   --border-color: #e5e7eb;
+  --body-gradient: linear-gradient(135deg, #f0f4f8 0%, #e5e7eb 100%);
+}
+
+/* Dark mode (#82). ThemeContext toggles data-theme on <html>; these overrides
+   flow through the CSS-variable-backed utility classes below (.card, .border,
+   .text-primary, .btn-*, body). */
+[data-theme='dark'] {
+  --bg-primary: #12151c;
+  --bg-secondary: #1b1f2a;
+  --text-primary: #e6e8ec;
+  --text-secondary: #9aa1ad;
+  --accent-blue: #3b82f6;
+  --accent-green: #34d399;
+  --accent-red: #f87171;
+  --border-color: #2b303c;
+  --body-gradient: linear-gradient(135deg, #0d0f14 0%, #161a22 100%);
 }
 
 * {
@@ -17,7 +33,7 @@
 
 body {
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-  background: linear-gradient(135deg, #f0f4f8 0%, #e5e7eb 100%);
+  background: var(--body-gradient);
   color: var(--text-primary);
   line-height: 1.6;
 }

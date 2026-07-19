@@ -21,10 +21,21 @@ interface LeaderRow {
   LTP?: number;
   ChangePct?: number;
   Value?: number;
+  MetricValue?: number;
 }
 
-// Compact top-N table, reused by the leaderboard widgets (PRD-12, #82).
-function LeaderTable({ title, rows }: { title: string; rows: LeaderRow[] }) {
+// Compact top-N table, reused by the leaderboard widgets (PRD-12, #82). With
+// `metricLabel` set it shows the row's MetricValue (extremes) instead of the
+// day's change %.
+function LeaderTable({
+  title,
+  rows,
+  metricLabel,
+}: {
+  title: string;
+  rows: LeaderRow[];
+  metricLabel?: string;
+}) {
   return (
     <div className="p-4 bg-white rounded-lg shadow">
       <h2 className="text-sm font-semibold text-gray-700 mb-3">{title}</h2>
@@ -42,12 +53,18 @@ function LeaderTable({ title, rows }: { title: string; rows: LeaderRow[] }) {
                 </Link>
                 <span className="flex items-center gap-3">
                   {r.LTP != null && <span className="text-gray-900">৳{Number(r.LTP).toFixed(2)}</span>}
-                  {pct != null && (
-                    <span className={`flex items-center gap-1 ${isUp ? 'text-green-600' : 'text-red-600'}`}>
-                      {isUp ? <TrendingUp size={14} /> : <TrendingDown size={14} />}
-                      {isUp ? '+' : ''}
-                      {pct.toFixed(2)}%
+                  {metricLabel != null && r.MetricValue != null ? (
+                    <span className="text-gray-700">
+                      {metricLabel} {Number(r.MetricValue).toFixed(2)}
                     </span>
+                  ) : (
+                    pct != null && (
+                      <span className={`flex items-center gap-1 ${isUp ? 'text-green-600' : 'text-red-600'}`}>
+                        {isUp ? <TrendingUp size={14} /> : <TrendingDown size={14} />}
+                        {isUp ? '+' : ''}
+                        {pct.toFixed(2)}%
+                      </span>
+                    )
                   )}
                 </span>
               </li>
@@ -84,20 +101,24 @@ export default function Dashboard({ client }: DashboardProps) {
   const [strength, setStrength] = useState<Strength | null>(null);
   const [value, setValue] = useState<LeaderRow[]>([]);
   const [gainers, setGainers] = useState<LeaderRow[]>([]);
+  const [peLow, setPeLow] = useState<LeaderRow[]>([]);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    // Independent fetches: the extremes endpoints 5xx until dataGrid re-scrapes
+    // the Audited_PE/NAV columns (#82), so a failure there must not blank out the
+    // widgets that read pre-existing columns. Each swallows its own error.
+    const load = <T,>(url: string, set: (v: T) => void, fallback: T) =>
+      client.get(url).then((r) => set(r.data as T)).catch(() => set(fallback));
+
     Promise.all([
-      client.get('/market/strength'),
-      client.get('/market/leaderboard?metric=value&limit=5'),
-      client.get('/market/leaderboard?metric=gainer&limit=5'),
-    ])
-      .then(([s, v, g]) => {
-        setStrength(s.data);
-        setValue(Array.isArray(v.data) ? v.data : []);
-        setGainers(Array.isArray(g.data) ? g.data : []);
-      })
-      .catch((err) => setError(errorMessage(err, 'Failed to load dashboard')));
+      load('/market/strength', setStrength, null as Strength | null),
+      load('/market/leaderboard?metric=value&limit=5', setValue, [] as LeaderRow[]),
+      load('/market/leaderboard?metric=gainer&limit=5', setGainers, [] as LeaderRow[]),
+    ]).catch((err) => setError(errorMessage(err, 'Failed to load dashboard')));
+
+    // Best-effort — hidden entirely if the columns aren't scraped yet.
+    load('/market/extremes?metric=pe_low&limit=5', setPeLow, [] as LeaderRow[]);
   }, [client]);
 
   return (
@@ -114,6 +135,12 @@ export default function Dashboard({ client }: DashboardProps) {
         <LeaderTable title="Top by Traded Value" rows={value} />
         <LeaderTable title="Top Gainers" rows={gainers} />
       </div>
+
+      {peLow.length > 0 && (
+        <div className="grid md:grid-cols-2 gap-6">
+          <LeaderTable title="Lowest P/E" rows={peLow} metricLabel="PE" />
+        </div>
+      )}
     </div>
   );
 }

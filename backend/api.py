@@ -388,18 +388,18 @@ def update_notification_prefs(payload: NotificationPreferences, current_user: Us
 
 @app.post("/api/internal/run-alerts")
 def run_alerts(authorization: str = Header(default="")):
-    """The edge-trigger alert sweep, triggered by Vercel Cron (#66, from #34).
+    """Manual / backfill trigger for the edge-trigger alert sweep (#66).
 
-    Serverless has no in-process scheduler, so an external trigger drives the
-    sweep. Auth is the platform-signed `Authorization: Bearer $CRON_SECRET`
-    header Vercel Cron sends — a missing or wrong secret is a 401, and an unset
-    server-side secret fails closed (never open the endpoint to the world).
+    The scheduled sweep now runs as a step chained onto the market ETL on GitHub
+    Actions (#80, ADR-0001) — LTP only refreshes there, so the sweep must run on
+    the scrape's completion, not on a fixed-time cron that races it. The Vercel
+    Cron that used to drive this endpoint is retired.
 
-    **Scale-out (#34 dec.6):** this runs synchronously inside the function
-    budget, fine at v1 scale (single-digit users, ms sweeps). When a crossing
-    batch × ~300ms/email approaches the Vercel function timeout, move the sweep
-    to a standalone GitHub Actions script (the ETL already runs there, #55) and
-    keep this endpoint only for manual runs.
+    This endpoint stays for manual and backfill runs (e.g. re-firing after a
+    provider outage). Auth is `Authorization: Bearer $CRON_SECRET` — a missing or
+    wrong secret is a 401, and an unset server-side secret fails closed (never
+    open the endpoint to the world). It runs the same `check_alerts` engine the
+    GH Actions step runs, so the two triggers can never diverge.
     """
     secret = os.environ.get("CRON_SECRET")
     if not secret or authorization != f"Bearer {secret}":

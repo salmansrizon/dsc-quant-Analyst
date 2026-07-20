@@ -1,10 +1,12 @@
-import { vi } from 'vitest';
+import { beforeEach, vi } from 'vitest';
 import type { AxiosInstance } from 'axios';
-import { track, flush, initBehaviour } from './behaviour';
+import { track, flush, initBehaviour, resetBehaviour } from './behaviour';
 
 function makeClient() {
   return { post: vi.fn().mockResolvedValue({ data: {} }) } as unknown as AxiosInstance;
 }
+
+beforeEach(() => resetBehaviour());
 
 describe('behaviour capture (#86)', () => {
   it('buffers then flushes a batch to /behaviour', () => {

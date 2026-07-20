@@ -53,3 +53,11 @@ def test_rollup_appends_summary_for_active_users(monkeypatch):
     table, rows = appended[0]
     assert table == "behaviour_summary"
     assert any(r["kind"] == "symbol" and r["key"] == "GP" for r in rows)
+
+
+def test_emit_swallows_a_capture_failure(monkeypatch):
+    # Behaviour capture must never break the primary action it rides on.
+    def boom(*a, **k):
+        raise RuntimeError("bq down")
+    monkeypatch.setattr(db, "insert_rows", boom)
+    behaviour_service.emit("u1", "watchlist_add", symbol="GP")   # must not raise

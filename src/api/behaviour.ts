@@ -32,12 +32,23 @@ export function flush(): void {
 
 export function initBehaviour(c: AxiosInstance, intervalMs = 10000): () => void {
   client = c;
+  if (timer) clearInterval(timer);           // a re-init never orphans the prior loop
   timer = setInterval(flush, intervalMs);
   const onHide = () => { if (document.visibilityState === 'hidden') flush(); };
   document.addEventListener('visibilitychange', onHide);
+  window.addEventListener('pagehide', flush);   // covers the unload path too
   return () => {
-    if (timer) clearInterval(timer);
+    if (timer) { clearInterval(timer); timer = null; }
     document.removeEventListener('visibilitychange', onHide);
+    window.removeEventListener('pagehide', flush);
     client = null;
   };
+}
+
+/** Test hook: drop any buffered events + client so cases don't leak into each
+ *  other (the buffer/client are module-global singletons). */
+export function resetBehaviour(): void {
+  buffer = [];
+  client = null;
+  if (timer) { clearInterval(timer); timer = null; }
 }

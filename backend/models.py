@@ -191,6 +191,28 @@ class FitScore(BaseModel):
     disclaimer: str
 
 
+# ─── Behaviour tracking (#86, personalization spine #84) ─────────────────────
+
+BehaviourType = Literal[
+    "view", "watchlist_add", "watchlist_remove", "portfolio",
+    "screener_run", "sector_view",
+]
+
+
+class BehaviourEvent(BaseModel):
+    """One implicit-signal event the frontend fires. The server stamps id,
+    user_id, event_date, created_at — the client cannot spoof them."""
+    event_type: BehaviourType
+    symbol: Optional[str] = None
+    sector: Optional[str] = None
+    payload: Optional[dict] = None
+
+
+class BehaviourBatch(BaseModel):
+    """A flush of buffered events (batched to cut append volume)."""
+    events: list[BehaviourEvent] = Field(default_factory=list, max_length=100)
+
+
 # ─── Portfolio health (#91, personalization spine #84) ───────────────────────
 
 class PortfolioFinding(BaseModel):

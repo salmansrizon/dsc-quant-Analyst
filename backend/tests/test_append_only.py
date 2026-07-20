@@ -151,9 +151,13 @@ def test_versioned_tables_derive_from_the_one_registry():
     assert db.VERSIONED_TABLES == {name: spec.key for name, spec in TABLES.items()}
 
 
-def test_every_registered_table_can_be_versioned():
+def test_every_versioned_table_can_be_versioned():
+    # Raw log tables (#86 behaviour_events, versioned=False) are immutable and
+    # age out via partition expiry — they carry no version columns by design.
     from backend.schema import TABLES
     for table, spec in TABLES.items():
+        if not getattr(spec, "versioned", True):
+            continue
         names = {c for c, _ in spec.columns}
         assert {"id", "updated_at", "is_deleted"} <= names, f"{table} cannot be versioned"
 

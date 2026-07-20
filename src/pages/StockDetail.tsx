@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
+import { track } from '../api/behaviour';
 import type { AxiosInstance } from 'axios';
 import { Bell } from 'lucide-react';
 import PriceChart, { type Candle } from '../components/PriceChart/PriceChart';
@@ -127,6 +128,9 @@ export default function StockDetail({ client }: { client: AxiosInstance }) {
       .then(([f, h]) => {
         setFund(f.data);
         setCandles(h.data);
+        // #86: a stock-detail visit — the core interest signal. Carries the
+        // stock's sector so it feeds sector affinity too.
+        track({ event_type: 'view', symbol, sector: f.data?.sector });
       })
       .catch(() => setError(`Failed to load ${symbol}`))
       .finally(() => setLoading(false));

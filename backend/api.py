@@ -15,7 +15,7 @@ from .models import (
     WatchlistAdd, PortfolioAdd, PortfolioUpdate, AlertCreate,
     ScreenerRequest, ScreenerResponse, ScreenerWatchlistAdd,
     SubscriptionCreate, BundleCreate, NotificationPreferences,
-    InvestorProfile, ProfileUpdate, FitScore,
+    InvestorProfile, ProfileUpdate, FitScore, BehaviourBatch,
 )
 from .user_service import (
     create_user, get_user_by_email, get_user_credentials,
@@ -30,6 +30,7 @@ from . import subscriptions_service
 from . import notification_prefs_service
 from . import profile_service
 from . import fit_service
+from . import behaviour_service
 
 FRONTEND_URL = os.environ.get("FRONTEND_URL", "http://localhost:5173")
 
@@ -296,12 +297,15 @@ def watchlist_list(current_user: UserResponse = Depends(get_current_user)):
 
 @app.post("/api/watchlist")
 def watchlist_add(payload: WatchlistAdd, current_user: UserResponse = Depends(get_current_user)):
-    return watchlist_service.add_to_watchlist(current_user.id, payload.symbol)
+    result = watchlist_service.add_to_watchlist(current_user.id, payload.symbol)
+    behaviour_service.emit(current_user.id, "watchlist_add", symbol=payload.symbol)
+    return result
 
 
 @app.delete("/api/watchlist/{symbol}")
 def watchlist_remove(symbol: str, current_user: UserResponse = Depends(get_current_user)):
     watchlist_service.remove_from_watchlist(current_user.id, symbol.upper())
+    behaviour_service.emit(current_user.id, "watchlist_remove", symbol=symbol.upper())
     return {"status": "removed"}
 
 
@@ -336,6 +340,15 @@ def fit_score(symbol: str, current_user: UserResponse = Depends(get_current_user
     return fit_service.fit_for(current_user.id, symbol)
 
 
+@app.post("/api/behaviour", status_code=202)
+def behaviour_track(batch: BehaviourBatch, current_user: UserResponse = Depends(get_current_user)):
+    # Fire-and-forget implicit-signal capture (#86). Best-effort: a dropped
+    # beacon is fine, so this never blocks the UI and always 202s.
+    n = behaviour_service.record_events(
+        current_user.id, [e.model_dump() for e in batch.events])
+    return {"recorded": n}
+
+
 # ── Portfolio ────────────────────────────────────────────────────────────────
 
 @app.get("/api/portfolio")
@@ -350,7 +363,9 @@ def portfolio_summary(current_user: UserResponse = Depends(get_current_user)):
 
 @app.post("/api/portfolio")
 def portfolio_add(payload: PortfolioAdd, current_user: UserResponse = Depends(get_current_user)):
-    return portfolio_service.add_to_portfolio(current_user.id, payload.model_dump())
+    result = portfolio_service.add_to_portfolio(current_user.id, payload.model_dump())
+    behaviour_service.emit(current_user.id, "portfolio", symbol=payload.symbol)
+    return result
 
 
 @app.put("/api/portfolio/{portfolio_id}")

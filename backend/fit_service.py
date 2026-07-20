@@ -1,11 +1,14 @@
 """Wires the pure fit engine (#88) to BigQuery: builds a stock's metrics and its
 sector cohort, then hands both to `fit_engine.score`.
 
-The cohort is built by BULK queries per sector — four aggregate reads, never a
-per-symbol fan-out of `get_fundamentals` (that would be N×several queries a
-scorecard). Every peer's metric is derived in Python by the SAME `valuation`
-functions the single-stock path uses, so the subject is compared like-for-like
-against its peers.
+The cohort is built by BULK queries per sector — a handful of aggregate reads,
+never a per-symbol fan-out of `get_fundamentals` (that would be N×several queries
+a scorecard). Every peer's metric is derived in Python by the SAME `valuation`
+functions the single-stock path uses, so the subject is compared like-for-like.
+
+When a sector has too few peers for a percentile to mean anything (< MIN_COHORT),
+each thin metric falls back to the market-wide distribution — the fallback the
+decision called for.
 """
 from collections import defaultdict
 
@@ -21,6 +24,13 @@ from .profile_service import get_profile
 _VOL_BARS = 30
 _VOL_MIN = 5
 
+# Below this many peers a sector percentile is noise; fall back to the market.
+MIN_COHORT = 5
+
+# The engine's cohort keys mapped to the subject metric keys they percentile.
+_METRIC_KEYS = {"pe": "pe", "pb": "pb", "yield": "yield_",
+                "growth": "growth", "volatility": "volatility"}
+
 
 def _sector_of(symbol: str) -> str | None:
     rows = db.query_rows(
@@ -30,26 +40,51 @@ def _sector_of(symbol: str) -> str | None:
     return rows[0]["Sector"] if rows else None
 
 
-def _peer_metrics(sector: str) -> dict[str, dict]:
-    """Every symbol in `sector`, each with its derived fit metrics — the same
-    figures `get_fundamentals` computes, but for the whole cohort in four reads."""
-    p = [bigquery.ScalarQueryParameter("sector", "STRING", sector)]
+def _peer_metrics(sector: str | None) -> dict[str, dict]:
+    """Every symbol in `sector` (or the whole market when `sector` is None), each
+    with its derived fit metrics — the same figures `get_fundamentals` computes,
+    but for the cohort in a handful of reads.
+
+    PE and volatility come from `price_archive` (the archive carries the daily
+    valuation columns; the datamatrix's PE columns only exist after a widened
+    re-scrape — see market_service). Symbols are scoped by the datamatrix
+    universe, not by a Sector column on the archive, which it does not carry.
+    """
+    params, where = [], "TRUE"
+    if sector is not None:
+        params = [bigquery.ScalarQueryParameter("sector", "STRING", sector)]
+        where = "Sector = @sector"
+
     dm = db.query_rows(
-        f"""SELECT Symbol, LTP, Forward_PE, Audited_PE
-            FROM {db.table_id('lankabd_datamatrix')} WHERE Sector = @sector""", p)
+        f"SELECT Symbol, Sector, LTP FROM {db.table_id('lankabd_datamatrix')} WHERE {where}",
+        params)
     earn = db.query_rows(
         f"""SELECT symbol, year, eps, nav FROM {db.current_view('fundamentals_earnings')}
-            WHERE sector = @sector AND period = 'ANNUAL'""", p)
+            WHERE period = 'ANNUAL'""")
     divs = db.query_rows(
         f"""SELECT symbol, year, dividend_type, cash_dividend_pct, publish_date
-            FROM {db.current_view('fundamentals_dividends')} WHERE sector = @sector""", p)
-    vol = db.query_rows(
-        f"""SELECT Symbol, SAFE_DIVIDE(STDDEV(Close), AVG(Close)) AS vol FROM (
-              SELECT Symbol, Close, ROW_NUMBER() OVER (
-                PARTITION BY Symbol ORDER BY Date DESC) AS rn
-              FROM {db.table_id('lankabd_price_archive')} WHERE Sector = @sector
-            ) WHERE rn <= {_VOL_BARS}
-            GROUP BY Symbol HAVING COUNT(*) >= {_VOL_MIN}""", p)
+            FROM {db.current_view('fundamentals_dividends')}""")
+    # Latest PE + coefficient-of-variation volatility per symbol, deduped (the
+    # archive stores each (Symbol, Date) twice) and scoped to the cohort's
+    # symbols via the datamatrix.
+    price = db.query_rows(
+        f"""
+        SELECT Symbol,
+               ANY_VALUE(IF(rn = 1, COALESCE(Forward_PE, Audited_PE), NULL)) AS pe,
+               SAFE_DIVIDE(STDDEV(IF(rn <= {_VOL_BARS}, Close, NULL)),
+                           AVG(IF(rn <= {_VOL_BARS}, Close, NULL))) AS vol,
+               COUNTIF(rn <= {_VOL_BARS}) AS bars
+        FROM (
+          SELECT Symbol, Close, Forward_PE, Audited_PE,
+                 ROW_NUMBER() OVER (PARTITION BY Symbol ORDER BY Date DESC) AS rn
+          FROM (
+            SELECT DISTINCT Symbol, Date, Close, Forward_PE, Audited_PE
+            FROM {db.table_id('lankabd_price_archive')}
+            WHERE Symbol IN (SELECT Symbol FROM {db.table_id('lankabd_datamatrix')} WHERE {where})
+          )
+        )
+        GROUP BY Symbol
+        """, params)
 
     eps_by_symbol: dict[str, dict[int, float]] = defaultdict(dict)
     nav_by_symbol: dict[str, tuple[int, float]] = {}
@@ -62,34 +97,34 @@ def _peer_metrics(sector: str) -> dict[str, dict]:
     decls_by_symbol: dict[str, list[dict]] = defaultdict(list)
     for r in divs:
         decls_by_symbol[r["symbol"]].append(r)
-    vol_by_symbol = {r["Symbol"]: r["vol"] for r in vol if r.get("vol") is not None}
+    price_by_symbol = {r["Symbol"]: r for r in price}
 
     out: dict[str, dict] = {}
     for r in dm:
         sym = r["Symbol"]
-        price = r.get("LTP")
-        pe = r.get("Forward_PE") or r.get("Audited_PE")
+        ltp = r.get("LTP")
+        pr = price_by_symbol.get(sym, {})
+        pe = pr.get("pe")
+        vol = pr.get("vol") if (pr.get("bars") or 0) >= _VOL_MIN else None
         nav = nav_by_symbol.get(sym, (None, None))[1]
         decls = decls_by_symbol.get(sym, [])
         div_year = valuation.latest_complete_dividend_year(decls)
         cash = valuation.annual_cash_dividend(decls, div_year) if div_year else None
         out[sym] = {
-            "sector": sector,
+            "sector": r.get("Sector"),
             "pe": pe if (pe and pe > 0) else None,
-            "pb": valuation.price_to_book(price, nav),
-            "yield_": valuation.dividend_yield(cash, price),
+            "pb": valuation.price_to_book(ltp, nav),
+            "yield_": valuation.dividend_yield(cash, ltp),
             "growth": valuation.eps_growth(eps_by_symbol.get(sym, {})),
-            "volatility": vol_by_symbol.get(sym),
+            "volatility": vol,
         }
     return out
 
 
-def _cohort_arrays(peers: dict[str, dict]) -> dict[str, list[float]]:
-    keys = {"pe": "pe", "pb": "pb", "yield": "yield_", "growth": "growth",
-            "volatility": "volatility"}
+def _arrays(peers: dict[str, dict]) -> dict[str, list[float]]:
     return {
-        cohort_key: [m[subj_key] for m in peers.values() if m.get(subj_key) is not None]
-        for cohort_key, subj_key in keys.items()
+        ck: [m[sk] for m in peers.values() if m.get(sk) is not None]
+        for ck, sk in _METRIC_KEYS.items()
     }
 
 
@@ -99,8 +134,25 @@ def fit_for(user_id: str, symbol: str) -> dict:
     profile = get_profile(user_id)
     sector = _sector_of(symbol)
     peers = _peer_metrics(sector) if sector else {}
-    subject = peers.get(symbol) or {
+    sector_arrays = _arrays(peers)
+
+    # Fill thin metrics from the market-wide distribution (decision: n < 5).
+    cohort: dict[str, list[float]] = {}
+    scope: dict[str, str] = {}
+    market_peers = None
+    for ck in _METRIC_KEYS:
+        arr = sector_arrays.get(ck, [])
+        if len(arr) < MIN_COHORT:
+            if market_peers is None:
+                market_peers = _peer_metrics(None)
+            marr = _arrays(market_peers).get(ck, [])
+            if len(marr) > len(arr):
+                cohort[ck], scope[ck] = marr, "market"
+                continue
+        cohort[ck], scope[ck] = arr, "sector"
+
+    subject = peers.get(symbol) or (market_peers or {}).get(symbol) or {
         "sector": sector, "pe": None, "pb": None, "yield_": None,
         "growth": None, "volatility": None,
     }
-    return engine_score(profile, symbol, subject, _cohort_arrays(peers)).model_dump()
+    return engine_score(profile, symbol, subject, cohort, scope).model_dump()

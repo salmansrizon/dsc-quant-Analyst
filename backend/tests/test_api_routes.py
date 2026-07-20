@@ -176,17 +176,18 @@ def test_get_fit_scores_a_symbol_through_the_seam(authed, monkeypatch):
             return []                              # neutral default profile
         if "SELECT Sector FROM" in sql:
             return [{"Sector": "Telecom"}]
-        if "Forward_PE" in sql:
-            return [{"Symbol": "GP", "LTP": 300.0, "Forward_PE": 10.0, "Audited_PE": None},
-                    {"Symbol": "ROBI", "LTP": 30.0, "Forward_PE": 20.0, "Audited_PE": None}]
+        if "Symbol, Sector, LTP" in sql:
+            return [{"Symbol": "GP", "Sector": "Telecom", "LTP": 300.0},
+                    {"Symbol": "ROBI", "Sector": "Telecom", "LTP": 30.0}]
+        if "price_archive" in sql:
+            return [{"Symbol": "GP", "pe": 10.0, "vol": 0.05, "bars": 30},
+                    {"Symbol": "ROBI", "pe": 20.0, "vol": 0.2, "bars": 30}]
         if "fundamentals_earnings" in sql:
             return [{"symbol": "GP", "year": 2018, "eps": 5.0, "nav": 40.0},
                     {"symbol": "GP", "year": 2024, "eps": 12.0, "nav": 60.0}]
         if "fundamentals_dividends" in sql:
             return [{"symbol": "GP", "year": 2024, "dividend_type": "ANNUAL",
                      "cash_dividend_pct": 200.0, "publish_date": "2024-06-01"}]
-        if "price_archive" in sql:
-            return [{"Symbol": "GP", "vol": 0.05}, {"Symbol": "ROBI", "vol": 0.2}]
         return []
     monkeypatch.setattr(db, "query_rows", dispatch)
 

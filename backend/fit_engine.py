@@ -62,8 +62,12 @@ def _tier(score: float) -> str:
 
 def _metric_axis(
     axis: str, label: str, value, peers: list[float], invert: bool, unit: str,
+    cohort_label: str = "sector",
 ) -> FitAxis:
-    """One percentile-scored axis, or a null axis with an honest reason."""
+    """One percentile-scored axis, or a null axis with an honest reason.
+
+    `cohort_label` is "sector" normally, "market" when the sector was too thin
+    and the percentile fell back to the market-wide distribution."""
     if value is None or not peers:
         return FitAxis(axis=axis, score=None, weight=0.0,
                        reason=f"No {label.lower()} data — {axis} not scored.")
@@ -71,12 +75,12 @@ def _metric_axis(
     med = median(peers)
     return FitAxis(
         axis=axis, score=round(score, 1), weight=0.0,
-        reason=(f"{label} {value:g}{unit} vs sector median {med:g}{unit} → "
+        reason=(f"{label} {value:g}{unit} vs {cohort_label} median {med:g}{unit} → "
                 f"{_tier(score)} on {axis.lower()}."),
     )
 
 
-def _value_axis(subject: dict, cohort: dict) -> FitAxis:
+def _value_axis(subject: dict, cohort: dict, labels: dict) -> FitAxis:
     """Value blends P/E and P/NAV (both cheaper-is-better), averaging whichever
     is available."""
     parts, bits = [], []
@@ -84,7 +88,7 @@ def _value_axis(subject: dict, cohort: dict) -> FitAxis:
         v, peers = subject.get(key), cohort.get(key, [])
         if v is not None and peers:
             parts.append(_percentile(v, peers, invert=True))
-            bits.append(f"{label} {v:g} (sector median {median(peers):g})")
+            bits.append(f"{label} {v:g} ({labels.get(key, 'sector')} median {median(peers):g})")
     if not parts:
         return FitAxis(axis="Value", score=None, weight=0.0,
                        reason="No valuation data — Value not scored.")
@@ -121,19 +125,25 @@ def _weights(profile: InvestorProfile) -> dict:
     return {a: v / total for a, v in w.items()}
 
 
-def score(profile: InvestorProfile, symbol: str, subject: dict, cohort: dict) -> FitScore:
+def score(profile: InvestorProfile, symbol: str, subject: dict, cohort: dict,
+          scope: dict | None = None) -> FitScore:
     """Score `symbol` against `profile`. `subject` carries the stock's metrics
-    (pe, pb, yield_, growth, volatility, sector); `cohort` the sector peers'
-    arrays (pe, pb, yield, growth, volatility). Both are plain data — the engine
-    touches no database."""
+    (pe, pb, yield_, growth, volatility, sector); `cohort` the peers' arrays
+    (pe, pb, yield, growth, volatility); `scope` labels each metric's cohort
+    "sector" or "market" (market = the n<5 fallback), for honest reasons. All
+    plain data — the engine touches no database."""
+    scope = scope or {}
     axes = [
-        _value_axis(subject, cohort),
+        _value_axis(subject, cohort, scope),
         _metric_axis("Income", "Dividend yield", subject.get("yield_"),
-                     cohort.get("yield", []), invert=False, unit="%"),
+                     cohort.get("yield", []), invert=False, unit="%",
+                     cohort_label=scope.get("yield", "sector")),
         _metric_axis("Growth", "EPS growth", subject.get("growth"),
-                     cohort.get("growth", []), invert=False, unit="%"),
+                     cohort.get("growth", []), invert=False, unit="%",
+                     cohort_label=scope.get("growth", "sector")),
         _metric_axis("Risk", "Volatility", subject.get("volatility"),
-                     cohort.get("volatility", []), invert=True, unit=""),
+                     cohort.get("volatility", []), invert=True, unit="",
+                     cohort_label=scope.get("volatility", "sector")),
         _sector_axis(subject.get("sector"), profile.sector_prefs),
     ]
 

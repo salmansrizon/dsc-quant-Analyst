@@ -145,6 +145,21 @@ TABLES: dict[str, TableSpec] = {
         ("source", _STR),
         ("updated_at", _TS), ("is_deleted", "BOOL"),
     )),
+    # Investor profile (#85, personalization spine #84). One row per user
+    # (id = user_id), append-versioned — an edit is a new version, the `_current`
+    # view resolves the latest. `sector_prefs` is a JSON rank-ordered array
+    # string ([0] = top choice); the #88 fit engine derives weights from rank.
+    # `is_default` marks the neutral cold-start object (never user-set), which is
+    # what the nudge banner keys on.
+    "investor_profiles": TableSpec("id", (
+        ("id", _STR), ("user_id", _STR),
+        ("goal", _STR),          # income|growth|preservation
+        ("risk", _STR),          # low|med|high
+        ("horizon", _STR),       # short|medium|long
+        ("sector_prefs", _STR),  # JSON rank-ordered array
+        ("is_default", "BOOL"),
+        ("created_at", _TS), ("updated_at", _TS), ("is_deleted", "BOOL"),
+    )),
     # One dividend DECLARATION (#57). A company declares several a year, so
     # symbol|year would collapse them.
     "fundamentals_dividends": TableSpec("id", (

@@ -88,3 +88,13 @@ jobs:
           RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
           RESEND_FROM: ${{ vars.RESEND_FROM }}
         run: python -m backend.alert_checker
+
+      # #86: roll the 7-day raw behaviour window into the per-user interest
+      # summary. continue-on-error — a personalization miss must never fail the
+      # market ETL; the next day's rollup recomputes from the same window.
+      - name: Behaviour roll-up (#86)
+        continue-on-error: true
+        env:
+          GCP_SERVICE_ACCOUNT_JSON: ${{ secrets.GCP_SERVICE_ACCOUNT_JSON }}
+          BIGQUERY_DATASET_ID: ${{ vars.BIGQUERY_DATASET_ID }}
+        run: python -m backend.behaviour_rollup

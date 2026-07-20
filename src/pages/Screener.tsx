@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { track } from '../api/behaviour';
 import type { AxiosInstance } from 'axios';
 import { Link } from 'react-router-dom';
 
@@ -59,6 +60,8 @@ export default function Screener({ client }: { client: AxiosInstance }) {
     setError(null);
     setNotice(null);
     setSelected(new Set());
+    // #86: a screener run reveals the user's criteria.
+    track({ event_type: 'screener_run', payload: body(preset) });
     client
       .post('/market/screener', body(preset))
       .then((res) => setRows(res.data.results))

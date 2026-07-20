@@ -234,3 +234,38 @@ def test_portfolio_summary_carries_health_block(authed, monkeypatch):
     assert {"concentration", "count"} <= kinds       # profile-independent findings
     assert health["is_default_profile"] is True      # neutral profile
     assert health["disclaimer"]
+
+
+# ── Behaviour capture (#86, spine #84) ───────────────────────────────────────
+
+def test_post_behaviour_appends_a_batch(authed, monkeypatch):
+    from backend import behaviour_service
+    captured = {}
+    monkeypatch.setattr(behaviour_service, "record_events",
+                        lambda uid, events: captured.update(uid=uid, events=events) or len(events))
+    resp = authed.post("/api/behaviour", json={"events": [
+        {"event_type": "view", "symbol": "GP"},
+        {"event_type": "sector_view", "sector": "Bank"}]})
+    assert resp.status_code == 202
+    assert resp.json()["recorded"] == 2
+    assert captured["uid"] == "u1"
+
+
+def test_post_behaviour_rejects_a_bad_event_type(authed):
+    resp = authed.post("/api/behaviour", json={"events": [{"event_type": "hovered"}]})
+    assert resp.status_code == 422                       # not in the Literal set
+
+
+def test_watchlist_add_emits_a_behaviour_event(authed, monkeypatch):
+    from backend import behaviour_service, watchlist_service
+    monkeypatch.setattr(watchlist_service, "add_to_watchlist", lambda uid, sym: {"status": "added"})
+    emitted = []
+    monkeypatch.setattr(behaviour_service, "record_events",
+                        lambda uid, events: emitted.extend(events) or len(events))
+    resp = authed.post("/api/watchlist", json={"symbol": "GP"})
+    assert resp.status_code == 200
+    assert emitted[0]["event_type"] == "watchlist_add"
+
+
+def test_behaviour_route_requires_auth():
+    assert TestClient(app).post("/api/behaviour", json={"events": []}).status_code in (401, 403)

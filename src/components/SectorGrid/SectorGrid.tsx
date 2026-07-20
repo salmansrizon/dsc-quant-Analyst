@@ -1,4 +1,5 @@
 import React from 'react';
+import { track } from '../../api/behaviour';
 
 export interface Sector {
   sector: string;
@@ -20,7 +21,11 @@ export default function SectorGrid({ sectors }: SectorGridProps) {
       {sectors.map((s) => (
         <div
           key={s.sector}
-          className="bg-white rounded-lg shadow p-4 border border-gray-200"
+          role="button"
+          tabIndex={0}
+          // #86: browsing a sector tile is a sector-affinity signal.
+          onClick={() => track({ event_type: 'sector_view', sector: s.sector })}
+          className="bg-white rounded-lg shadow p-4 border border-gray-200 cursor-pointer"
         >
           <h3 className="text-lg font-semibold mb-2">{s.sector}</h3>
           <p className="text-gray-600 mb-1">{s.count} stocks</p>

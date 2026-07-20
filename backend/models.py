@@ -169,6 +169,28 @@ class ProfileUpdate(BaseModel):
     sector_prefs: list[str] = []
 
 
+# ─── Fit engine (#88, personalization spine #84) ─────────────────────────────
+
+class FitAxis(BaseModel):
+    """One explainable dimension of the fit scorecard. `score` is null when the
+    metric is missing or meaningless (e.g. negative-equity ROE) — a null axis is
+    dropped from the composite, never scored 0 (which would fake-penalize)."""
+    axis: str
+    score: Optional[float] = None      # 0..100, higher = better on this dimension
+    reason: str                        # mandatory human sentence
+    weight: float                      # this axis's share of the composite
+
+
+class FitScore(BaseModel):
+    """A stock scored against an investor profile (#88). Framing is always
+    'matches your preferences', never advice — the disclaimer rides here."""
+    symbol: str
+    composite: Optional[float] = None  # weighted mean over scored axes, 0..100
+    axes: list[FitAxis]
+    is_default_profile: bool
+    disclaimer: str
+
+
 # ─── Screener (#71) ───────────────────────────────────────────────────────────
 
 class ScreenerFilter(BaseModel):

@@ -6,11 +6,13 @@ spoof identity or timing. Raw events are immutable and age out via the table's
 never append_version: the raw log has no version columns).
 """
 import json
+import logging
 import uuid
 from datetime import datetime, timezone
 
 from . import db
 
+logger = logging.getLogger(__name__)
 _TABLE = "behaviour_events"
 
 
@@ -20,7 +22,7 @@ def _row(user_id: str, ev: dict, now: datetime) -> dict:
         "id": str(uuid.uuid4()),
         "user_id": user_id,
         "event_type": ev["event_type"],
-        "symbol": (ev.get("symbol") or None) and ev["symbol"].upper(),
+        "symbol": (ev.get("symbol") or "").upper() or None,
         "sector": ev.get("sector") or None,
         "payload": json.dumps(payload) if payload else None,
         "event_date": now.date().isoformat(),
@@ -40,5 +42,13 @@ def record_events(user_id: str, events: list[dict]) -> int:
 def emit(user_id: str, event_type: str, symbol: str | None = None,
          sector: str | None = None) -> None:
     """Record one event server-side — the path watchlist/portfolio handlers use,
-    so an explicit action is captured without a frontend round-trip."""
-    record_events(user_id, [{"event_type": event_type, "symbol": symbol, "sector": sector}])
+    so an explicit action is captured without a frontend round-trip.
+
+    Best-effort: behaviour capture must never break the primary action it rides
+    on (the watchlist/portfolio write already committed), so a capture failure is
+    logged and swallowed, matching the /api/behaviour fire-and-forget contract."""
+    try:
+        record_events(user_id, [{"event_type": event_type, "symbol": symbol, "sector": sector}])
+    except Exception:
+        logger.warning("behaviour emit failed (%s, %s) — ignored", event_type, symbol,
+                       exc_info=True)

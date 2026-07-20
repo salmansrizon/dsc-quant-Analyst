@@ -13,6 +13,8 @@ add a standing signal. Interest is normalized 0..1 per user per kind.
 from collections import defaultdict
 from datetime import datetime, timezone
 
+from google.cloud import bigquery
+
 from . import db
 
 HALF_LIFE_DAYS = 7.0
@@ -95,7 +97,6 @@ def _active_users() -> list[str]:
 
 
 def _events_for(user_id: str) -> list[dict]:
-    from google.cloud import bigquery
     return db.query_rows(
         f"""SELECT event_type, symbol, sector, created_at
             FROM {db.table_id('behaviour_events')} WHERE user_id = @u""",
@@ -103,7 +104,6 @@ def _events_for(user_id: str) -> list[dict]:
 
 
 def _symbols(table: str, user_id: str) -> list[str]:
-    from google.cloud import bigquery
     rows = db.query_rows(
         f"SELECT DISTINCT symbol FROM {db.current_view(table)} WHERE user_id = @u",
         [bigquery.ScalarQueryParameter("u", "STRING", user_id)])

@@ -15,8 +15,8 @@ from collections import defaultdict
 from google.cloud import bigquery
 
 from . import db, fit_service
-from .fit_service import _MarketCache, _peer_metrics, score_symbol
-from .models import InvestorProfile, PortfolioFinding, PortfolioHealth
+from .fit_service import MarketCache, build_cohort, score_symbol
+from .models import FitScore, InvestorProfile, PortfolioFinding, PortfolioHealth
 from .fit_engine import DISCLAIMER
 from .profile_service import get_profile
 from .portfolio_service import get_portfolio
@@ -36,14 +36,15 @@ def _weighted(pairs: list[tuple[float, float]]) -> float | None:
     return num / den if den else None
 
 
-def _risk_axis(fit) -> float | None:
+def _risk_axis(fit: FitScore) -> float | None:
     for a in fit.axes:
         if a.axis == "Risk":
             return a.score
     return None
 
 
-def compute_health(profile: InvestorProfile, holdings: list[dict], fits: dict) -> PortfolioHealth:
+def compute_health(profile: InvestorProfile, holdings: list[dict],
+                   fits: dict[str, FitScore]) -> PortfolioHealth:
     """holdings: [{symbol, sector, value}]. fits: symbol -> FitScore."""
     valued = [h for h in holdings if h.get("value")]
     total = sum(h["value"] for h in valued)
@@ -154,14 +155,21 @@ def portfolio_health(user_id: str) -> dict:
         "value": (h.get("current_price") or 0) * (h.get("quantity") or 0),
     } for h in holdings]
 
+    # Equal-weight fallback: if no holding can be valued (every LTP missing),
+    # weight each equally so the health read degrades to a count/mix view rather
+    # than vanishing (decision Q3).
+    if holdings and not any(v["value"] for v in valued):
+        for v in valued:
+            v["value"] = 1.0
+
     # Batch: build each distinct sector's cohort once, score every holding in it.
-    market = _MarketCache()
+    market = MarketCache()
     by_sector: dict[str | None, list[str]] = defaultdict(list)
     for h in valued:
         by_sector[h["sector"]].append(h["symbol"])
     fits = {}
     for sector, syms in by_sector.items():
-        peers = _peer_metrics(sector) if sector else {}
+        peers = build_cohort(sector) if sector else {}
         for sym in syms:
             fits[sym] = score_symbol(profile, sym, sector, peers, market)
 

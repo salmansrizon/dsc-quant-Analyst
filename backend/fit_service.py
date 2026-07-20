@@ -41,7 +41,7 @@ def _sector_of(symbol: str) -> str | None:
     return rows[0]["Sector"] if rows else None
 
 
-def _peer_metrics(sector: str | None) -> dict[str, dict]:
+def build_cohort(sector: str | None) -> dict[str, dict]:
     """Every symbol in `sector` (or the whole market when `sector` is None), each
     with its derived fit metrics — the same figures `get_fundamentals` computes,
     but for the cohort in a handful of reads.
@@ -129,7 +129,7 @@ def _arrays(peers: dict[str, dict]) -> dict[str, list[float]]:
     }
 
 
-class _MarketCache:
+class MarketCache:
     """Lazily builds the whole-market peer set once, then reuses it — so a
     portfolio scoring many thin sectors pays for the market fallback at most
     once, not per sector."""
@@ -138,12 +138,12 @@ class _MarketCache:
 
     def peers(self) -> dict:
         if self._peers is None:
-            self._peers = _peer_metrics(None)
+            self._peers = build_cohort(None)
         return self._peers
 
 
 def score_symbol(profile: InvestorProfile, symbol: str, sector: str | None,
-                 sector_peers: dict, market: "_MarketCache"):
+                 sector_peers: dict, market: "MarketCache"):
     """Score one symbol against its (already-built) sector cohort, falling back
     to the market-wide distribution for any metric with fewer than MIN_COHORT
     peers. Shared by the single-stock and portfolio paths so scoring lives once.
@@ -172,5 +172,5 @@ def fit_for(user_id: str, symbol: str) -> dict:
     symbol = symbol.upper()
     profile = get_profile(user_id)
     sector = _sector_of(symbol)
-    peers = _peer_metrics(sector) if sector else {}
-    return score_symbol(profile, symbol, sector, peers, _MarketCache()).model_dump()
+    peers = build_cohort(sector) if sector else {}
+    return score_symbol(profile, symbol, sector, peers, MarketCache()).model_dump()

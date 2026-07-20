@@ -54,5 +54,5 @@ def test_real_cohort_has_more_than_one_peer():
     sector = fit_service._sector_of(SYMBOL)
     if sector is None:
         pytest.skip(f"{SYMBOL} not in the live datamatrix")
-    peers = fit_service._peer_metrics(sector)
+    peers = fit_service.build_cohort(sector)
     assert len(peers) >= 2

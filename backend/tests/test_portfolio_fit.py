@@ -1,4 +1,5 @@
 """Portfolio health aggregation (#91) — pure compute_health over fixtures."""
+from backend import db, portfolio_fit_service
 from backend.portfolio_fit_service import compute_health
 from backend.models import InvestorProfile, FitAxis, FitScore
 
@@ -97,3 +98,25 @@ def test_default_profile_softens_and_skips_fit_findings():
     assert rf.severity == "good" and "profile" in rf.reason.lower()
     # profile-independent findings still present
     assert _find(h, "concentration") and _find(h, "count")
+
+
+# ── equal-weight fallback (all LTP missing) ──────────────────────────────────
+
+def test_equal_weight_fallback_when_all_ltp_missing(monkeypatch):
+    def dispatch(sql, params=None):
+        if "p.symbol" in sql:                              # get_portfolio
+            return [{"symbol": "GP", "current_price": None, "quantity": 10},
+                    {"symbol": "ROBI", "current_price": None, "quantity": 5}]
+        if "investor_profiles" in sql:
+            return []                                      # neutral default
+        if "UNNEST" in sql:
+            return [{"Symbol": "GP", "Sector": "Bank"},
+                    {"Symbol": "ROBI", "Sector": "Bank"}]
+        return []
+    monkeypatch.setattr(db, "query_rows", dispatch)
+
+    health = portfolio_fit_service.portfolio_health("u1")
+    # Holdings had no price, but equal-weighting still values + reports them.
+    assert health["holdings_valued"] == 2
+    kinds = {f["kind"] for f in health["findings"]}
+    assert {"concentration", "count"} <= kinds

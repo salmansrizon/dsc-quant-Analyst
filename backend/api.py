@@ -15,7 +15,7 @@ from .models import (
     WatchlistAdd, PortfolioAdd, PortfolioUpdate, AlertCreate,
     ScreenerRequest, ScreenerResponse, ScreenerWatchlistAdd,
     SubscriptionCreate, BundleCreate, NotificationPreferences,
-    InvestorProfile, ProfileUpdate,
+    InvestorProfile, ProfileUpdate, FitScore,
 )
 from .user_service import (
     create_user, get_user_by_email, get_user_credentials,
@@ -29,6 +29,7 @@ from . import screener_service
 from . import subscriptions_service
 from . import notification_prefs_service
 from . import profile_service
+from . import fit_service
 
 FRONTEND_URL = os.environ.get("FRONTEND_URL", "http://localhost:5173")
 
@@ -327,6 +328,12 @@ def profile_update(payload: ProfileUpdate, current_user: UserResponse = Depends(
 @app.get("/api/profile/sectors")
 def profile_sectors(current_user: UserResponse = Depends(get_current_user)):
     return profile_service.list_sector_names()
+
+
+@app.get("/api/fit/{symbol}", response_model=FitScore)
+def fit_score(symbol: str, current_user: UserResponse = Depends(get_current_user)):
+    # Explainable per-axis fit of a stock against the caller's profile (#88).
+    return fit_service.fit_for(current_user.id, symbol)
 
 
 # ── Portfolio ────────────────────────────────────────────────────────────────

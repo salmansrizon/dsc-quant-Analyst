@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import type { AxiosInstance } from 'axios';
+import PortfolioHealth, { type Health } from '../components/PortfolioHealth/PortfolioHealth';
 
 interface Holding {
   id: string;
@@ -17,6 +18,7 @@ interface Summary {
   current_value?: number;
   total_pnl?: number;
   avg_pnl_pct?: number;
+  health?: Health;
 }
 
 const money = (n?: number) => (typeof n === 'number' ? n.toFixed(2) : '—');
@@ -59,6 +61,8 @@ export default function Portfolio({ client }: { client: AxiosInstance }) {
           </p>
         </div>
       </div>
+
+      <PortfolioHealth health={summary.health} />
 
       <div className="overflow-x-auto">
         <table className="min-w-full divide-y divide-gray-200">

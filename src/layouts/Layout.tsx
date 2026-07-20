@@ -1,8 +1,10 @@
 import { useContext } from 'react';
+import type { AxiosInstance } from 'axios';
 import { Outlet, NavLink, useNavigate } from 'react-router-dom';
 import { Moon, Sun } from 'lucide-react';
 import { AuthContext } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
+import ProfileNudge from '../components/ProfileQuiz/ProfileNudge';
 
 const navItems = [
   { to: '/', label: 'Dashboard', end: true },
@@ -20,7 +22,7 @@ const linkClass = ({ isActive }: { isActive: boolean }) =>
       : 'text-gray-700 hover:text-indigo-600 hover:bg-indigo-50'
   }`;
 
-function Layout() {
+function Layout({ client }: { client: AxiosInstance }) {
   const { user, logout } = useContext(AuthContext);
   const { theme, toggleTheme } = useTheme();
   const navigate = useNavigate();
@@ -79,6 +81,7 @@ function Layout() {
         </nav>
       </header>
       <main className="max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8">
+        <ProfileNudge client={client} />
         <Outlet />
       </main>
     </div>

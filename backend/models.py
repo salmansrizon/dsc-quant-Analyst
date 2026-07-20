@@ -2,7 +2,7 @@
 Pydantic models for request/response schemas.
 """
 from pydantic import BaseModel, Field
-from typing import Optional
+from typing import Literal, Optional
 from datetime import datetime
 
 
@@ -136,6 +136,37 @@ class NotificationPreferences(BaseModel):
     email: Optional[str] = None
     web_push_subscription: Optional[str] = None
     channels_enabled: list[str] = []
+
+
+# ─── Investor profile (#85, personalization spine #84) ───────────────────────
+
+Goal = Literal["income", "growth", "preservation"]
+Risk = Literal["low", "med", "high"]
+Horizon = Literal["short", "medium", "long"]
+
+
+class InvestorProfile(BaseModel):
+    """The resolved, engine-ready profile the #88 fit engine + #93 recs consume.
+
+    Always non-null: an absent profile resolves to the neutral cold-start object
+    (is_default=True), so the engine never branches on None. sector_prefs is the
+    parsed rank-ordered list ([0] = top choice), never the stored JSON string.
+    """
+    goal: Goal
+    risk: Risk
+    horizon: Horizon
+    sector_prefs: list[str] = []
+    is_default: bool = False
+
+
+class ProfileUpdate(BaseModel):
+    """What the onboarding quiz / profile editor submits. Enums are validated by
+    Pydantic (422 on a bad value); sector_prefs is checked against the live
+    sector universe at the route (400)."""
+    goal: Goal
+    risk: Risk
+    horizon: Horizon
+    sector_prefs: list[str] = []
 
 
 # ─── Screener (#71) ───────────────────────────────────────────────────────────

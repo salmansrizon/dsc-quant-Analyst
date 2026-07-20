@@ -121,3 +121,48 @@ def test_bootstrap_admin_promotes_with_the_right_secret(monkeypatch):
                                 json={"email": "x@y.com", "secret": "real"})
     assert resp.status_code == 200
     assert promoted == {"role": "admin"}
+
+
+# ── Investor profile (#85, spine #84) ────────────────────────────────────────
+
+def test_get_profile_me_returns_neutral_default_when_unset(authed, monkeypatch):
+    monkeypatch.setattr(db, "_client", FakeClient(result_rows=[]))
+    resp = authed.get("/api/profile/me")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["is_default"] is True
+    assert (body["goal"], body["risk"], body["horizon"]) == ("growth", "med", "medium")
+
+
+def test_put_profile_me_saves_and_returns_resolved(authed, monkeypatch):
+    from backend import profile_service
+    monkeypatch.setattr(profile_service, "list_sector_names", lambda: ["Bank", "Pharma"])
+    monkeypatch.setattr(db, "append_version", AppendLog())
+    # get_profile readback after save:
+    monkeypatch.setattr(db, "_client", FakeClient(result_rows=fake_rows(
+        {"id": "u1", "user_id": "u1", "goal": "income", "risk": "low",
+         "horizon": "long", "sector_prefs": '["Bank"]', "is_default": False})))
+    resp = authed.put("/api/profile/me", json={
+        "goal": "income", "risk": "low", "horizon": "long", "sector_prefs": ["Bank"]})
+    assert resp.status_code == 200
+    assert resp.json()["sector_prefs"] == ["Bank"]
+    assert resp.json()["is_default"] is False
+
+
+def test_put_profile_me_rejects_unknown_sector(authed, monkeypatch):
+    from backend import profile_service
+    monkeypatch.setattr(profile_service, "list_sector_names", lambda: ["Bank"])
+    resp = authed.put("/api/profile/me", json={
+        "goal": "growth", "risk": "med", "horizon": "medium", "sector_prefs": ["Nope"]})
+    assert resp.status_code == 400
+
+
+def test_put_profile_me_rejects_bad_enum(authed):
+    resp = authed.put("/api/profile/me", json={
+        "goal": "gambling", "risk": "med", "horizon": "medium", "sector_prefs": []})
+    assert resp.status_code == 422
+
+
+def test_profile_routes_require_auth():
+    client = TestClient(app)
+    assert client.get("/api/profile/me").status_code in (401, 403)

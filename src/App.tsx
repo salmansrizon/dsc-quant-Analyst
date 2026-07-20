@@ -35,7 +35,7 @@ function App({ client = defaultClient }: AppProps) {
           <Route
             element={
               <PrivateRoute>
-                <Layout />
+                <Layout client={client} />
               </PrivateRoute>
             }
           >
@@ -52,7 +52,7 @@ function App({ client = defaultClient }: AppProps) {
             path="/admin"
             element={
               <PrivateRoute adminOnly>
-                <Layout />
+                <Layout client={client} />
               </PrivateRoute>
             }
           >

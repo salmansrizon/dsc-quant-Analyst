@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import type { CSSProperties } from 'react';
 import type { AxiosInstance } from 'axios';
 import { errorMessage } from '../../api/errorMessage';
 import { useToast } from '../../context/ToastContext';
@@ -31,6 +32,20 @@ const DEFAULTS: Profile = {
   goal: 'growth', risk: 'med', horizon: 'medium', sector_prefs: [], is_default: true,
 };
 
+// This project ships no Tailwind (see index.css — hand-rolled semantic classes +
+// CSS vars). So the modal chrome is styled inline against those vars; the buttons
+// reuse the real .btn-primary/.btn-secondary classes.
+const overlay: CSSProperties = {
+  position: 'fixed', inset: 0, zIndex: 50, display: 'flex',
+  alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.4)',
+};
+const panel: CSSProperties = {
+  background: 'var(--bg-secondary)', color: 'var(--text-primary)',
+  border: '1px solid var(--border-color)', borderRadius: 8,
+  width: '100%', maxWidth: 440, padding: 24,
+  display: 'flex', flexDirection: 'column', gap: 16,
+};
+
 interface Props {
   client: AxiosInstance;
   open: boolean;
@@ -41,7 +56,7 @@ interface Props {
 
 /**
  * Single-screen onboarding quiz (#85). A controlled modal: the host (Layout's
- * nudge, or Settings) owns `open`. Sectors preferences are rank-ordered — the
+ * nudge, or Settings) owns `open`. Sector preferences are rank-ordered — the
  * order the user adds them in is the order #88 derives weights from ([0] = top).
  */
 export default function ProfileQuiz({ client, open, onClose, onSaved, initial }: Props) {
@@ -99,11 +114,11 @@ export default function ProfileQuiz({ client, open, onClose, onSaved, initial }:
   const radioGroup = <T extends string>(
     legend: string, opts: [T, string][], value: T, set: (v: T) => void,
   ) => (
-    <fieldset className="border-0 p-0 m-0">
-      <legend className="text-sm font-medium text-gray-700 mb-1">{legend}</legend>
-      <div className="flex gap-4">
+    <fieldset style={{ border: 0, padding: 0, margin: 0 }}>
+      <legend style={{ fontSize: 14, fontWeight: 600, marginBottom: 4 }}>{legend}</legend>
+      <div style={{ display: 'flex', gap: 16 }}>
         {opts.map(([v, label]) => (
-          <label key={v} className="flex items-center gap-1 text-sm">
+          <label key={v} style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 14 }}>
             <input
               type="radio"
               name={legend}
@@ -118,14 +133,10 @@ export default function ProfileQuiz({ client, open, onClose, onSaved, initial }:
   );
 
   return (
-    <div
-      role="dialog"
-      aria-label="Investor profile"
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40"
-    >
-      <div className="bg-white rounded-lg shadow-xl w-full max-w-md p-6 space-y-4">
-        <h2 className="text-lg font-bold text-gray-900">Build your investor profile</h2>
-        <p className="text-sm text-gray-500">
+    <div role="dialog" aria-label="Investor profile" style={overlay}>
+      <div style={panel}>
+        <h2 style={{ fontSize: 18, fontWeight: 700, margin: 0 }}>Build your investor profile</h2>
+        <p className="text-secondary" style={{ fontSize: 14, margin: 0 }}>
           Tells us how to tailor fit scores and recommendations. Not financial advice.
         </p>
 
@@ -134,35 +145,35 @@ export default function ProfileQuiz({ client, open, onClose, onSaved, initial }:
         {radioGroup('Time horizon', HORIZONS, horizon, setHorizon)}
 
         <div>
-          <label htmlFor="sector-pick" className="text-sm font-medium text-gray-700">
+          <label htmlFor="sector-pick" style={{ fontSize: 14, fontWeight: 600 }}>
             Add a preferred sector
           </label>
-          <div className="flex gap-2 mt-1">
+          <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
             <select
               id="sector-pick"
               aria-label="Add a preferred sector"
               value={pick}
               onChange={(e) => setPick(e.target.value)}
-              className="flex-1 border rounded px-2 py-1 text-sm"
+              style={{
+                flex: 1, border: '1px solid var(--border-color)', borderRadius: 4,
+                padding: '4px 8px', fontSize: 14, background: 'var(--bg-secondary)',
+                color: 'var(--text-primary)',
+              }}
             >
               <option value="">Select…</option>
               {available.map((s) => (
                 <option key={s} value={s}>{s}</option>
               ))}
             </select>
-            <button
-              type="button"
-              onClick={addSector}
-              className="px-3 py-1 rounded bg-indigo-50 text-indigo-700 text-sm"
-            >
+            <button type="button" onClick={addSector} className="btn-secondary">
               Add sector
             </button>
           </div>
-          <ol className="mt-2 space-y-1">
+          <ol style={{ marginTop: 8, paddingLeft: 0, listStyle: 'none', display: 'flex', flexDirection: 'column', gap: 4 }}>
             {sectors.map((s, i) => (
-              <li key={s} className="flex items-center gap-2 text-sm">
-                <span className="text-gray-400">{i + 1}.</span>
-                <span className="flex-1">{s}</span>
+              <li key={s} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 14 }}>
+                <span className="text-secondary">{i + 1}.</span>
+                <span style={{ flex: 1 }}>{s}</span>
                 <button type="button" aria-label={`Move ${s} up`} onClick={() => move(i, -1)}>↑</button>
                 <button type="button" aria-label={`Move ${s} down`} onClick={() => move(i, 1)}>↓</button>
                 <button type="button" aria-label={`Remove ${s}`} onClick={() => removeSector(s)}>✕</button>
@@ -171,21 +182,10 @@ export default function ProfileQuiz({ client, open, onClose, onSaved, initial }:
           </ol>
         </div>
 
-        <div className="flex justify-end gap-2 pt-2">
-          <button
-            type="button"
-            onClick={onClose}
-            className="px-3 py-2 rounded text-sm text-gray-600 hover:bg-gray-100"
-          >
-            Skip
-          </button>
-          <button
-            type="button"
-            onClick={save}
-            disabled={saving}
-            className="px-4 py-2 rounded bg-indigo-600 text-white text-sm disabled:opacity-50"
-          >
-            Save profile
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, paddingTop: 8 }}>
+          <button type="button" onClick={onClose} className="btn-secondary">Skip</button>
+          <button type="button" onClick={save} disabled={saving} className="btn-primary">
+            {saving ? 'Saving…' : 'Save profile'}
           </button>
         </div>
       </div>

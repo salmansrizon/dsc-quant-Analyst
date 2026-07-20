@@ -39,15 +39,23 @@ export default function ProfileNudge({ client }: { client: AxiosInstance }) {
   return (
     <>
       {needsProfile && (
-        <div className="bg-indigo-50 border border-indigo-100 rounded-md px-4 py-2 mb-4 flex items-center justify-between text-sm">
-          <span className="text-indigo-800">
+        <div
+          className="card"
+          style={{
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+            gap: 12, padding: '8px 16px', marginBottom: 16, fontSize: 14,
+            borderLeft: '3px solid var(--accent-blue)',
+          }}
+        >
+          <span>
             Complete your investor profile to personalize fit scores and recommendations.
           </span>
-          <span className="flex items-center gap-3">
+          <span style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
             <button
               type="button"
               onClick={() => setOpen(true)}
-              className="font-medium text-indigo-700 hover:underline"
+              className="text-accent-blue"
+              style={{ fontWeight: 600, background: 'none', border: 0, cursor: 'pointer' }}
             >
               Set up now
             </button>
@@ -55,7 +63,8 @@ export default function ProfileNudge({ client }: { client: AxiosInstance }) {
               type="button"
               aria-label="Dismiss profile reminder"
               onClick={() => setDismissed(true)}
-              className="text-indigo-400 hover:text-indigo-600"
+              className="text-secondary"
+              style={{ background: 'none', border: 0, cursor: 'pointer' }}
             >
               ✕
             </button>

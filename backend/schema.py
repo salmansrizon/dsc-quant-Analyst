@@ -158,7 +158,7 @@ TABLES: dict[str, TableSpec] = {
         ("horizon", _STR),       # short|medium|long
         ("sector_prefs", _STR),  # JSON rank-ordered array
         ("is_default", "BOOL"),
-        ("created_at", _TS), ("updated_at", _TS), ("is_deleted", "BOOL"),
+        ("updated_at", _TS), ("is_deleted", "BOOL"),
     )),
     # One dividend DECLARATION (#57). A company declares several a year, so
     # symbol|year would collapse them.

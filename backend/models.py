@@ -191,6 +191,25 @@ class FitScore(BaseModel):
     disclaimer: str
 
 
+# ─── Portfolio health (#91, personalization spine #84) ───────────────────────
+
+class PortfolioFinding(BaseModel):
+    """One 'health vs your profile' finding. `kind` names the signal; `severity`
+    is good|caution|warn; `reason` explains it. Never advice."""
+    kind: str          # concentration|count|risk_fit|goal_fit|unmet_prefs
+    severity: str      # good|caution|warn
+    headline: str
+    reason: str
+
+
+class PortfolioHealth(BaseModel):
+    holdings_valued: int
+    total_value: float
+    is_default_profile: bool
+    findings: list[PortfolioFinding]
+    disclaimer: str
+
+
 # ─── Screener (#71) ───────────────────────────────────────────────────────────
 
 class ScreenerFilter(BaseModel):

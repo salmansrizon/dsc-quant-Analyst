@@ -103,4 +103,10 @@ def portfolio_summary(user_id: str):
     """
     params = [bigquery.ScalarQueryParameter("uid", "STRING", user_id)]
     rows = db.query_rows(sql, params)
-    return rows[0] if rows else {}
+    summary = rows[0] if rows else {}
+    # Portfolio-level personalization (#91): a 'health vs your profile' block
+    # rides on the existing summary rather than a second endpoint. Imported here
+    # to avoid an import cycle (portfolio_fit_service reads get_portfolio).
+    from . import portfolio_fit_service
+    summary["health"] = portfolio_fit_service.portfolio_health(user_id)
+    return summary

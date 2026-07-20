@@ -16,6 +16,7 @@ from google.cloud import bigquery
 
 from . import db, valuation
 from .fit_engine import score as engine_score
+from .models import InvestorProfile
 from .profile_service import get_profile
 
 # How many recent daily bars back the volatility proxy — the coefficient of
@@ -128,31 +129,48 @@ def _arrays(peers: dict[str, dict]) -> dict[str, list[float]]:
     }
 
 
+class _MarketCache:
+    """Lazily builds the whole-market peer set once, then reuses it — so a
+    portfolio scoring many thin sectors pays for the market fallback at most
+    once, not per sector."""
+    def __init__(self):
+        self._peers: dict | None = None
+
+    def peers(self) -> dict:
+        if self._peers is None:
+            self._peers = _peer_metrics(None)
+        return self._peers
+
+
+def score_symbol(profile: InvestorProfile, symbol: str, sector: str | None,
+                 sector_peers: dict, market: "_MarketCache"):
+    """Score one symbol against its (already-built) sector cohort, falling back
+    to the market-wide distribution for any metric with fewer than MIN_COHORT
+    peers. Shared by the single-stock and portfolio paths so scoring lives once.
+    """
+    sector_arrays = _arrays(sector_peers)
+    cohort: dict[str, list[float]] = {}
+    scope: dict[str, str] = {}
+    for ck in _METRIC_KEYS:
+        arr = sector_arrays.get(ck, [])
+        if len(arr) < MIN_COHORT:
+            marr = _arrays(market.peers()).get(ck, [])
+            if len(marr) > len(arr):
+                cohort[ck], scope[ck] = marr, "market"
+                continue
+        cohort[ck], scope[ck] = arr, "sector"
+
+    subject = sector_peers.get(symbol) or market.peers().get(symbol) or {
+        "sector": sector, "pe": None, "pb": None, "yield_": None,
+        "growth": None, "volatility": None,
+    }
+    return engine_score(profile, symbol, subject, cohort, scope)
+
+
 def fit_for(user_id: str, symbol: str) -> dict:
     """The scorecard for one stock against one user's profile."""
     symbol = symbol.upper()
     profile = get_profile(user_id)
     sector = _sector_of(symbol)
     peers = _peer_metrics(sector) if sector else {}
-    sector_arrays = _arrays(peers)
-
-    # Fill thin metrics from the market-wide distribution (decision: n < 5).
-    cohort: dict[str, list[float]] = {}
-    scope: dict[str, str] = {}
-    market_peers = None
-    for ck in _METRIC_KEYS:
-        arr = sector_arrays.get(ck, [])
-        if len(arr) < MIN_COHORT:
-            if market_peers is None:
-                market_peers = _peer_metrics(None)
-            marr = _arrays(market_peers).get(ck, [])
-            if len(marr) > len(arr):
-                cohort[ck], scope[ck] = marr, "market"
-                continue
-        cohort[ck], scope[ck] = arr, "sector"
-
-    subject = peers.get(symbol) or (market_peers or {}).get(symbol) or {
-        "sector": sector, "pe": None, "pb": None, "yield_": None,
-        "growth": None, "volatility": None,
-    }
-    return engine_score(profile, symbol, subject, cohort, scope).model_dump()
+    return score_symbol(profile, symbol, sector, peers, _MarketCache()).model_dump()

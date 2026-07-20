@@ -201,3 +201,36 @@ def test_get_fit_scores_a_symbol_through_the_seam(authed, monkeypatch):
 
 def test_fit_route_requires_auth():
     assert TestClient(app).get("/api/fit/GP").status_code in (401, 403)
+
+
+# ── Portfolio health (#91, spine #84) ────────────────────────────────────────
+
+def test_portfolio_summary_carries_health_block(authed, monkeypatch):
+    def dispatch(sql, params=None):
+        if "total_holdings" in sql:
+            return [{"total_holdings": 2, "total_invested": 1000.0,
+                     "current_value": 1200.0, "total_pnl": 200.0, "avg_pnl_pct": 20.0}]
+        if "p.symbol" in sql:                       # get_portfolio
+            return [{"id": "h1", "symbol": "GP", "current_price": 300.0, "quantity": 10},
+                    {"id": "h2", "symbol": "ROBI", "current_price": 30.0, "quantity": 5}]
+        if "investor_profiles" in sql:
+            return []                               # neutral default profile
+        if "UNNEST" in sql:                         # _sectors_for
+            return [{"Symbol": "GP", "Sector": "Telecom"},
+                    {"Symbol": "ROBI", "Sector": "Telecom"}]
+        if "Symbol, Sector, LTP" in sql:
+            return [{"Symbol": "GP", "Sector": "Telecom", "LTP": 300.0},
+                    {"Symbol": "ROBI", "Sector": "Telecom", "LTP": 30.0}]
+        if "price_archive" in sql:
+            return [{"Symbol": "GP", "pe": 10.0, "vol": 0.05, "bars": 30},
+                    {"Symbol": "ROBI", "pe": 20.0, "vol": 0.2, "bars": 30}]
+        return []
+    monkeypatch.setattr(db, "query_rows", dispatch)
+
+    resp = authed.get("/api/portfolio/summary")
+    assert resp.status_code == 200
+    health = resp.json()["health"]
+    kinds = {f["kind"] for f in health["findings"]}
+    assert {"concentration", "count"} <= kinds       # profile-independent findings
+    assert health["is_default_profile"] is True      # neutral profile
+    assert health["disclaimer"]

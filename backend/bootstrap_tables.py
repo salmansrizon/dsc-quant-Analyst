@@ -38,9 +38,15 @@ def _table_exists(name: str) -> bool:
         return False
 
 
-def _create_table(name: str, columns) -> None:
+def _create_table(name: str, columns, spec=None) -> None:
     cols = ", ".join(f"{c} {t}" for c, t in columns)
-    db.client().query(f"CREATE TABLE {db.table_id(name)} ({cols})").result()
+    ddl = f"CREATE TABLE {db.table_id(name)} ({cols})"
+    # Time-partitioned raw tables (#86): BigQuery expires old partitions itself.
+    if spec is not None and spec.partition:
+        ddl += f" PARTITION BY {spec.partition}"
+        if spec.expiration_days:
+            ddl += f" OPTIONS(partition_expiration_days={spec.expiration_days})"
+    db.client().query(ddl).result()
 
 
 def _add_missing_columns(name: str, columns) -> list[str]:
@@ -60,7 +66,7 @@ def bootstrap() -> None:
     for table, spec in TABLES.items():
         columns, key = spec.columns, spec.key
         if not _table_exists(table):
-            _create_table(table, columns)
+            _create_table(table, columns, spec)
             logger.info("created table %s", table)
         else:
             added = _add_missing_columns(table, columns)
@@ -69,8 +75,10 @@ def bootstrap() -> None:
             else:
                 logger.info("table %s already current", table)
 
-        db.ensure_current_view(table, key=key)
-        logger.info("  view %s%s ready", table, db.CURRENT_SUFFIX)
+        # Raw log tables (#86) are never superseded — no `_current` view.
+        if getattr(spec, "versioned", True):
+            db.ensure_current_view(table, key=key)
+            logger.info("  view %s%s ready", table, db.CURRENT_SUFFIX)
 
 
 if __name__ == "__main__":

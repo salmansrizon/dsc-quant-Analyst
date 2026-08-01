@@ -128,6 +128,11 @@ def main() -> None:
     parser.add_argument("task", nargs="?", help="what the loop should work on")
     parser.add_argument("--status", action="store_true", help="print state and exit")
     parser.add_argument("--reset", action="store_true", help="clear saved state and exit")
+    parser.add_argument(
+        "--phase",
+        choices=PHASE_ORDER,
+        help="start at this phase instead of planning (for work already specified)",
+    )
     args = parser.parse_args()
 
     if args.reset:
@@ -144,10 +149,13 @@ def main() -> None:
     if args.task:
         state.task = args.task
         state.context = ""
-        state.phase = PHASE_ORDER[0]
+        state.phase = args.phase or PHASE_ORDER[0]
         state.attempts = {}
     elif not state.task:
         parser.error("no saved task to resume; pass a task description")
+    elif args.phase:
+        state.phase = args.phase
+        state.attempts = {}
 
     print(json.dumps(run(state), indent=2))
 

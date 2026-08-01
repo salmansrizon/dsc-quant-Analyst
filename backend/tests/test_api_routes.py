@@ -243,6 +243,21 @@ def test_recommendations_route_requires_auth():
     assert TestClient(app).get("/api/recommendations").status_code in (401, 403)
 
 
+def test_feed_route(authed, monkeypatch):
+    from backend import feed_service
+    monkeypatch.setattr(feed_service, "feed", lambda uid, limit=20, offset=0: {
+        "items": [{"kind": "nudge", "headline": "h", "reason": "r",
+                   "symbol": None, "symbols": [], "sources": []}],
+        "next_offset": None, "is_default_profile": True, "disclaimer": "d"})
+    resp = authed.get("/api/feed")
+    assert resp.status_code == 200
+    assert resp.json()["items"][0]["kind"] == "nudge"
+
+
+def test_feed_route_requires_auth():
+    assert TestClient(app).get("/api/feed").status_code in (401, 403)
+
+
 # ── Behaviour capture (#86, spine #84) ───────────────────────────────────────
 
 def test_post_behaviour_appends_a_batch(authed, monkeypatch):

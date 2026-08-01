@@ -96,3 +96,13 @@ def test_nudges_map_from_findings_and_are_additive_never_sell(monkeypatch):
     assert "BANKA" not in all_syms                    # additive-only: never a held/sell symbol
     unmet = next(n for n in out["nudges"] if n["kind"] == "unmet_prefs")
     assert set(unmet["symbols"]) <= {"PH1", "PH2"}    # candidates in the unmet sector
+
+
+def test_unfused_nudge_is_dropped_not_shipped_empty(monkeypatch):
+    # Only preference IS the concentrated sector (Bank) -> the "spread beyond Bank"
+    # nudge has no out-of-Bank candidate to fuse, so it must be dropped, not empty.
+    _wire(monkeypatch, _profile(sector_prefs=["Bank"]),
+          [{"symbol": "BANKA", "current_price": 100.0, "quantity": 10}])
+    out = rec.recommend("u1")
+    assert "concentration" not in {n["kind"] for n in out["nudges"]}
+    assert all(n["symbols"] for n in out["nudges"])    # no unfused nudge ships

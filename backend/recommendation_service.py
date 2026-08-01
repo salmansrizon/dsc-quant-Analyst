@@ -14,8 +14,6 @@ On-read Python; scores every candidate through `fit_service.score_many` (the #88
 seam — cohort built once). Behaviour affinity is a placeholder seam (`affinity`,
 until #86/#107); the fit + gap generators carry v1.
 """
-from collections import defaultdict
-
 from . import db, fit_service, affinity
 from . import portfolio_fit_service as pf
 from .models import FitScore, Recommendation, StrategyNudge, Recommendations
@@ -80,7 +78,7 @@ def recommend(user_id: str) -> dict:
 
     ranked = _rank(user_id, candidates, sector_of, profile, engaged, unmet, fits)
     recs = _recs(ranked, profile, unmet)
-    nudges = _nudges(profile, valued, held_fits, held_sectors, ranked)
+    nudges = _nudges(profile, valued, held_fits, unmet, ranked)
 
     return Recommendations(recs=recs, nudges=nudges,
                            is_default_profile=False, disclaimer=DISCLAIMER).model_dump()
@@ -126,17 +124,17 @@ def _recs(ranked, profile, unmet) -> list[Recommendation]:
     return recs
 
 
-def _nudges(profile, valued, held_fits, held_sectors, ranked) -> list[StrategyNudge]:
+def _nudges(profile, valued, held_fits, unmet, ranked) -> list[StrategyNudge]:
     """Deterministic map from #91 warn/caution findings to additive, conditional
     -frame nudges fused with the candidates that address each. Priority order,
-    capped at _MAX_NUDGES. Symbols are always unheld candidates — never a sell."""
+    capped at _MAX_NUDGES. Symbols are always unheld candidates — never a sell; a
+    nudge that can't fuse any candidate is dropped rather than shipped unfused."""
     findings = {f.kind: f for f in pf.compute_health(profile, valued, held_fits).findings}
     cands = [(sym, sec, fit) for sym, sec, fit, _ in ranked]
     out: list[StrategyNudge] = []
 
     f = findings.get("unmet_prefs")
     if f and f.severity in ("warn", "caution"):
-        unmet = [s for s in profile.sector_prefs if s not in held_sectors]
         out.append(StrategyNudge(
             kind="unmet_prefs", headline=f"Explore your preferred {', '.join(unmet)}",
             reason=f"You prefer {', '.join(unmet)} but hold nothing there — these fit "
@@ -145,9 +143,7 @@ def _nudges(profile, valued, held_fits, held_sectors, ranked) -> list[StrategyNu
 
     f = findings.get("concentration")
     if f and f.severity in ("warn", "caution"):
-        by: dict[str, float] = defaultdict(float)
-        for h in valued:
-            by[h.get("sector") or "Unknown"] += h["value"]
+        by = pf.sector_values(valued)
         top_sector = max(by, key=by.get) if by else None
         out.append(StrategyNudge(
             kind="concentration", headline=f"Spread beyond {top_sector}",
@@ -157,16 +153,16 @@ def _nudges(profile, valued, held_fits, held_sectors, ranked) -> list[StrategyNu
 
     f = findings.get("mix")
     if f and f.severity in ("warn", "caution"):
-        income_w = pf._weighted_axis(valued, held_fits, "Income") or 0.0
-        growth_w = pf._weighted_axis(valued, held_fits, "Growth") or 0.0
+        income_w = pf.weighted_axis(valued, held_fits, "Income") or 0.0
+        growth_w = pf.weighted_axis(valued, held_fits, "Growth") or 0.0
         lean = "growth" if growth_w > income_w else "income"
         opp = "Income" if lean == "growth" else "Growth"
-        tilted = sorted(cands, key=lambda t: pf._axis(t[2], opp) or 0.0, reverse=True)
+        tilted = sorted(cands, key=lambda t: pf.axis_score(t[2], opp) or 0.0, reverse=True)
         out.append(StrategyNudge(
             kind="mix", headline=f"Balance your {lean}-leaning mix",
             reason=f"Your holdings lean {lean} while your goal is {profile.goal}; adding "
                    f"{opp.lower()}-tilted names would balance the mix.",
-            symbols=[s for s, sec, fit in tilted if (pf._axis(fit, opp) or 0) > 0][:3]))
+            symbols=[s for s, sec, fit in tilted if (pf.axis_score(fit, opp) or 0) > 0][:3]))
 
     f = findings.get("goal_fit")
     if f and f.severity in ("warn", "caution"):
@@ -176,4 +172,6 @@ def _nudges(profile, valued, held_fits, held_sectors, ranked) -> list[StrategyNu
                    f"it more closely.",
             symbols=[s for s, sec, _ in cands][:3]))
 
-    return out[:_MAX_NUDGES]
+    # A nudge with no candidate to fuse is an unfused observation (#91 already
+    # shows it) — drop it; keep only nudges that actually suggest names.
+    return [n for n in out if n.symbols][:_MAX_NUDGES]

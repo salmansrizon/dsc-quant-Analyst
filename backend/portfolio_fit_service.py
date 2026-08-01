@@ -41,16 +41,27 @@ def _weighted(pairs: list[tuple[float | None, float]]) -> float | None:
     return num / den if den else None
 
 
-def _axis(fit: FitScore, name: str) -> float | None:
+def axis_score(fit: FitScore, name: str) -> float | None:
+    """One axis's score from a FitScore, or None. Public — #93 ranks through it."""
     for a in fit.axes:
         if a.axis == name:
             return a.score
     return None
 
 
-def _weighted_axis(valued: list[dict], fits: dict[str, FitScore], name: str) -> float | None:
-    return _weighted([(_axis(fits[h["symbol"]], name), h["value"])
+def weighted_axis(valued: list[dict], fits: dict[str, FitScore], name: str) -> float | None:
+    """Value-weighted mean of an axis across holdings. Public — shared with #93."""
+    return _weighted([(axis_score(fits[h["symbol"]], name), h["value"])
                       for h in valued if h["symbol"] in fits])
+
+
+def sector_values(valued: list[dict]) -> dict[str, float]:
+    """Total value per sector. The one place concentration is derived — shared by
+    compute_health and #93's nudges so 'top sector' is computed once."""
+    by: dict[str, float] = defaultdict(float)
+    for h in valued:
+        by[h.get("sector") or "Unknown"] += h["value"]
+    return by
 
 
 def compute_health(profile: InvestorProfile, holdings: list[dict],
@@ -62,9 +73,7 @@ def compute_health(profile: InvestorProfile, holdings: list[dict],
 
     # ── Concentration (structural, factual headline) ─────────────────────────
     if valued and total:
-        by_sector: dict[str, float] = defaultdict(float)
-        for h in valued:
-            by_sector[h.get("sector") or "Unknown"] += h["value"]
+        by_sector = sector_values(valued)
         top_sector, top_val = max(by_sector.items(), key=lambda kv: kv[1])
         pct = 100.0 * top_val / total
         sev = "warn" if pct > _CONC[1] else "caution" if pct >= _CONC[0] else "good"
@@ -99,7 +108,7 @@ def compute_health(profile: InvestorProfile, holdings: list[dict],
             unweighted=unweighted, findings=findings, disclaimer=DISCLAIMER)
 
     # ── Risk fit (value-weighted Stability vs tolerance; qualitative headline) ─
-    stability = _weighted_axis(valued, fits, "Stability")
+    stability = weighted_axis(valued, fits, "Stability")
     if stability is not None:
         gap = _STABILITY_TARGET[profile.risk] - stability
         sev = "warn" if gap > 20 else "caution" if gap > 0 else "good"
@@ -132,8 +141,8 @@ def compute_health(profile: InvestorProfile, holdings: list[dict],
         ))
 
     # ── Income/growth mix vs goal (value-weighted lean; qualitative headline) ─
-    income_w = _weighted_axis(valued, fits, "Income")
-    growth_w = _weighted_axis(valued, fits, "Growth")
+    income_w = weighted_axis(valued, fits, "Income")
+    growth_w = weighted_axis(valued, fits, "Growth")
     if income_w is not None and growth_w is not None:
         findings.append(_mix_finding(profile.goal, income_w, growth_w))
 

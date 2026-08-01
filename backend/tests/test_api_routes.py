@@ -226,3 +226,18 @@ def test_portfolio_health_route(authed, monkeypatch):
 
 def test_portfolio_health_route_requires_auth():
     assert TestClient(app).get("/api/portfolio/health").status_code in (401, 403)
+
+
+def test_recommendations_route(authed, monkeypatch):
+    from backend import recommendation_service
+    monkeypatch.setattr(recommendation_service, "recommend", lambda uid: {
+        "recs": [], "nudges": [{"kind": "set_profile", "headline": "h",
+                                "reason": "r", "symbols": []}],
+        "is_default_profile": True, "disclaimer": "d"})
+    resp = authed.get("/api/recommendations")
+    assert resp.status_code == 200
+    assert resp.json()["nudges"][0]["kind"] == "set_profile"
+
+
+def test_recommendations_route_requires_auth():
+    assert TestClient(app).get("/api/recommendations").status_code in (401, 403)

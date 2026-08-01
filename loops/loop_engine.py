@@ -16,7 +16,7 @@ from dataclasses import dataclass, field, asdict
 from pathlib import Path
 
 from gates import current_head, run_gates
-from skill_runner import SkillUnavailable, run_skill
+from skill_runner import SkillBlocked, SkillUnavailable, run_skill
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 SESSION_PATH = REPO_ROOT / "memory" / "session" / "current.json"
@@ -100,7 +100,15 @@ def run(state: LoopState) -> dict:
         state.attempts[state.phase] = state.attempts_for(state.phase) + 1
         print(f"\n=== {describe(state)} ===", flush=True)
 
-        passed, report = run_phase(state)
+        try:
+            passed, report = run_phase(state)
+        except SkillBlocked as exc:
+            # Not a failed attempt — the wall is outside the loop's control, so
+            # spending the remaining retries on it would change nothing.
+            state.context = str(exc)
+            state.attempts[state.phase] = state.attempts_for(state.phase) - 1
+            return escalate(state, f"blocked, not retryable: {exc}")
+
         state.context = report
         save_state(state)
 

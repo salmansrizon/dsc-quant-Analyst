@@ -30,6 +30,24 @@ class SkillUnavailable(RuntimeError):
     pass
 
 
+class SkillBlocked(Exception):
+    """A failure that retrying cannot fix — quota, auth, or a permission wall."""
+
+
+# Retrying these just burns the remaining attempts against the same wall, and
+# the run escalates having spent three times the tokens for one answer.
+_NON_RETRYABLE = (
+    "session limit",
+    "usage limit",
+    "rate limit",
+    "quota",
+    "credit balance",
+    "authentication_error",
+    "invalid api key",
+    "please run /login",
+)
+
+
 @dataclass
 class SkillResult:
     skill: str
@@ -57,4 +75,10 @@ def run_skill(skill: str, prompt: str) -> SkillResult:
         text=True,
         timeout=SKILL_TIMEOUT,
     )
-    return SkillResult(skill, proc.returncode == 0, (proc.stdout + proc.stderr).strip())
+    output = (proc.stdout + proc.stderr).strip()
+    if proc.returncode != 0 or not output:
+        lowered = output.lower()
+        for marker in _NON_RETRYABLE:
+            if marker in lowered:
+                raise SkillBlocked(f"/{skill}: {output.splitlines()[0][:200]}")
+    return SkillResult(skill, proc.returncode == 0, output)

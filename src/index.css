@@ -1,5 +1,22 @@
 @import "tailwindcss";
 
+/* Design-language semantic tokens (#87), pre-generated so the utilities
+   exist ahead of any consumer (#97/#98) — Tailwind v4 otherwise tree-shakes
+   utilities that aren't yet referenced in scanned source. */
+@source inline(
+  "text-gain text-loss text-neutral bg-gain bg-loss bg-elevated-1 bg-elevated-2 border-border-subtle border-border-strong"
+);
+
+@theme {
+  --color-gain: var(--gain);
+  --color-loss: var(--loss);
+  --color-neutral: var(--neutral);
+  --color-elevated-1: var(--elevated-1);
+  --color-elevated-2: var(--elevated-2);
+  --color-border-subtle: var(--border-subtle);
+  --color-border-strong: var(--border-strong);
+}
+
 :root {
   --bg-primary: #f7f7f7;
   --bg-secondary: #ffffff;
@@ -10,6 +27,20 @@
   --accent-red: #ef4444;
   --border-color: #e5e7eb;
   --body-gradient: linear-gradient(135deg, #f0f4f8 0%, #e5e7eb 100%);
+
+  /* Semantic aliases: name colors by meaning (gain/loss/neutral) rather
+     than hue, so trading-data components stay correct if the accent
+     palette is rebranded later. */
+  --gain: var(--accent-green);
+  --loss: var(--accent-red);
+  --neutral: var(--text-secondary);
+
+  /* Elevation scale, building on --bg-secondary as the base card surface. */
+  --elevated-1: var(--bg-secondary);
+  --elevated-2: #f0f2f5;
+
+  --border-subtle: var(--border-color);
+  --border-strong: #c7cdd6;
 }
 
 /* Dark mode (#82). ThemeContext toggles data-theme on <html>; these overrides
@@ -25,6 +56,16 @@
   --accent-red: #f87171;
   --border-color: #2b303c;
   --body-gradient: linear-gradient(135deg, #0d0f14 0%, #161a22 100%);
+
+  --gain: var(--accent-green);
+  --loss: var(--accent-red);
+  --neutral: var(--text-secondary);
+
+  --elevated-1: var(--bg-secondary);
+  --elevated-2: #232838;
+
+  --border-subtle: var(--border-color);
+  --border-strong: #3a4152;
 }
 
 * {
@@ -206,6 +247,19 @@ body {
 
 .shadow { box-shadow: 0 2px 8px rgba(0,0,0,0.05); }
 .shadow-md { box-shadow: 0 4px 16px rgba(0,0,0,0.1); }
+
+/* Respect reduced-motion preference: neutralize all transitions and
+   animations, including the semantic-token utilities above. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
 
 /* Responsive */
 @media (max-width: 768px) {

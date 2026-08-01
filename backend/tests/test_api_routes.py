@@ -201,3 +201,28 @@ def test_get_fit_scores_a_symbol_through_the_seam(authed, monkeypatch):
 
 def test_fit_route_requires_auth():
     assert TestClient(app).get("/api/fit/GP").status_code in (401, 403)
+
+
+def test_portfolio_health_route(authed, monkeypatch):
+    def dispatch(sql, params=None):
+        if "p.symbol" in sql:                              # get_portfolio
+            return [{"symbol": "GP", "current_price": 300.0, "quantity": 10}]
+        if "investor_profiles" in sql:
+            return []                                      # neutral default profile
+        if "UNNEST" in sql:                                # _sectors_for
+            return [{"Symbol": "GP", "Sector": "Bank"}]
+        return []                                          # cohort reads -> empty
+    monkeypatch.setattr(db, "query_rows", dispatch)
+
+    resp = authed.get("/api/portfolio/health")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["holdings_valued"] == 1
+    assert body["is_default_profile"] is True              # no profile set
+    kinds = {f["kind"] for f in body["findings"]}
+    assert {"concentration", "count"} <= kinds             # structural findings always
+    assert body["disclaimer"]
+
+
+def test_portfolio_health_route_requires_auth():
+    assert TestClient(app).get("/api/portfolio/health").status_code in (401, 403)

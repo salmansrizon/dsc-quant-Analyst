@@ -15,7 +15,7 @@ from .models import (
     WatchlistAdd, PortfolioAdd, PortfolioUpdate, AlertCreate,
     ScreenerRequest, ScreenerResponse, ScreenerWatchlistAdd,
     SubscriptionCreate, BundleCreate, NotificationPreferences,
-    InvestorProfile, ProfileUpdate, FitScore,
+    InvestorProfile, ProfileUpdate, FitScore, PortfolioHealth,
 )
 from .user_service import (
     create_user, get_user_by_email, get_user_credentials,
@@ -30,6 +30,7 @@ from . import subscriptions_service
 from . import notification_prefs_service
 from . import profile_service
 from . import fit_service
+from . import portfolio_fit_service
 
 FRONTEND_URL = os.environ.get("FRONTEND_URL", "http://localhost:5173")
 
@@ -341,6 +342,12 @@ def fit_score(symbol: str, current_user: UserResponse = Depends(get_current_user
 @app.get("/api/portfolio")
 def portfolio_list(current_user: UserResponse = Depends(get_current_user)):
     return portfolio_service.get_portfolio(current_user.id)
+
+
+@app.get("/api/portfolio/health", response_model=PortfolioHealth)
+def portfolio_health(current_user: UserResponse = Depends(get_current_user)):
+    # Portfolio-level fit vs the caller's profile — observations, never advice (#91).
+    return portfolio_fit_service.portfolio_health(current_user.id)
 
 
 @app.get("/api/portfolio/summary")

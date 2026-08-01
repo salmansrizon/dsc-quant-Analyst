@@ -7,6 +7,24 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parent.parent
 SKILL_TIMEOUT = 3600
 
+# Nested `claude -p` runs unattended: no human can answer a permission prompt,
+# so anything not listed here deadlocks the phase rather than failing loudly.
+# Deliberately narrow — the build/test toolchain and file edits, not blanket
+# shell access. Widen only with a specific reason.
+ALLOWED_TOOLS = [
+    "Bash(npm:*)",
+    "Bash(npx:*)",
+    "Bash(node:*)",
+    "Bash(git:*)",
+    "Bash(.venv/bin/python:*)",
+    "Bash(.venv/bin/pytest:*)",
+    "Read",
+    "Edit",
+    "Write",
+    "Glob",
+    "Grep",
+]
+
 
 class SkillUnavailable(RuntimeError):
     pass
@@ -33,7 +51,7 @@ def run_skill(skill: str, prompt: str) -> SkillResult:
         raise SkillUnavailable(f"skill /{skill} is not installed in .claude/skills")
 
     proc = subprocess.run(
-        ["claude", "-p", f"/{skill} {prompt}".strip()],
+        ["claude", "-p", f"/{skill} {prompt}".strip(), "--allowed-tools", *ALLOWED_TOOLS],
         cwd=REPO_ROOT,
         capture_output=True,
         text=True,

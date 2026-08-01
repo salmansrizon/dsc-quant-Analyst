@@ -183,9 +183,17 @@ class FitAxis(BaseModel):
 
 class FitScore(BaseModel):
     """A stock scored against an investor profile (#88). Framing is always
-    'matches your preferences', never advice — the disclaimer rides here."""
+    'matches your preferences', never advice — the disclaimer rides here.
+
+    `composite` is computed for downstream ranking (feed #89 / recs #91 / nudges
+    #93) but is NOT a user-facing headline — the frontend renders axes + reasons
+    only (decision C). `scorable` is False below the 2-axis coverage floor, when
+    `composite` is None and the scorecard should say so. `weight_caption` is the
+    only place the profile->weight tilt surfaces, since the composite is hidden."""
     symbol: str
-    composite: Optional[float] = None  # weighted mean over scored axes, 0..100
+    composite: Optional[float] = None  # weighted mean over scored axes, 0..100 — internal-only
+    scorable: bool = True              # False when <2 axes scored (composite floored to None)
+    weight_caption: str = ""           # e.g. "Weighted toward Growth & Stability, from your profile."
     axes: list[FitAxis]
     is_default_profile: bool
     disclaimer: str

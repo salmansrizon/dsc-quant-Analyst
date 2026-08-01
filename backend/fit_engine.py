@@ -1,7 +1,7 @@
 """The fit engine (#88, personalization spine #84): score a stock against an
 investor profile, explainably, as a pure function.
 
-Five axes — Value, Income, Growth, Risk, Sector — each normalized to a 0..100
+Five axes — Value, Income, Growth, Stability, Sector — each normalized to a 0..100
 *sector percentile* (a bank's P/E is only meaningful against other banks) and
 each emitting a mandatory human reason string. The investor profile sets the
 per-axis weights; the composite is their weighted mean over the axes that
@@ -26,12 +26,14 @@ DISCLAIMER = (
 # these by risk tolerance and horizon; the result is renormalized over whichever
 # axes end up scored.
 _BASE = {
-    "growth":       {"Value": .20, "Income": .15, "Growth": .30, "Risk": .15, "Sector": .20},
-    "income":       {"Value": .20, "Income": .35, "Growth": .10, "Risk": .15, "Sector": .20},
-    "preservation": {"Value": .20, "Income": .25, "Growth": .05, "Risk": .35, "Sector": .15},
+    "growth":       {"Value": .20, "Income": .15, "Growth": .30, "Stability": .15, "Sector": .20},
+    "income":       {"Value": .20, "Income": .35, "Growth": .10, "Stability": .15, "Sector": .20},
+    "preservation": {"Value": .20, "Income": .25, "Growth": .05, "Stability": .35, "Sector": .15},
 }
-# Risk tolerance scales how much the Risk (stability) axis counts: a cautious
-# investor weights stability heavily; a risk-seeker barely cares.
+# Risk tolerance scales how much the Stability axis counts: a cautious investor
+# weights stability heavily; a risk-seeker barely cares. (The axis is named
+# Stability — a single-stock price-dispersion proxy — not "Risk"; the profile's
+# `risk` tolerance is a separate thing that tilts this axis's weight.)
 _RISK_MULT = {"low": 1.6, "med": 1.0, "high": 0.5}
 # Horizon tilts Growth against Income: a long horizon can ride growth, a short
 # one leans on income now.
@@ -40,6 +42,13 @@ _HORIZON_MULT = {
     "medium": {"Growth": 1.0, "Income": 1.0},
     "long":   {"Growth": 1.3, "Income": 0.8},
 }
+
+# Below this many scored axes a composite is built on too little to mean
+# anything — it floors to None and the stock is not fit-scorable (kept out of
+# feed/recommendation ranking; the scorecard says so).
+_MIN_SCORED_AXES = 2
+
+_INSUFFICIENT_CAPTION = "Not enough data to fit-score this stock."
 
 
 def _percentile(value: float, peers: list[float], invert: bool) -> float:
@@ -118,7 +127,7 @@ def _weights(profile: InvestorProfile) -> dict:
     """The engine-owned weight table: base-by-goal, tilted by risk and horizon,
     normalized to sum 1 over all five axes (renormalized over scored axes later)."""
     w = dict(_BASE[profile.goal])
-    w["Risk"] *= _RISK_MULT[profile.risk]
+    w["Stability"] *= _RISK_MULT[profile.risk]
     for axis, mult in _HORIZON_MULT[profile.horizon].items():
         w[axis] *= mult
     total = sum(w.values())
@@ -141,7 +150,7 @@ def score(profile: InvestorProfile, symbol: str, subject: dict, cohort: dict,
         _metric_axis("Growth", "EPS growth", subject.get("growth"),
                      cohort.get("growth", []), invert=False, unit="%",
                      cohort_label=scope.get("growth", "sector")),
-        _metric_axis("Risk", "Volatility", subject.get("volatility"),
+        _metric_axis("Stability", "Volatility", subject.get("volatility"),
                      cohort.get("volatility", []), invert=True, unit="",
                      cohort_label=scope.get("volatility", "sector")),
         _sector_axis(subject.get("sector"), profile.sector_prefs),
@@ -153,10 +162,25 @@ def score(profile: InvestorProfile, symbol: str, subject: dict, cohort: dict,
     for a in axes:
         a.weight = round(weights[a.axis] / total_w, 4) if a.score is not None else 0.0
 
+    # Coverage floor: a composite off fewer than two axes is noise — drop it, so
+    # the stock never ranks in the feed on a single dimension.
+    scorable = len(scored) >= _MIN_SCORED_AXES
     composite = (round(sum(a.score * a.weight for a in scored), 1)
-                 if scored else None)
+                 if scorable else None)
 
     return FitScore(
-        symbol=symbol, composite=composite, axes=axes,
+        symbol=symbol, composite=composite, scorable=scorable,
+        weight_caption=_caption(scored, scorable), axes=axes,
         is_default_profile=profile.is_default, disclaimer=DISCLAIMER,
     )
+
+
+def _caption(scored: list, scorable: bool) -> str:
+    """The one sentence that surfaces the profile->weight tilt (the composite is
+    hidden per decision C), naming the two axes carrying the most weight. Below
+    the coverage floor it carries the not-enough-data note instead."""
+    if not scorable:
+        return _INSUFFICIENT_CAPTION
+    top = sorted(scored, key=lambda a: a.weight, reverse=True)[:2]
+    names = " & ".join(a.axis for a in top)
+    return f"Weighted toward {names}, from your profile."

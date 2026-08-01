@@ -128,31 +128,78 @@ def _arrays(peers: dict[str, dict]) -> dict[str, list[float]]:
     }
 
 
-def fit_for(user_id: str, symbol: str) -> dict:
-    """The scorecard for one stock against one user's profile."""
-    symbol = symbol.upper()
-    profile = get_profile(user_id)
-    sector = _sector_of(symbol)
-    peers = _peer_metrics(sector) if sector else {}
+def _cohort(peers: dict[str, dict], market: "_MarketCache") -> tuple[dict, dict]:
+    """Build the engine's cohort arrays + their scope labels from a sector's peers,
+    filling any thin metric (< MIN_COHORT) from the market-wide distribution
+    (decision: n < 5). `market` is a lazy, once-built market cohort shared across
+    every symbol in a batch."""
     sector_arrays = _arrays(peers)
-
-    # Fill thin metrics from the market-wide distribution (decision: n < 5).
     cohort: dict[str, list[float]] = {}
     scope: dict[str, str] = {}
-    market_peers = None
     for ck in _METRIC_KEYS:
         arr = sector_arrays.get(ck, [])
         if len(arr) < MIN_COHORT:
-            if market_peers is None:
-                market_peers = _peer_metrics(None)
-            marr = _arrays(market_peers).get(ck, [])
+            marr = _arrays(market.peers()).get(ck, [])
             if len(marr) > len(arr):
                 cohort[ck], scope[ck] = marr, "market"
                 continue
         cohort[ck], scope[ck] = arr, "sector"
+    return cohort, scope
 
-    subject = peers.get(symbol) or (market_peers or {}).get(symbol) or {
-        "sector": sector, "pe": None, "pb": None, "yield_": None,
-        "growth": None, "volatility": None,
-    }
-    return engine_score(profile, symbol, subject, cohort, scope).model_dump()
+
+class _MarketCache:
+    """Builds the market-wide peer set at most once per request, however many
+    sectors and symbols end up needing the n<5 fallback."""
+    def __init__(self):
+        self._peers: dict[str, dict] | None = None
+
+    def peers(self) -> dict[str, dict]:
+        if self._peers is None:
+            self._peers = _peer_metrics(None)
+        return self._peers
+
+
+def _null_subject(sector: str | None) -> dict:
+    # Keys derived from _METRIC_KEYS so a new metric is added in one place.
+    return {"sector": sector, **{sk: None for sk in _METRIC_KEYS.values()}}
+
+
+def fit_for(user_id: str, symbol: str) -> dict:
+    """The scorecard for one stock against one user's profile."""
+    return score_many(user_id, [symbol])[symbol.upper()]
+
+
+def score_many(user_id: str, symbols: list[str]) -> dict[str, dict]:
+    """Score many stocks against one profile — the seam #89 (feed) / #91
+    (portfolio) / #93 (recommendations) rank through. The sector cohort is built
+    ONCE per sector (not a per-symbol fan-out), and the market fallback at most
+    once for the whole batch. Returns {SYMBOL: FitScore-dict}."""
+    symbols = [s.upper() for s in symbols]
+    profile = get_profile(user_id)
+    market = _MarketCache()
+
+    sector_of: dict[str, str | None] = {}
+    peers_by_sector: dict[str | None, dict[str, dict]] = {}
+    cohort_by_sector: dict[str | None, tuple[dict, dict]] = {}
+    out: dict[str, dict] = {}
+    for symbol in symbols:
+        if symbol not in sector_of:
+            sector_of[symbol] = _sector_of(symbol)
+        sector = sector_of[symbol]
+        if sector not in peers_by_sector:
+            peers_by_sector[sector] = _peer_metrics(sector) if sector else {}
+            cohort_by_sector[sector] = _cohort(peers_by_sector[sector], market)
+        peers = peers_by_sector[sector]
+        cohort, scope = cohort_by_sector[sector]      # built once per sector, not per symbol
+        if symbol in peers:
+            subject = peers[symbol]
+        elif _uses_market(scope) and symbol in market.peers():
+            subject = market.peers()[symbol]        # thin sector: subject rode the fallback
+        else:
+            subject = _null_subject(sector)
+        out[symbol] = engine_score(profile, symbol, subject, cohort, scope).model_dump()
+    return out
+
+
+def _uses_market(scope: dict) -> bool:
+    return any(v == "market" for v in scope.values())

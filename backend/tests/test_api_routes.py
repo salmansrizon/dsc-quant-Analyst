@@ -195,7 +195,7 @@ def test_get_fit_scores_a_symbol_through_the_seam(authed, monkeypatch):
     assert resp.status_code == 200
     body = resp.json()
     assert body["symbol"] == "GP"
-    assert {a["axis"] for a in body["axes"]} == {"Value", "Income", "Growth", "Risk", "Sector"}
+    assert {a["axis"] for a in body["axes"]} == {"Value", "Income", "Growth", "Stability", "Sector"}
     assert body["disclaimer"]
 
 

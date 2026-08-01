@@ -56,10 +56,10 @@ def test_fit_for_scores_the_subject_against_its_cohort(wired):
     res = fit_service.fit_for("u1", "gp")
     assert res["symbol"] == "GP"
     axes = {a["axis"]: a for a in res["axes"]}
-    assert set(axes) == {"Value", "Income", "Growth", "Risk", "Sector"}
+    assert set(axes) == {"Value", "Income", "Growth", "Stability", "Sector"}
     # GP is the cheapest (P/E 10) and least volatile of the three -> scores well.
     assert axes["Value"]["score"] is not None
-    assert axes["Risk"]["score"] is not None
+    assert axes["Stability"]["score"] is not None
     assert res["composite"] is not None
     assert res["is_default_profile"] is True       # neutral profile used
     assert res["disclaimer"]
@@ -101,3 +101,31 @@ def test_unknown_symbol_returns_all_null_axes_not_a_crash(monkeypatch):
     res = fit_service.fit_for("u1", "NOSUCH")
     assert res["symbol"] == "NOSUCH"
     assert res["composite"] is None                # nothing scored, no crash
+
+
+def test_score_many_cohort_reads_are_independent_of_symbol_count(wired, monkeypatch):
+    # score_many is the seam #89/#91/#93 rank through: the sector cohort is built
+    # once per sector (+ at most one market fallback), NOT a per-symbol fan-out.
+    # So scoring three same-sector symbols costs the same reads as scoring one.
+    calls = {"n": 0}
+    orig = db.query_rows                          # the wired dispatch
+    def counting(sql, params=None):
+        if "price_archive" in sql:
+            calls["n"] += 1
+        return orig(sql, params)
+    monkeypatch.setattr(db, "query_rows", counting)
+
+    many = fit_service.score_many("u1", ["GP", "ROBI", "BATBC"])   # all Telecom
+    assert set(many) == {"GP", "ROBI", "BATBC"}
+    assert many["GP"]["symbol"] == "GP"
+    many_reads = calls["n"]
+
+    calls["n"] = 0
+    fit_service.score_many("u1", ["GP"])
+    assert many_reads == calls["n"]               # 3 symbols cost no more than 1
+
+def test_score_many_single_symbol_matches_fit_for(wired):
+    many = fit_service.score_many("u1", ["GP"])["GP"]
+    one = fit_service.fit_for("u1", "GP")
+    assert many["composite"] == one["composite"]
+    assert [a["axis"] for a in many["axes"]] == [a["axis"] for a in one["axes"]]

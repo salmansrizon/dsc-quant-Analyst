@@ -2,7 +2,7 @@
 Pydantic models for request/response schemas.
 """
 from pydantic import BaseModel, Field
-from typing import Optional
+from typing import Literal, Optional
 from datetime import datetime
 
 
@@ -136,6 +136,67 @@ class NotificationPreferences(BaseModel):
     email: Optional[str] = None
     web_push_subscription: Optional[str] = None
     channels_enabled: list[str] = []
+
+
+# ─── Investor profile (#85, personalization spine #84) ───────────────────────
+
+Goal = Literal["income", "growth", "preservation"]
+Risk = Literal["low", "med", "high"]
+Horizon = Literal["short", "medium", "long"]
+
+
+class InvestorProfile(BaseModel):
+    """The resolved, engine-ready profile the #88 fit engine + #93 recs consume.
+
+    Always non-null: an absent profile resolves to the neutral cold-start object
+    (is_default=True), so the engine never branches on None. sector_prefs is the
+    parsed rank-ordered list ([0] = top choice), never the stored JSON string.
+    """
+    goal: Goal
+    risk: Risk
+    horizon: Horizon
+    sector_prefs: list[str] = []
+    is_default: bool = False
+
+
+class ProfileUpdate(BaseModel):
+    """What the onboarding quiz / profile editor submits. Enums are validated by
+    Pydantic (422 on a bad value); sector_prefs is checked against the live
+    sector universe at the route (400)."""
+    goal: Goal
+    risk: Risk
+    horizon: Horizon
+    sector_prefs: list[str] = []
+
+
+# ─── Fit engine (#88, personalization spine #84) ─────────────────────────────
+
+class FitAxis(BaseModel):
+    """One explainable dimension of the fit scorecard. `score` is null when the
+    metric is missing or meaningless (e.g. negative-equity ROE) — a null axis is
+    dropped from the composite, never scored 0 (which would fake-penalize)."""
+    axis: str
+    score: Optional[float] = None      # 0..100, higher = better on this dimension
+    reason: str                        # mandatory human sentence
+    weight: float                      # this axis's share of the composite
+
+
+class FitScore(BaseModel):
+    """A stock scored against an investor profile (#88). Framing is always
+    'matches your preferences', never advice — the disclaimer rides here.
+
+    `composite` is computed for downstream ranking (feed #89 / recs #91 / nudges
+    #93) but is NOT a user-facing headline — the frontend renders axes + reasons
+    only (decision C). `scorable` is False below the 2-axis coverage floor, when
+    `composite` is None and the scorecard should say so. `weight_caption` is the
+    only place the profile->weight tilt surfaces, since the composite is hidden."""
+    symbol: str
+    composite: Optional[float] = None  # weighted mean over scored axes, 0..100 — internal-only
+    scorable: bool = True              # False when <2 axes scored (composite floored to None)
+    weight_caption: str = ""           # e.g. "Weighted toward Growth & Stability, from your profile."
+    axes: list[FitAxis]
+    is_default_profile: bool
+    disclaimer: str
 
 
 # ─── Screener (#71) ───────────────────────────────────────────────────────────

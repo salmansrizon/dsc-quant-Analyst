@@ -15,6 +15,7 @@ from .models import (
     WatchlistAdd, PortfolioAdd, PortfolioUpdate, AlertCreate,
     ScreenerRequest, ScreenerResponse, ScreenerWatchlistAdd,
     SubscriptionCreate, BundleCreate, NotificationPreferences,
+    InvestorProfile, ProfileUpdate, FitScore,
 )
 from .user_service import (
     create_user, get_user_by_email, get_user_credentials,
@@ -27,6 +28,8 @@ from . import fundamentals_service
 from . import screener_service
 from . import subscriptions_service
 from . import notification_prefs_service
+from . import profile_service
+from . import fit_service
 
 FRONTEND_URL = os.environ.get("FRONTEND_URL", "http://localhost:5173")
 
@@ -300,6 +303,37 @@ def watchlist_add(payload: WatchlistAdd, current_user: UserResponse = Depends(ge
 def watchlist_remove(symbol: str, current_user: UserResponse = Depends(get_current_user)):
     watchlist_service.remove_from_watchlist(current_user.id, symbol.upper())
     return {"status": "removed"}
+
+
+# ── Investor profile (#85, personalization spine #84) ────────────────────────
+
+@app.get("/api/profile/me", response_model=InvestorProfile)
+def profile_me(current_user: UserResponse = Depends(get_current_user)):
+    # Never 404s: an unset profile resolves to the neutral default (is_default),
+    # which is what the onboarding nudge keys on.
+    return profile_service.get_profile(current_user.id)
+
+
+@app.put("/api/profile/me", response_model=InvestorProfile)
+def profile_update(payload: ProfileUpdate, current_user: UserResponse = Depends(get_current_user)):
+    # Enums are validated by Pydantic (422). Sectors are validated here against
+    # the live universe so a typo can't silently store an un-scoreable preference.
+    valid = set(profile_service.list_sector_names())
+    unknown = [s for s in payload.sector_prefs if s not in valid]
+    if unknown:
+        raise HTTPException(status_code=400, detail=f"Unknown sectors: {', '.join(unknown)}")
+    return profile_service.save_profile(current_user.id, payload.model_dump())
+
+
+@app.get("/api/profile/sectors")
+def profile_sectors(current_user: UserResponse = Depends(get_current_user)):
+    return profile_service.list_sector_names()
+
+
+@app.get("/api/fit/{symbol}", response_model=FitScore)
+def fit_score(symbol: str, current_user: UserResponse = Depends(get_current_user)):
+    # Explainable per-axis fit of a stock against the caller's profile (#88).
+    return fit_service.fit_for(current_user.id, symbol)
 
 
 # ── Portfolio ────────────────────────────────────────────────────────────────

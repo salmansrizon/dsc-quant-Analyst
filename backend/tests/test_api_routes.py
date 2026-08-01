@@ -121,3 +121,83 @@ def test_bootstrap_admin_promotes_with_the_right_secret(monkeypatch):
                                 json={"email": "x@y.com", "secret": "real"})
     assert resp.status_code == 200
     assert promoted == {"role": "admin"}
+
+
+# ── Investor profile (#85, spine #84) ────────────────────────────────────────
+
+def test_get_profile_me_returns_neutral_default_when_unset(authed, monkeypatch):
+    monkeypatch.setattr(db, "_client", FakeClient(result_rows=[]))
+    resp = authed.get("/api/profile/me")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["is_default"] is True
+    assert (body["goal"], body["risk"], body["horizon"]) == ("growth", "med", "medium")
+
+
+def test_put_profile_me_saves_and_returns_resolved(authed, monkeypatch):
+    from backend import profile_service
+    monkeypatch.setattr(profile_service, "list_sector_names", lambda: ["Bank", "Pharma"])
+    monkeypatch.setattr(db, "append_version", AppendLog())
+    # get_profile readback after save:
+    monkeypatch.setattr(db, "_client", FakeClient(result_rows=fake_rows(
+        {"id": "u1", "user_id": "u1", "goal": "income", "risk": "low",
+         "horizon": "long", "sector_prefs": '["Bank"]', "is_default": False})))
+    resp = authed.put("/api/profile/me", json={
+        "goal": "income", "risk": "low", "horizon": "long", "sector_prefs": ["Bank"]})
+    assert resp.status_code == 200
+    assert resp.json()["sector_prefs"] == ["Bank"]
+    assert resp.json()["is_default"] is False
+
+
+def test_put_profile_me_rejects_unknown_sector(authed, monkeypatch):
+    from backend import profile_service
+    monkeypatch.setattr(profile_service, "list_sector_names", lambda: ["Bank"])
+    resp = authed.put("/api/profile/me", json={
+        "goal": "growth", "risk": "med", "horizon": "medium", "sector_prefs": ["Nope"]})
+    assert resp.status_code == 400
+
+
+def test_put_profile_me_rejects_bad_enum(authed):
+    resp = authed.put("/api/profile/me", json={
+        "goal": "gambling", "risk": "med", "horizon": "medium", "sector_prefs": []})
+    assert resp.status_code == 422
+
+
+def test_profile_routes_require_auth():
+    client = TestClient(app)
+    assert client.get("/api/profile/me").status_code in (401, 403)
+
+
+# ── Fit engine (#88, spine #84) ──────────────────────────────────────────────
+
+def test_get_fit_scores_a_symbol_through_the_seam(authed, monkeypatch):
+    def dispatch(sql, params=None):
+        if "investor_profiles" in sql:
+            return []                              # neutral default profile
+        if "SELECT Sector FROM" in sql:
+            return [{"Sector": "Telecom"}]
+        if "Symbol, Sector, LTP" in sql:
+            return [{"Symbol": "GP", "Sector": "Telecom", "LTP": 300.0},
+                    {"Symbol": "ROBI", "Sector": "Telecom", "LTP": 30.0}]
+        if "price_archive" in sql:
+            return [{"Symbol": "GP", "pe": 10.0, "vol": 0.05, "bars": 30},
+                    {"Symbol": "ROBI", "pe": 20.0, "vol": 0.2, "bars": 30}]
+        if "fundamentals_earnings" in sql:
+            return [{"symbol": "GP", "year": 2018, "eps": 5.0, "nav": 40.0},
+                    {"symbol": "GP", "year": 2024, "eps": 12.0, "nav": 60.0}]
+        if "fundamentals_dividends" in sql:
+            return [{"symbol": "GP", "year": 2024, "dividend_type": "ANNUAL",
+                     "cash_dividend_pct": 200.0, "publish_date": "2024-06-01"}]
+        return []
+    monkeypatch.setattr(db, "query_rows", dispatch)
+
+    resp = authed.get("/api/fit/gp")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["symbol"] == "GP"
+    assert {a["axis"] for a in body["axes"]} == {"Value", "Income", "Growth", "Stability", "Sector"}
+    assert body["disclaimer"]
+
+
+def test_fit_route_requires_auth():
+    assert TestClient(app).get("/api/fit/GP").status_code in (401, 403)

@@ -15,7 +15,7 @@ import time
 from dataclasses import dataclass, field, asdict
 from pathlib import Path
 
-from gates import run_gates
+from gates import current_head, run_gates
 from skill_runner import SkillUnavailable, run_skill
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -70,6 +70,9 @@ def run_phase(state: LoopState) -> tuple[bool, str]:
     """Run every skill for the phase, then its gates. Returns (passed, report)."""
     prompt = state.context or state.task
     transcript = []
+    # Pin the starting commit so the diff gate still sees work a skill commits
+    # itself, not just what it leaves uncommitted.
+    baseline = current_head()
 
     for skill in PHASE_SKILLS[state.phase]:
         try:
@@ -81,7 +84,7 @@ def run_phase(state: LoopState) -> tuple[bool, str]:
             return False, "\n".join(transcript)
         prompt = result.output
 
-    passed, gate_results = run_gates(state.phase)
+    passed, gate_results = run_gates(state.phase, baseline)
     for gate in gate_results:
         status = "SKIP" if gate.skipped else ("PASS" if gate.passed else "FAIL")
         transcript.append(f"[gate:{gate.name}] {status}\n{gate.detail}")

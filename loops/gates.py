@@ -57,28 +57,55 @@ def lint() -> GateResult:
     return GateResult("lint", code == 0, False, out)
 
 
-def working_tree_has_changes() -> GateResult:
-    code, out = _run(["git", "status", "--porcelain"])
-    changed = bool(out.strip())
-    detail = out if changed else "no files changed"
-    return GateResult("diff-present", changed, False, detail)
+def diff_present(baseline: str | None = None) -> GateResult:
+    """Did this phase actually change anything?
+
+    Work may be left uncommitted *or* committed by the skill itself, so both
+    count. Checking only the working tree reports a false failure the moment a
+    skill commits — and, worse, a false pass when it leaves stray scratch files
+    behind.
+    """
+    _, dirty = _run(["git", "status", "--porcelain"])
+    detail = dirty
+    changed = bool(dirty.strip())
+
+    if baseline:
+        code, committed = _run(["git", "diff", "--stat", f"{baseline}..HEAD"])
+        if code == 0 and committed.strip():
+            changed = True
+            detail = f"{detail}\ncommitted since {baseline[:8]}:\n{committed}".strip()
+
+    return GateResult("diff-present", changed, False, detail or "no files changed")
 
 
 PHASE_GATES = {
     "planning": [],
     "spec": [],
-    "implement": [working_tree_has_changes, backend_tests, frontend_tests, lint],
+    "implement": [diff_present, backend_tests, frontend_tests, lint],
     "review": [backend_tests, frontend_tests],
     "maintain": [],
 }
 
+# Gates needing the phase's starting commit to judge "did anything change".
+_BASELINE_GATES = {diff_present}
 
-def run_gates(phase: str) -> tuple[bool, list[GateResult]]:
+
+def run_gates(phase: str, baseline: str | None = None) -> tuple[bool, list[GateResult]]:
     """A phase passes only if every non-skipped gate passes.
 
     A skipped gate never counts as a pass — it blocks, so a missing toolchain
     surfaces as an escalation instead of silently green-lighting the phase.
+
+    `baseline` is the commit HEAD pointed at when the phase started.
     """
-    results = [gate() for gate in PHASE_GATES.get(phase, [])]
+    results = [
+        gate(baseline) if gate in _BASELINE_GATES else gate()
+        for gate in PHASE_GATES.get(phase, [])
+    ]
     passed = all(r.passed for r in results)
     return passed, results
+
+
+def current_head() -> str | None:
+    code, out = _run(["git", "rev-parse", "HEAD"])
+    return out.strip() if code == 0 else None

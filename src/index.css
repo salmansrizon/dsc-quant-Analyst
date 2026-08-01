@@ -1,3 +1,13 @@
+/* Tailwind v4 (#108): utilities + theme only — NOT preflight. The existing
+   base styles below (unlayered custom classes .card/.border/.btn-*, CSS-variable
+   dark mode) stay the base layer; unlayered CSS wins the cascade over Tailwind's
+   layered utilities, so the 18 pre-classed files' utilities light up additively
+   without the reset clobbering existing styling. #87 revisits preflight when it
+   defines the design language. */
+@layer theme, base, components, utilities;
+@import 'tailwindcss/theme.css' layer(theme);
+@import 'tailwindcss/utilities.css' layer(utilities);
+
 :root {
   --bg-primary: #f7f7f7;
   --bg-secondary: #ffffff;

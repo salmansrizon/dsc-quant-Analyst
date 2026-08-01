@@ -4,7 +4,7 @@
    exist ahead of any consumer (#97/#98) — Tailwind v4 otherwise tree-shakes
    utilities that aren't yet referenced in scanned source. */
 @source inline(
-  "text-gain text-loss text-neutral bg-gain bg-loss bg-elevated-1 bg-elevated-2 border-border-subtle border-border-strong"
+  "text-gain text-loss text-neutral bg-gain bg-loss bg-elevated-1 bg-elevated-2 border-border-subtle border-border-strong p-xs p-sm p-md p-lg p-xl gap-xs gap-sm gap-md gap-lg gap-xl rounded-1 rounded-2 rounded-3 rounded-4 rounded-pill text-micro text-data text-data-lg text-heading font-data"
 );
 
 @theme {
@@ -15,6 +15,53 @@
   --color-elevated-2: var(--elevated-2);
   --color-border-subtle: var(--border-subtle);
   --color-border-strong: var(--border-strong);
+
+  /* Motion (#87): a short/base/slow duration scale and a small set of
+     easing curves for a dense financial UI. Theme-independent (not
+     duplicated per data-theme) — see docs/design-language.md. */
+  --duration-short: 100ms;
+  --duration-base: 180ms;
+  --duration-slow: 320ms;
+
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+  --ease-decisive: cubic-bezier(0.32, 0, 0.67, 0);
+  --ease-linear: linear;
+
+  /* Spacing scale (#87): tee-shirt tiers, tighter than a general-purpose
+     app to suit dense tables/grids. Additive alongside the numeric p-1/p-2/
+     gap-1.../etc. utilities, which read off Tailwind's own bare --spacing
+     multiplier and are untouched here. */
+  --spacing-xs: 0.25rem;
+  --spacing-sm: 0.5rem;
+  --spacing-md: 0.75rem;
+  --spacing-lg: 1rem;
+  --spacing-xl: 1.5rem;
+
+  /* Radius scale (#87): numbered (not xs/sm/md/lg/xl) to avoid overriding
+     Tailwind's own default --radius-* scale, which rounded-sm/rounded-md
+     already read from elsewhere in the app. */
+  --radius-1: 0.125rem;
+  --radius-2: 0.25rem;
+  --radius-3: 0.5rem;
+  --radius-4: 0.75rem;
+  --radius-pill: 999px;
+
+  /* Typography scale (#87): named by role, not tee-shirt size, since
+     Tailwind's default --text-* namespace already reserves xs/sm/base/lg/
+     xl/2xl/3xl (relied on elsewhere in the app via rounded text-xs etc.). */
+  --text-micro: 0.6875rem;
+  --text-micro--line-height: 1rem;
+  --text-data: 0.8125rem;
+  --text-data--line-height: 1.25rem;
+  --text-data-lg: 0.9375rem;
+  --text-data-lg--line-height: 1.375rem;
+  --text-heading: 1.375rem;
+  --text-heading--line-height: 1.75rem;
+
+  /* Tabular-figures font stack for numeric/price data, additive alongside
+     Tailwind's default --font-sans/--font-serif/--font-mono. */
+  --font-data: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono',
+    monospace;
 }
 
 :root {
@@ -145,6 +192,31 @@ body {
 
 .hover-lift:hover {
   transform: translateY(-2px);
+}
+
+/* Token-driven transition utilities (#87), built on the motion scale above.
+   Governed by the single prefers-reduced-motion guard near the responsive
+   rules — no per-class opt-out needed. */
+.transition-fast {
+  transition-duration: var(--duration-short);
+  transition-timing-function: var(--ease-standard);
+}
+
+.transition-base {
+  transition-duration: var(--duration-base);
+  transition-timing-function: var(--ease-standard);
+}
+
+.transition-slow {
+  transition-duration: var(--duration-slow);
+  transition-timing-function: var(--ease-standard);
+}
+
+/* Micro-interaction for a data value that just updated (e.g. a price tick). */
+.value-flash {
+  transition-property: background-color, color;
+  transition-duration: var(--duration-short);
+  transition-timing-function: var(--ease-decisive);
 }
 
 .btn-primary {

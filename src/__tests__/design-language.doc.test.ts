@@ -30,4 +30,27 @@ describe('docs/design-language.md', () => {
       expect(doc).toContain(token);
     }
   });
+
+  it('documents the motion, spacing/radius, and typography token layers', () => {
+    const doc = fs.readFileSync(DOC_PATH, 'utf8');
+    const structuralTokens = [
+      '--duration-short',
+      '--duration-base',
+      '--duration-slow',
+      '--ease-standard',
+      '--ease-decisive',
+      '--ease-linear',
+      '--spacing-xs',
+      '--spacing-xl',
+      '--radius-1',
+      '--radius-pill',
+      '--text-micro',
+      '--text-data',
+      '--text-heading',
+      '--font-data',
+    ];
+    for (const token of structuralTokens) {
+      expect(doc).toContain(token);
+    }
+  });
 });

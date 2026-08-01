@@ -280,6 +280,30 @@ class Recommendations(BaseModel):
     disclaimer: str
 
 
+# ─── Personalized home feed (#96, spine #84) ─────────────────────────────────
+
+class FeedItem(BaseModel):
+    """One card on the 'for you' home feed. `kind` orders it (nudge > rec >
+    watchlist_move > alert); `reason` frames it 'matches your interests', never
+    advice."""
+    kind: str              # nudge|recommendation|watchlist_move|alert
+    headline: str
+    reason: str
+    symbol: Optional[str] = None
+    symbols: list[str] = []
+    sources: list[str] = []
+
+
+class Feed(BaseModel):
+    """The composed 'for you' surface (#96): #93's recs/nudges plus non-personalized
+    context (watchlist moves, alerts), ordered + paginated. Behaviour reason strings
+    (#86/#107) enrich rec items once the affinity formula lands."""
+    items: list[FeedItem]
+    next_offset: Optional[int] = None
+    is_default_profile: bool
+    disclaimer: str
+
+
 # ─── Screener (#71) ───────────────────────────────────────────────────────────
 
 class ScreenerFilter(BaseModel):

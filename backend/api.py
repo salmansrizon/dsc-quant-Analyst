@@ -16,7 +16,7 @@ from .models import (
     ScreenerRequest, ScreenerResponse, ScreenerWatchlistAdd,
     SubscriptionCreate, BundleCreate, NotificationPreferences,
     InvestorProfile, ProfileUpdate, FitScore, PortfolioHealth, Recommendations,
-    BehaviourBatch,
+    BehaviourBatch, Feed,
 )
 from .user_service import (
     create_user, get_user_by_email, get_user_credentials,
@@ -34,6 +34,7 @@ from . import fit_service
 from . import portfolio_fit_service
 from . import recommendation_service
 from . import behaviour_service
+from . import feed_service
 
 FRONTEND_URL = os.environ.get("FRONTEND_URL", "http://localhost:5173")
 
@@ -347,6 +348,13 @@ def fit_score(symbol: str, current_user: UserResponse = Depends(get_current_user
 def recommendations(current_user: UserResponse = Depends(get_current_user)):
     # Personalized 'for you' recs + strategy nudges — matches preferences, not advice (#93).
     return recommendation_service.recommend(current_user.id)
+
+
+@app.get("/api/feed", response_model=Feed)
+def home_feed(limit: int = 20, offset: int = 0,
+              current_user: UserResponse = Depends(get_current_user)):
+    # Composed 'for you' home feed: recs/nudges + watchlist moves + alerts (#96).
+    return feed_service.feed(current_user.id, limit=limit, offset=offset)
 
 
 @app.post("/api/behaviour", status_code=202)

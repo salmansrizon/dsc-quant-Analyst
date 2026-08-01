@@ -225,6 +225,39 @@ class PortfolioHealth(BaseModel):
     disclaimer: str
 
 
+# ─── Recommendations + strategy nudges (#93, spine #84) ──────────────────────
+
+class Recommendation(BaseModel):
+    """A 'for you' stock suggestion. `match` is a qualitative tier (no composite
+    digits, #88 decision C); `reason` carries the dominant fit axis + why it
+    surfaced, framed 'matches your preferences', never 'buy'. `sources` names the
+    generators that surfaced it (fit|behaviour|gap)."""
+    symbol: str
+    sector: Optional[str] = None
+    match: str             # strong|good
+    reason: str
+    sources: list[str]
+
+
+class StrategyNudge(BaseModel):
+    """An actionable nudge over the portfolio findings (#91). Additive-only —
+    names stocks that would ADDRESS a finding, never a stock to sell — and stated
+    in the conditional/consequence frame ('adding X would reduce Y'), never an
+    imperative."""
+    kind: str              # concentration|goal_fit|mix|unmet_prefs|set_profile
+    headline: str
+    reason: str
+    symbols: list[str]     # additive candidates that address it
+
+
+class Recommendations(BaseModel):
+    """The personalized rec/nudge stream (#93) the feed (#96) composes from."""
+    recs: list[Recommendation]
+    nudges: list[StrategyNudge]
+    is_default_profile: bool
+    disclaimer: str
+
+
 # ─── Screener (#71) ───────────────────────────────────────────────────────────
 
 class ScreenerFilter(BaseModel):

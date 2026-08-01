@@ -31,10 +31,22 @@ def frontend_tests() -> GateResult:
     return GateResult("frontend-tests", code == 0, False, out)
 
 
+def _python() -> str | None:
+    """Prefer the project venv — a bare `pytest` on PATH usually lacks the
+    project's dependencies and fails at conftest import."""
+    venv_python = REPO_ROOT / ".venv" / "bin" / "python"
+    if venv_python.is_file():
+        return str(venv_python)
+    return shutil.which("python3")
+
+
 def backend_tests() -> GateResult:
-    if shutil.which("pytest") is None:
-        return GateResult("backend-tests", False, True, "pytest not installed")
-    code, out = _run(["pytest", "-m", "not integration", "-q"])
+    python = _python()
+    if python is None:
+        return GateResult("backend-tests", False, True, "no python interpreter found")
+    code, out = _run([python, "-m", "pytest", "-m", "not integration", "-q"])
+    if code == 5:
+        return GateResult("backend-tests", False, True, "pytest not installed in venv")
     return GateResult("backend-tests", code == 0, False, out)
 
 

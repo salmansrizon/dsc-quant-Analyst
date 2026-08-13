@@ -39,11 +39,37 @@ from . import feed_service
 
 FRONTEND_URL = os.environ.get("FRONTEND_URL", "http://localhost:5173")
 
+
+def _allowed_origins() -> list[str]:
+    """Explicit CORS allowlist (never `*` with credentials).
+
+    The app and this API are served same-origin on Vercel (the frontend and the
+    `/api` rewrite share one domain), so same-origin requests never hit CORS.
+    The allowlist only covers genuine cross-origin callers: the deployed site
+    (FRONTEND_URL / PORTAL_URL). Local dev servers are added only off-platform
+    (no `VERCEL` env) so production never trusts localhost.
+
+    `allow_origins=["*"]` with `allow_credentials=True` is both a security smell
+    and spec-invalid — browsers refuse to send credentials to a wildcard origin.
+
+    Both URLs are read from the env here (not the module-level FRONTEND_URL
+    constant) so origin config has a single source of truth, and every entry is
+    trailing-slash-normalized so set membership is reliable.
+    """
+    origins = {
+        os.environ.get("FRONTEND_URL", "").rstrip("/"),
+        os.environ.get("PORTAL_URL", "").rstrip("/"),
+    }
+    if not os.environ.get("VERCEL"):
+        origins |= {"http://localhost:5173", "http://localhost:3000"}
+    return sorted(o for o in origins if o)
+
+
 app = FastAPI(title="DSC Quant Analyst API", version="1.0.0")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=_allowed_origins(),
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

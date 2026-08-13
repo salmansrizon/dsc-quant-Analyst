@@ -361,3 +361,27 @@ def test_watchlist_add_emits_a_behaviour_event(authed, monkeypatch):
 
 def test_behaviour_route_requires_auth():
     assert TestClient(app).post("/api/behaviour", json={"events": []}).status_code in (401, 403)
+
+
+def test_cors_allowlist_excludes_wildcard(monkeypatch):
+    """CORS origins are an explicit allowlist, never `*` (public-launch #112)."""
+    import backend.api as api
+    monkeypatch.delenv("VERCEL", raising=False)  # off-platform: dev origins allowed
+    monkeypatch.setenv("FRONTEND_URL", "https://app.example.com/")
+    monkeypatch.setenv("PORTAL_URL", "https://app.example.com")
+    origins = api._allowed_origins()
+    assert "*" not in origins
+    assert "https://app.example.com" in origins
+    assert "http://localhost:5173" in origins
+    # FRONTEND_URL trailing slash normalized, deduped against PORTAL_URL
+    assert origins.count("https://app.example.com") == 1
+
+
+def test_cors_allowlist_drops_localhost_on_vercel(monkeypatch):
+    """Production (VERCEL set) never trusts localhost dev origins (#112)."""
+    import backend.api as api
+    monkeypatch.setenv("VERCEL", "1")
+    monkeypatch.setenv("FRONTEND_URL", "https://app.example.com")
+    monkeypatch.setenv("PORTAL_URL", "")
+    origins = api._allowed_origins()
+    assert origins == ["https://app.example.com"]

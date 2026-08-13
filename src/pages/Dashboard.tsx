@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import type { AxiosInstance } from 'axios';
 import { Link } from 'react-router-dom';
+import HomeFeed from '../components/HomeFeed/HomeFeed';
 import MarketSummary from '../components/MarketSummary/DashboardSummary';
 import PriceChange from '../components/PriceChange/PriceChange';
 import { errorMessage } from '../api/errorMessage';
@@ -107,6 +108,11 @@ export default function Dashboard({ client }: DashboardProps) {
     <div data-testid="dashboard-container" className="min-h-96 space-y-6">
       <h1 className="text-2xl font-bold">Market Dashboard</h1>
       {error && <p className="text-red-500 text-sm">{error}</p>}
+
+      {/* #96: the personalized 'for you' surface leads the Dashboard — same
+          precedence as Stock Detail's Fit zone (#90). No-ops (renders null)
+          for a logged-out visitor. */}
+      <HomeFeed client={client} />
 
       <div className="grid md:grid-cols-2 gap-6">
         <MarketSummary client={client} />

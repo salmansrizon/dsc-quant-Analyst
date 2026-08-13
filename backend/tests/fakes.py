@@ -1,11 +1,14 @@
-"""Shared BigQuery fakes for the offline tests.
+"""Shared test doubles for the offline tests.
 
-Stub `db._client` with one of these and every service module goes through it —
-reads via db.query_rows, writes via db.execute_dml/insert_rows (tickets #40/#46).
+Mostly BigQuery fakes — stub `db._client` with one of these and every service
+module goes through it, reads via db.query_rows, writes via
+db.execute_dml/insert_rows (tickets #40/#46). Rows are real `bigquery.Row`
+objects, not dicts: that is what the client library actually yields, and it is
+the only reason db.query_rows' `dict(r)` conversion exists. Fakes that hand
+back dicts make that conversion untested.
 
-Rows are real `bigquery.Row` objects, not dicts: that is what the client library
-actually yields, and it is the only reason db.query_rows' `dict(r)` conversion
-exists. Fakes that hand back dicts make that conversion untested.
+`FakeResponse` (#94) is the one non-BigQuery fake here — a `requests.Response`
+stand-in for the outbound HTTP senders (email/Telegram/WhatsApp).
 """
 from google.cloud import bigquery
 
@@ -59,6 +62,15 @@ class AppendLog:
 
     def __call__(self, table, rows):
         self.appends.append({"table": table, "rows": [dict(r) for r in rows]})
+
+
+class FakeResponse:
+    """A `requests.Response` stand-in for the notification-channel senders
+    (#94) — just the two attributes email_sender.py / channels.py read."""
+
+    def __init__(self, status_code, text=""):
+        self.status_code = status_code
+        self.text = text
 
 
 class VersionStore:

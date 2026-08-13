@@ -1,6 +1,32 @@
+"""Provider adapters for the non-email notification channels (#94).
+
+`alert_checker.build_notifier` is the one caller — each function here mirrors
+`email_sender.send_email`'s contract (bool: did the provider accept it) and its
+missing-config behavior (return False rather than raise, so an unconfigured
+channel just doesn't deliver instead of crashing the fan-out). A raised
+exception is still possible (a network error from `requests.post` isn't caught
+here) but that's fine: `alert_checker._deliver` already wraps the whole
+notifier call in a try/except, same safety net `email_sender` relies on.
+
+Providers chosen (#94 decision record):
+- **Telegram**: the Bot API directly (`api.telegram.org`), no wrapper library.
+  Needs `TELEGRAM_BOT_TOKEN` + the recipient's numeric `chat_id` (the user's
+  `telegram_chat_id` notification pref, #78) — the user must have messaged the
+  bot at least once for a chat_id to exist, same one-time step as this repo's
+  own SDLC control channel (`docs/SDLC_LOOP.md`).
+- **WhatsApp**: the Meta Cloud API (`graph.facebook.com`), not Twilio — no
+  third-party billing relationship beyond a Meta Business/WhatsApp Business
+  Platform account. Needs `WHATSAPP_API_TOKEN` (a permanent system-user access
+  token, not a 24h test token) + `WHATSAPP_PHONE_NUMBER_ID` (the sending
+  number's platform id, not the phone number itself) + the recipient's
+  `whatsapp_number` pref.
+"""
+import logging
 import os
 import json
 import requests
+
+logger = logging.getLogger(__name__)
 
 TELEGRAM_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "")
 WHATSAPP_TOKEN = os.environ.get("WHATSAPP_API_TOKEN", "")
@@ -12,7 +38,11 @@ def send_telegram(chat_id: str, message: str) -> bool:
         return False
     url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
     resp = requests.post(url, json={"chat_id": chat_id, "text": message}, timeout=10)
-    return resp.status_code == 200
+    if resp.status_code != 200:
+        logger.error("Telegram rejected a send to chat %s: %s %s",
+                     chat_id, resp.status_code, resp.text[:200])
+        return False
+    return True
 
 
 def send_whatsapp(phone_number: str, message: str) -> bool:
@@ -31,7 +61,11 @@ def send_whatsapp(phone_number: str, message: str) -> bool:
         json=payload,
         timeout=10,
     )
-    return resp.status_code == 200
+    if resp.status_code != 200:
+        logger.error("WhatsApp rejected a send to %s: %s %s",
+                     phone_number, resp.status_code, resp.text[:200])
+        return False
+    return True
 
 
 def send_web_push(subscription_json: str, payload: dict) -> bool:

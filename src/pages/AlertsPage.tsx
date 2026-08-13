@@ -3,6 +3,8 @@ import type { AxiosInstance } from 'axios';
 import { AlertCircle, Bell, CheckCircle, XCircle } from 'lucide-react';
 import { errorMessage } from '../api/errorMessage';
 import SymbolSearch from '../components/SymbolSearch/SymbolSearch';
+import { Card } from '../components/ui/Card';
+import { VARIANT_COLOR_VAR } from '../components/ui/Badge';
 
 interface Alert {
   id: string;
@@ -61,17 +63,20 @@ export default function AlertsPage({ client }: { client: AxiosInstance }) {
     }
   };
 
-  if (loading) return <div className="text-center py-8">Loading alerts...</div>;
+  if (loading) {
+    return <div className="py-8 text-center text-[var(--text-secondary)]">Loading alerts...</div>;
+  }
 
   return (
-    <div className="p-6 space-y-6 max-w-4xl mx-auto">
-      <h1 className="text-2xl font-bold flex items-center gap-2">
+    <div className="mx-auto max-w-4xl space-y-6 p-6">
+      <h1 className="flex items-center gap-2 text-2xl font-bold text-[var(--text-primary)]">
         <Bell size={24} /> Your Alerts
       </h1>
-      {formError && <p className="text-red-500 text-sm">{formError}</p>}
+      {formError && <p className="text-sm" style={{ color: VARIANT_COLOR_VAR.negative }}>{formError}</p>}
 
-        {/* New Alert Form */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 p-4 border rounded-lg bg-gray-50">
+      {/* New Alert Form */}
+      <Card revealIndex={0}>
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
           <SymbolSearch
             client={client}
             value={newAlert.symbol}
@@ -90,67 +95,72 @@ export default function AlertsPage({ client }: { client: AxiosInstance }) {
             placeholder="Target Price"
             value={newAlert.target_price || ''}
             onChange={e => setNewAlert({ ...newAlert, target_price: Number(e.target.value) })}
-            className="border p-2 rounded"
+            className="rounded border border-[var(--border-color)] bg-[var(--bg-primary)] p-2 text-[var(--text-primary)]"
           />
           <select
             value={newAlert.direction}
             onChange={e => setNewAlert({ ...newAlert, direction: e.target.value as 'above' | 'below' })}
-            className="border p-2 rounded"
+            className="rounded border border-[var(--border-color)] bg-[var(--bg-primary)] p-2 text-[var(--text-primary)]"
           >
             <option value="above">Above</option>
             <option value="below">Below</option>
           </select>
-          <button
-            onClick={handleCreate}
-            className="col-span-3 bg-blue-600 text-white py-2 rounded hover:bg-blue-700"
-          >
+          <button onClick={handleCreate} className="btn-primary col-span-3 justify-center">
             Add Alert
           </button>
         </div>
+      </Card>
 
-        {/* Alerts List */}
-        {alerts.length === 0 ? (
-          <p className="text-gray-500">No alerts set.</p>
-        ) : (
-          <table className="w-full divide-y divide-gray-200">
-            <thead>
-              <tr>
-                <th className="px-4 py-2 text-left">Symbol</th>
-                <th className="px-4 py-2 text-left">Target</th>
-                <th className="px-4 py-2 text-left">Direction</th>
-                <th className="px-4 py-2 text-left">Status</th>
-                <th className="px-4 py-2 text-left">Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {alerts.map(alert => (
-                <tr key={alert.id} className="hover:bg-gray-100">
-                  <td className="px-4 py-2">{alert.symbol}</td>
-                  <td className="px-4 py-2">${alert.target_price.toFixed(2)}</td>
-                  <td className="px-4 py-2 capitalize">{alert.direction}</td>
-                  <td className="px-4 py-2">
-                    {alert.is_triggered ? (
-                      <span className="flex items-center text-green-600">
-                        <CheckCircle size={16} /> Triggered
-                      </span>
-                    ) : (
-                      <span className="flex items-center text-yellow-600">
-                        <AlertCircle size={16} /> Pending
-                      </span>
-                    )}
-                  </td>
-                  <td className="px-4 py-2">
-                    <button
-                      onClick={() => handleDelete(alert.id)}
-                      className="text-red-600 hover:underline"
-                    >
-                      <XCircle size={16} /> Delete
-                    </button>
-                  </td>
+      {/* Alerts List */}
+      {alerts.length === 0 ? (
+        <p className="text-[var(--text-secondary)]">No alerts set.</p>
+      ) : (
+        <Card revealIndex={1}>
+          <div className="overflow-x-auto">
+            <table className="w-full divide-y divide-[var(--border-color)] text-sm">
+              <thead>
+                <tr className="text-left text-[var(--text-secondary)]">
+                  <th className="px-4 py-2">Symbol</th>
+                  <th className="px-4 py-2">Target</th>
+                  <th className="px-4 py-2">Direction</th>
+                  <th className="px-4 py-2">Status</th>
+                  <th className="px-4 py-2">Actions</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody className="divide-y divide-[var(--border-color)]">
+                {alerts.map(alert => (
+                  <tr key={alert.id}>
+                    <td className="px-4 py-2 font-medium text-[var(--text-primary)]">{alert.symbol}</td>
+                    <td className="px-4 py-2 tabular-nums text-[var(--text-primary)]">
+                      ${alert.target_price.toFixed(2)}
+                    </td>
+                    <td className="px-4 py-2 capitalize text-[var(--text-primary)]">{alert.direction}</td>
+                    <td className="px-4 py-2">
+                      {alert.is_triggered ? (
+                        <span className="flex items-center gap-1" style={{ color: VARIANT_COLOR_VAR.positive }}>
+                          <CheckCircle size={16} /> Triggered
+                        </span>
+                      ) : (
+                        <span className="flex items-center gap-1" style={{ color: VARIANT_COLOR_VAR.warning }}>
+                          <AlertCircle size={16} /> Pending
+                        </span>
+                      )}
+                    </td>
+                    <td className="px-4 py-2">
+                      <button
+                        onClick={() => handleDelete(alert.id)}
+                        className="flex items-center gap-1 hover:underline"
+                        style={{ color: VARIANT_COLOR_VAR.negative }}
+                      >
+                        <XCircle size={16} /> Delete
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </Card>
       )}
     </div>
   );

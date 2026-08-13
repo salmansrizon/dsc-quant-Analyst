@@ -2,6 +2,8 @@ import { useState } from 'react';
 import { track } from '../api/behaviour';
 import type { AxiosInstance } from 'axios';
 import { Link } from 'react-router-dom';
+import { Card } from '../components/ui/Card';
+import { VARIANT_COLOR_VAR } from '../components/ui/Badge';
 import { FitScorecard } from '../components/ui/FitScorecard';
 import { useFitScores } from '../hooks/useFitScores';
 
@@ -111,150 +113,152 @@ export default function Screener({ client }: { client: AxiosInstance }) {
 
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-semibold">Screener</h1>
+      <h1 className="text-2xl font-semibold text-[var(--text-primary)]">Screener</h1>
 
       <div className="flex flex-wrap gap-2">
         {PRESETS.map((p) => (
-          <button
-            key={p.key}
-            type="button"
-            onClick={() => run(p.key)}
-            className="px-3 py-2 rounded-md text-sm font-medium bg-indigo-600 text-white hover:bg-indigo-700"
-          >
+          <button key={p.key} type="button" onClick={() => run(p.key)} className="btn-primary text-sm">
             {p.label}
           </button>
         ))}
       </div>
 
-      <div className="bg-white rounded-lg shadow-sm p-4 space-y-3">
-        <div className="flex items-center justify-between">
-          <h2 className="text-sm font-semibold text-gray-700">Custom filters</h2>
-          <button
-            type="button"
-            onClick={addFilter}
-            className="text-sm text-indigo-600 hover:underline"
-          >
-            + Add filter
-          </button>
-        </div>
-        {filters.map((f, i) => (
-          <div key={i} className="flex items-center gap-2">
-            <select
-              value={f.field}
-              onChange={(e) => setFilter(i, { field: e.target.value })}
-              className="border rounded px-2 py-1 text-sm"
-            >
-              {FIELDS.map((fl) => (
-                <option key={fl} value={fl}>
-                  {fl}
-                </option>
-              ))}
-            </select>
-            <select
-              value={f.op}
-              onChange={(e) => setFilter(i, { op: e.target.value })}
-              className="border rounded px-2 py-1 text-sm"
-            >
-              {OPS.map((o) => (
-                <option key={o.key} value={o.key}>
-                  {o.label}
-                </option>
-              ))}
-            </select>
-            <input
-              type="number"
-              value={f.value}
-              onChange={(e) => setFilter(i, { value: e.target.value })}
-              className="border rounded px-2 py-1 text-sm w-32"
-              placeholder="value"
-            />
+      <Card revealIndex={0}>
+        <div className="space-y-3">
+          <div className="flex items-center justify-between">
+            <h2 className="text-sm font-semibold text-[var(--text-primary)]">Custom filters</h2>
             <button
               type="button"
-              onClick={() => removeFilter(i)}
-              className="text-red-500 text-sm"
+              onClick={addFilter}
+              className="text-sm text-[var(--accent-blue)] hover:underline"
             >
-              ✕
+              + Add filter
             </button>
           </div>
-        ))}
-        <button
-          type="button"
-          onClick={() => run(undefined)}
-          className="px-3 py-2 rounded-md text-sm font-medium bg-gray-800 text-white hover:bg-gray-900"
-        >
-          Run filters
-        </button>
-      </div>
+          {filters.map((f, i) => (
+            <div key={i} className="flex items-center gap-2">
+              <select
+                value={f.field}
+                onChange={(e) => setFilter(i, { field: e.target.value })}
+                className="rounded border border-[var(--border-color)] bg-[var(--bg-primary)] px-2 py-1 text-sm text-[var(--text-primary)]"
+              >
+                {FIELDS.map((fl) => (
+                  <option key={fl} value={fl}>
+                    {fl}
+                  </option>
+                ))}
+              </select>
+              <select
+                value={f.op}
+                onChange={(e) => setFilter(i, { op: e.target.value })}
+                className="rounded border border-[var(--border-color)] bg-[var(--bg-primary)] px-2 py-1 text-sm text-[var(--text-primary)]"
+              >
+                {OPS.map((o) => (
+                  <option key={o.key} value={o.key}>
+                    {o.label}
+                  </option>
+                ))}
+              </select>
+              <input
+                type="number"
+                value={f.value}
+                onChange={(e) => setFilter(i, { value: e.target.value })}
+                className="w-32 rounded border border-[var(--border-color)] bg-[var(--bg-primary)] px-2 py-1 text-sm text-[var(--text-primary)]"
+                placeholder="value"
+              />
+              <button
+                type="button"
+                onClick={() => removeFilter(i)}
+                className="text-sm"
+                style={{ color: VARIANT_COLOR_VAR.negative }}
+              >
+                ✕
+              </button>
+            </div>
+          ))}
+          <button type="button" onClick={() => run(undefined)} className="btn-secondary text-sm">
+            Run filters
+          </button>
+        </div>
+      </Card>
 
-      {error && <p className="text-red-500 text-sm">{error}</p>}
-      {notice && <p className="text-green-600 text-sm">{notice}</p>}
-      {loading && <p className="text-gray-500">Screening…</p>}
+      {error && <p className="text-sm" style={{ color: VARIANT_COLOR_VAR.negative }}>{error}</p>}
+      {notice && <p className="text-sm" style={{ color: VARIANT_COLOR_VAR.positive }}>{notice}</p>}
+      {loading && <p className="text-[var(--text-secondary)]">Screening…</p>}
 
       {rows.length > 0 && (
         <>
           <div className="flex items-center gap-3">
-            <span className="text-sm text-gray-600">{rows.length} match(es)</span>
+            <span className="text-sm text-[var(--text-secondary)]">{rows.length} match(es)</span>
             <button
               type="button"
               onClick={addToWatchlist}
               disabled={selected.size === 0}
-              className="px-3 py-1.5 rounded-md text-sm bg-indigo-600 text-white disabled:opacity-40"
+              className="btn-primary text-sm disabled:opacity-40"
             >
               Add {selected.size || ''} to watchlist
             </button>
-            <button
-              type="button"
-              onClick={exportCsv}
-              className="px-3 py-1.5 rounded-md text-sm border border-gray-300 hover:bg-gray-50"
-            >
+            <button type="button" onClick={exportCsv} className="btn-secondary text-sm">
               Export CSV
             </button>
           </div>
-          <div className="overflow-x-auto bg-white rounded-lg shadow-sm">
-            <table className="min-w-full divide-y divide-gray-200 text-sm">
-              <thead>
-                <tr className="text-left text-gray-500">
-                  <th className="px-3 py-2" />
-                  <th className="px-3 py-2">Symbol</th>
-                  <th className="px-3 py-2">Fit</th>
-                  <th className="px-3 py-2">Sector</th>
-                  <th className="px-3 py-2 text-right">Price</th>
-                  <th className="px-3 py-2 text-right">Mkt Cap (bn)</th>
-                  <th className="px-3 py-2 text-right">P/E</th>
-                  <th className="px-3 py-2 text-right">P/B</th>
-                  <th className="px-3 py-2 text-right">Div Yield %</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100">
-                {rows.map((r) => (
-                  <tr key={r.symbol} data-testid="screener-row">
-                    <td className="px-3 py-2">
-                      <input
-                        type="checkbox"
-                        checked={selected.has(r.symbol)}
-                        onChange={() => toggle(r.symbol)}
-                        aria-label={`select ${r.symbol}`}
-                      />
-                    </td>
-                    <td className="px-3 py-2 font-medium">
-                      <Link to={`/stock/${r.symbol}`} className="text-indigo-600 hover:underline">
-                        {r.symbol}
-                      </Link>
-                    </td>
-                    <td className="px-3 py-2">
-                      <FitScorecard fit={getFit(r.symbol)} />
-                    </td>
-                    <td className="px-3 py-2 text-gray-600">{r.sector ?? '—'}</td>
-                    <td className="px-3 py-2 text-right">{num(r.price)}</td>
-                    <td className="px-3 py-2 text-right">{num(r.market_cap)}</td>
-                    <td className="px-3 py-2 text-right">{num(r.pe)}</td>
-                    <td className="px-3 py-2 text-right">{num(r.pb)}</td>
-                    <td className="px-3 py-2 text-right">{num(r.dividend_yield)}</td>
+          <Card revealIndex={1}>
+            <div className="overflow-x-auto">
+              <table className="min-w-full divide-y divide-[var(--border-color)] text-sm">
+                <thead>
+                  <tr className="text-left text-[var(--text-secondary)]">
+                    <th className="px-3 py-2" />
+                    <th className="px-3 py-2">Symbol</th>
+                    <th className="px-3 py-2">Fit</th>
+                    <th className="px-3 py-2">Sector</th>
+                    <th className="px-3 py-2 text-right">Price</th>
+                    <th className="px-3 py-2 text-right">Mkt Cap (bn)</th>
+                    <th className="px-3 py-2 text-right">P/E</th>
+                    <th className="px-3 py-2 text-right">P/B</th>
+                    <th className="px-3 py-2 text-right">Div Yield %</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody className="divide-y divide-[var(--border-color)]">
+                  {rows.map((r) => (
+                    <tr key={r.symbol} data-testid="screener-row">
+                      <td className="px-3 py-2">
+                        <input
+                          type="checkbox"
+                          checked={selected.has(r.symbol)}
+                          onChange={() => toggle(r.symbol)}
+                          aria-label={`select ${r.symbol}`}
+                        />
+                      </td>
+                      <td className="px-3 py-2 font-medium">
+                        <Link to={`/stock/${r.symbol}`} className="text-[var(--accent-blue)] hover:underline">
+                          {r.symbol}
+                        </Link>
+                      </td>
+                      <td className="px-3 py-2">
+                        <FitScorecard fit={getFit(r.symbol)} />
+                      </td>
+                      <td className="px-3 py-2 text-[var(--text-secondary)]">{r.sector ?? '—'}</td>
+                      <td className="px-3 py-2 text-right tabular-nums text-[var(--text-primary)]">
+                        {num(r.price)}
+                      </td>
+                      <td className="px-3 py-2 text-right tabular-nums text-[var(--text-primary)]">
+                        {num(r.market_cap)}
+                      </td>
+                      <td className="px-3 py-2 text-right tabular-nums text-[var(--text-primary)]">
+                        {num(r.pe)}
+                      </td>
+                      <td className="px-3 py-2 text-right tabular-nums text-[var(--text-primary)]">
+                        {num(r.pb)}
+                      </td>
+                      <td className="px-3 py-2 text-right tabular-nums text-[var(--text-primary)]">
+                        {num(r.dividend_yield)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </Card>
         </>
       )}
     </div>

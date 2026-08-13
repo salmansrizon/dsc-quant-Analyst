@@ -1,5 +1,6 @@
 import { TrendingDown, TrendingUp } from 'lucide-react';
 import { useCountUp } from '../../hooks/useCountUp';
+import { VARIANT_COLOR_VAR } from '../ui/Badge';
 
 // The colored ±pct% with an up/down arrow — one render shared by the Dashboard
 // leaderboards and the SymbolSearch suggestion rows. Renders nothing when the
@@ -19,7 +20,10 @@ export default function PriceChange({
   if (value == null) return null;
   const isUp = value >= 0;
   return (
-    <span className={`flex items-center gap-1 ${isUp ? 'text-green-600' : 'text-red-600'}`}>
+    <span
+      className="flex items-center gap-1"
+      style={{ color: isUp ? VARIANT_COLOR_VAR.positive : VARIANT_COLOR_VAR.negative }}
+    >
       {isUp ? <TrendingUp size={size} /> : <TrendingDown size={size} />}
       {isUp ? '+' : ''}
       {animated.toFixed(2)}%

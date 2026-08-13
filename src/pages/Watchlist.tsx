@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import type { AxiosInstance } from 'axios';
 import PriceChart, { type Candle } from '../components/PriceChart/PriceChart';
+import { Card } from '../components/ui/Card';
 import { FitScorecard } from '../components/ui/FitScorecard';
 import { useFitScores } from '../hooks/useFitScores';
 
@@ -92,7 +93,9 @@ export default function Watchlist({ client }: { client: AxiosInstance }) {
       )}
 
       {selected && candles.length > 0 && (
-        <PriceChart candles={candles} symbol={selected} />
+        <Card>
+          <PriceChart candles={candles} symbol={selected} />
+        </Card>
       )}
     </div>
   );

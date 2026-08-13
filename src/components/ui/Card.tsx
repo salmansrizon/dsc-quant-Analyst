@@ -2,6 +2,12 @@ import { motion } from 'motion/react';
 import type { CSSProperties, MouseEventHandler, ReactNode } from 'react';
 import { cardHover, zoneReveal } from '../../design/motion';
 
+// Shared with CollapsibleZone, which can't compose <Card> directly (Radix's
+// Collapsible.Trigger must be the outer clickable element, not a div), but
+// should still look like one rather than re-typing this string by hand.
+export const CARD_BASE_CLASS =
+  'rounded-xl border border-[var(--border-color)] bg-[var(--bg-secondary)]';
+
 interface CardProps {
   children: ReactNode;
   className?: string;
@@ -22,8 +28,7 @@ export function Card({
   revealIndex,
   hoverLift = true,
 }: CardProps) {
-  const classes =
-    `rounded-xl border border-[var(--border-color)] bg-[var(--bg-secondary)] p-5 ${className}`.trim();
+  const classes = `${CARD_BASE_CLASS} p-5 ${className}`.trim();
 
   if (revealIndex === undefined) {
     return (

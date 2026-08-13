@@ -6,8 +6,11 @@ import { Bell } from 'lucide-react';
 import PriceChart, { type Candle } from '../components/PriceChart/PriceChart';
 import CandlestickChart from '../components/CandlestickChart/CandlestickChart';
 import { Badge } from '../components/ui/Badge';
+import { Card } from '../components/ui/Card';
+import { CollapsibleZone } from '../components/ui/CollapsibleZone';
 import { ExplainerPopover } from '../components/ui/ExplainerPopover';
-import { FitScorecard } from '../components/ui/FitScorecard';
+import { FitScorecardContent } from '../components/ui/FitScorecardContent';
+import { Zone } from '../components/ui/Zone';
 import { useFitScores } from '../hooks/useFitScores';
 import { errorMessage } from '../api/errorMessage';
 import { useToast } from '../context/ToastContext';
@@ -41,17 +44,35 @@ interface Fundamentals {
 
 const num = (v?: number | null, d = 2) => (v == null ? '—' : v.toFixed(d));
 
-function Stat({ label, value }: { label: string; value: string }) {
+// #90: static "what this means" copy for the Overview stats — every derived
+// number gets one, raw Price doesn't (#87's selective-microcopy rule).
+const STAT_EXPLANATIONS: Record<string, string> = {
+  pe: 'Price divided by earnings per share — how many years of current earnings it takes to pay back the share price. Lower is cheaper relative to earnings.',
+  marketCap: 'Total market value of all outstanding shares — price times shares issued.',
+  pb: "Price divided by book (net asset) value per share — how the market prices the company relative to its accounting net worth.",
+  dividendYield: 'Annual cash dividend as a percentage of the current share price.',
+  epsGrowth: 'Year-over-year growth in earnings per share.',
+  peg: 'P/E divided by EPS growth rate — a lower PEG can suggest growth priced more cheaply relative to how fast earnings are growing.',
+  cashDiv: 'Cash dividend as a percentage of face value, for the given year.',
+};
+
+function Stat({ label, value, explanation }: { label: string; value: string; explanation?: string }) {
   return (
-    <div className="bg-white rounded-lg shadow-sm px-4 py-3">
-      <div className="text-xs text-gray-500">{label}</div>
-      <div className="text-lg font-semibold">{value}</div>
+    <div className="rounded-lg border border-[var(--border-color)] bg-[var(--bg-secondary)] px-4 py-3">
+      <div className="flex items-center gap-1 text-xs text-[var(--text-secondary)]">
+        {label}
+        {explanation && <ExplainerPopover label={`What does ${label} mean?`}>{explanation}</ExplainerPopover>}
+      </div>
+      <div className="text-lg font-semibold tabular-nums text-[var(--text-primary)]">{value}</div>
     </div>
   );
 }
 
 // Inline price-alert setter (reconciled from main's StockProfile into the trunk
 // StockDetail, #82) — seeds the target from the current price, POSTs /alerts.
+// #90: a standalone action card, not one of the 5 named zones — it doesn't
+// have a "reason" to explain, so it stays outside the zone/collapsible system
+// and always visible (a primary action shouldn't hide behind a disclosure).
 function SetPriceAlert({
   client,
   symbol,
@@ -84,8 +105,8 @@ function SetPriceAlert({
   };
 
   return (
-    <div className="bg-white rounded-lg shadow-sm p-4">
-      <h2 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
+    <Card>
+      <h2 className="mb-3 flex items-center gap-2 text-sm font-semibold text-[var(--text-primary)]">
         <Bell size={16} /> Set Price Alert
       </h2>
       <div className="flex flex-wrap items-center gap-2">
@@ -95,7 +116,7 @@ function SetPriceAlert({
           onChange={(e) => setTarget(e.target.value)}
           placeholder="Target price"
           aria-label="Target price"
-          className="border p-2 rounded"
+          className="border p-2 rounded tabular-nums"
         />
         <select
           value={direction}
@@ -110,7 +131,7 @@ function SetPriceAlert({
           {saving ? 'Setting…' : 'Set Alert'}
         </button>
       </div>
-    </div>
+    </Card>
   );
 }
 
@@ -147,38 +168,56 @@ export default function StockDetail({ client }: { client: AxiosInstance }) {
 
   const d = fund.derived;
   const ratios = Object.entries(fund.reported);
+  const fit = fitScores[fund.symbol.toUpperCase()];
 
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <h1 className="text-2xl font-semibold">{fund.symbol}</h1>
-          <FitScorecard fit={fitScores[fund.symbol.toUpperCase()]} />
-        </div>
-        <Link to="/screener" className="text-sm text-indigo-600 hover:underline">
+        <h1 className="text-2xl font-semibold text-[var(--text-primary)]">{fund.symbol}</h1>
+        <Link to="/screener" className="text-sm text-[var(--accent-blue)] hover:underline">
           ← Screener
         </Link>
       </div>
 
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        <Stat label="Price" value={num(fund.price)} />
-        <Stat label="P/E" value={num(fund.pe)} />
-        <Stat label="Market Cap (bn BDT)" value={num(fund.market_cap_bdt_bn)} />
-        <Stat label="P/B" value={num(d.price_to_book)} />
-        <Stat label="Dividend Yield %" value={num(d.dividend_yield_pct)} />
-        <Stat label="EPS Growth %/yr" value={num(d.eps_growth_pct)} />
-        <Stat label="PEG" value={num(d.peg)} />
-        <Stat
-          label={`Cash Div % (${d.dividend_year ?? '—'})`}
-          value={num(d.cash_dividend_pct)}
-        />
-      </div>
+      {/* #90: Fit-for-you leads the page — the personalization spine's
+          headline differentiator, not just a header chip cluster. */}
+      {fit && <FitScorecardContent fit={fit} revealIndex={0} />}
+
+      <Card revealIndex={1}>
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+          <Stat label="Price" value={num(fund.price)} />
+          <Stat label="P/E" value={num(fund.pe)} explanation={STAT_EXPLANATIONS.pe} />
+          <Stat
+            label="Market Cap (bn BDT)"
+            value={num(fund.market_cap_bdt_bn)}
+            explanation={STAT_EXPLANATIONS.marketCap}
+          />
+          <Stat label="P/B" value={num(d.price_to_book)} explanation={STAT_EXPLANATIONS.pb} />
+          <Stat
+            label="Dividend Yield %"
+            value={num(d.dividend_yield_pct)}
+            explanation={STAT_EXPLANATIONS.dividendYield}
+          />
+          <Stat
+            label="EPS Growth %/yr"
+            value={num(d.eps_growth_pct)}
+            explanation={STAT_EXPLANATIONS.epsGrowth}
+          />
+          <Stat label="PEG" value={num(d.peg)} explanation={STAT_EXPLANATIONS.peg} />
+          <Stat
+            label={`Cash Div % (${d.dividend_year ?? '—'})`}
+            value={num(d.cash_dividend_pct)}
+            explanation={STAT_EXPLANATIONS.cashDiv}
+          />
+        </div>
+      </Card>
 
       <SetPriceAlert client={client} symbol={fund.symbol} price={fund.price} />
 
-      <div className="bg-white rounded-lg shadow-sm p-4">
-        <div className="flex items-center justify-between mb-2">
-          <h2 className="text-sm font-semibold text-gray-700">Price history</h2>
+      <Zone
+        type="price"
+        revealIndex={2}
+        actions={
           <div className="flex gap-2" role="group" aria-label="Chart type">
             {(['line', 'candles'] as const).map((t) => (
               <button
@@ -193,33 +232,38 @@ export default function StockDetail({ client }: { client: AxiosInstance }) {
               </button>
             ))}
           </div>
-        </div>
+        }
+      >
         {candles.length === 0 ? (
-          <p className="text-gray-500 text-sm">No price history.</p>
+          <p className="text-sm text-[var(--text-secondary)]">No price history.</p>
         ) : chart === 'line' ? (
           <PriceChart symbol={fund.symbol} data={candles} />
         ) : (
           <CandlestickChart data={candles} />
         )}
-      </div>
+      </Zone>
 
-      <div className="bg-white rounded-lg shadow-sm p-4">
-        <h2 className="text-sm font-semibold text-gray-700 mb-2">Reported ratios</h2>
+      <CollapsibleZone type="fundamentals" defaultOpen={false}>
         <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-gray-200 text-sm">
+          <table className="min-w-full divide-y divide-[var(--border-color)] text-sm">
             <thead>
-              <tr className="text-left text-gray-500">
+              <tr className="text-left text-[var(--text-secondary)]">
                 <th className="px-3 py-2">Metric</th>
                 <th className="px-3 py-2">Category</th>
                 <th className="px-3 py-2 text-right">Value</th>
                 <th className="px-3 py-2 text-right">Year</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-100">
+            <tbody className="divide-y divide-[var(--border-color)]">
               {ratios.map(([key, r]) => (
                 <tr key={key}>
-                  <td className="px-3 py-2 font-medium">
-                    {r.reported_as}
+                  <td className="px-3 py-2 font-medium text-[var(--text-primary)]">
+                    <span className="inline-flex items-center gap-1">
+                      {r.reported_as}
+                      <ExplainerPopover label={`What does ${r.reported_as} mean?`}>
+                        {r.equation}
+                      </ExplainerPopover>
+                    </span>
                     {r.sign_inverted && (
                       <span className="ml-2 inline-flex items-center gap-1">
                         <Badge variant="warning">⚠ sign</Badge>
@@ -229,47 +273,62 @@ export default function StockDetail({ client }: { client: AxiosInstance }) {
                       </span>
                     )}
                   </td>
-                  <td className="px-3 py-2 text-gray-600">{r.category}</td>
-                  <td className="px-3 py-2 text-right">{num(r.value, 4)}</td>
-                  <td className="px-3 py-2 text-right">{r.year}</td>
+                  <td className="px-3 py-2 text-[var(--text-secondary)]">{r.category}</td>
+                  <td className="px-3 py-2 text-right tabular-nums text-[var(--text-primary)]">
+                    {num(r.value, 4)}
+                  </td>
+                  <td className="px-3 py-2 text-right tabular-nums text-[var(--text-secondary)]">
+                    {r.year}
+                  </td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
-      </div>
 
-      <div className="bg-white rounded-lg shadow-sm p-4">
-        <h2 className="text-sm font-semibold text-gray-700 mb-2">EPS / NAV history</h2>
-        <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-gray-200 text-sm">
+        <div className="mt-6 overflow-x-auto">
+          <h3 className="mb-2 text-sm font-semibold text-[var(--text-primary)]">EPS / NAV history</h3>
+          <table className="min-w-full divide-y divide-[var(--border-color)] text-sm">
             <thead>
-              <tr className="text-left text-gray-500">
+              <tr className="text-left text-[var(--text-secondary)]">
                 <th className="px-3 py-2">Year</th>
                 <th className="px-3 py-2 text-right">EPS</th>
                 <th className="px-3 py-2 text-right">NAV</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-100">
+            <tbody className="divide-y divide-[var(--border-color)]">
               {fund.eps_history.map((e) => (
                 <tr key={e.year}>
-                  <td className="px-3 py-2">{e.year}</td>
-                  <td className="px-3 py-2 text-right">{num(e.eps)}</td>
-                  <td className="px-3 py-2 text-right">{num(e.nav)}</td>
+                  <td className="px-3 py-2 tabular-nums text-[var(--text-primary)]">{e.year}</td>
+                  <td className="px-3 py-2 text-right tabular-nums text-[var(--text-primary)]">
+                    {num(e.eps)}
+                  </td>
+                  <td className="px-3 py-2 text-right tabular-nums text-[var(--text-primary)]">
+                    {num(e.nav)}
+                  </td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
-      </div>
 
-      {fund.caveats && fund.caveats.length > 0 && (
-        <ul className="text-xs text-gray-500 list-disc pl-5">
-          {fund.caveats.map((c, i) => (
-            <li key={i}>{c}</li>
-          ))}
-        </ul>
-      )}
+        {fund.caveats && fund.caveats.length > 0 && (
+          <ul className="mt-4 list-disc pl-5 text-xs text-[var(--text-secondary)]">
+            {fund.caveats.map((c, i) => (
+              <li key={i}>{c}</li>
+            ))}
+          </ul>
+        )}
+      </CollapsibleZone>
+
+      {/* #92 (separate ticket) fills this zone's real content — which metrics
+          get benchmarked and how sector averages are computed. #90 only
+          establishes its position in the zone order. */}
+      <CollapsibleZone type="sector" defaultOpen={false}>
+        <p className="text-sm text-[var(--text-secondary)]">
+          Sector comparison is coming soon — how {fund.symbol} stacks up against its sector peers.
+        </p>
+      </CollapsibleZone>
     </div>
   );
 }

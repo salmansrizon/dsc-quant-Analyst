@@ -7,6 +7,7 @@ import {
 } from 'lightweight-charts';
 import { useEffect, useRef } from 'react';
 import { useTheme } from '../../context/ThemeContext';
+import { cssVar } from '../../design/cssVar';
 import type { Candle } from '../PriceChart/PriceChart';
 
 interface OHLC {
@@ -27,12 +28,6 @@ function toOHLC(c: Candle): OHLC {
   const low = (anyC.low ?? anyC.Low ?? Math.min(open, close)) as number;
   const date = (anyC.date ?? anyC.Date ?? '') as string;
   return { time: date, open, high, low, close };
-}
-
-function cssVar(name: string, fallback: string): string {
-  if (typeof window === 'undefined') return fallback;
-  const value = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
-  return value || fallback;
 }
 
 // #87: reads the design tokens live (not hard-coded) so the chart follows the

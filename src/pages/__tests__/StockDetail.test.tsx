@@ -57,18 +57,22 @@ function renderDetail(client: AxiosInstance) {
 }
 
 describe('StockDetail', () => {
-  it('renders the symbol header and a reported ratio', async () => {
+  it('renders the symbol header and the Overview stat grid, expanded by default', async () => {
     renderDetail(makeClient());
     expect(await screen.findByRole('heading', { name: 'GP', level: 1 })).toBeInTheDocument();
-    expect(screen.getByText('Return on Equity')).toBeInTheDocument();
     expect(screen.getByText('PEG')).toBeInTheDocument();
   });
 
-  it('shows the caveat text', async () => {
+  it('collapses Fundamentals by default (#90); expanding it reveals the ratio and the caveat', async () => {
     renderDetail(makeClient());
-    expect(
-      await screen.findByText(/Face value is assumed to be 10 BDT/),
-    ).toBeInTheDocument();
+    await screen.findByRole('heading', { name: 'GP', level: 1 });
+    expect(screen.queryByText('Return on Equity')).not.toBeInTheDocument();
+    expect(screen.queryByText(/Face value is assumed to be 10 BDT/)).not.toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: /fundamentals/i }));
+
+    expect(await screen.findByText('Return on Equity')).toBeInTheDocument();
+    expect(screen.getByText(/Face value is assumed to be 10 BDT/)).toBeInTheDocument();
   });
 
   it('seeds the alert target from the price and POSTs /alerts', async () => {

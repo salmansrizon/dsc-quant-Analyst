@@ -1,8 +1,7 @@
 import * as Dialog from '@radix-ui/react-dialog';
 import { X } from 'lucide-react';
 import type { FitScore } from '../../api/fit';
-import { axisBadgeVariant, deriveFitView } from '../../design/fitBucket';
-import { ScorecardShell, type ScorecardAxis } from './ScorecardShell';
+import { FitScorecardContent } from './FitScorecardContent';
 
 interface FitScorecardModalProps {
   fit: FitScore;
@@ -15,16 +14,6 @@ interface FitScorecardModalProps {
 // (screener row, watchlist, portfolio, detail) without depending on #90's
 // Stock Detail zone layout.
 export function FitScorecardModal({ fit, open, onOpenChange }: FitScorecardModalProps) {
-  const { scoredAxes, muted } = deriveFitView(fit);
-
-  const axes: ScorecardAxis[] = scoredAxes.map((axis) => ({
-    key: axis.axis,
-    label: axis.axis,
-    reason: axis.reason,
-    badgeLabel: String(Math.round(axis.score as number)),
-    badgeVariant: axisBadgeVariant(axis.score as number, muted),
-  }));
-
   return (
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
       <Dialog.Portal>
@@ -40,23 +29,7 @@ export function FitScorecardModal({ fit, open, onOpenChange }: FitScorecardModal
           >
             <X size={16} />
           </Dialog.Close>
-          <ScorecardShell
-            axes={axes}
-            header={
-              muted && (
-                <p className="mb-3 text-xs text-[var(--text-secondary)]">
-                  Complete your profile to personalize this scorecard.
-                </p>
-              )
-            }
-            footer={
-              <div className="mt-3 flex flex-col gap-1 text-xs text-[var(--text-secondary)]">
-                {fit.weight_caption && <p>{fit.weight_caption}</p>}
-                {!fit.scorable && <p>Not enough data for a full picture yet.</p>}
-                <p>{fit.disclaimer}</p>
-              </div>
-            }
-          />
+          <FitScorecardContent fit={fit} />
         </Dialog.Content>
       </Dialog.Portal>
     </Dialog.Root>

@@ -51,8 +51,8 @@ def test_fit_for_a_real_symbol_returns_a_wellformed_scorecard():
 def test_real_cohort_has_more_than_one_peer():
     # A percentile against a cohort of one is meaningless; GP's sector should be
     # populated. This catches price_archive/datamatrix going empty.
-    sector = fit_service._sector_of(SYMBOL)
+    sector = fit_service.sector_of(SYMBOL)
     if sector is None:
         pytest.skip(f"{SYMBOL} not in the live datamatrix")
-    peers = fit_service._peer_metrics(sector)
+    peers = fit_service.peer_metrics(sector)
     assert len(peers) >= 2

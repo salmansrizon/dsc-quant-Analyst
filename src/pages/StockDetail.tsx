@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { track } from '../api/behaviour';
 import type { AxiosInstance } from 'axios';
@@ -10,7 +10,9 @@ import { Card } from '../components/ui/Card';
 import { CollapsibleZone } from '../components/ui/CollapsibleZone';
 import { ExplainerPopover } from '../components/ui/ExplainerPopover';
 import { FitScorecardContent } from '../components/ui/FitScorecardContent';
+import { SectorComparisonContent } from '../components/ui/SectorComparisonContent';
 import { Zone } from '../components/ui/Zone';
+import { fetchSectorComparison, type SectorComparison } from '../api/sectorComparison';
 import { useFitScores } from '../hooks/useFitScores';
 import { errorMessage } from '../api/errorMessage';
 import { useToast } from '../context/ToastContext';
@@ -142,6 +144,10 @@ export default function StockDetail({ client }: { client: AxiosInstance }) {
   const [chart, setChart] = useState<'line' | 'candles'>('line');
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [sectorZoneOpen, setSectorZoneOpen] = useState(false);
+  const [sectorComparison, setSectorComparison] = useState<SectorComparison | undefined>(undefined);
+  const [sectorLoading, setSectorLoading] = useState(false);
+  const fetchedSectorForRef = useRef<string | null>(null);
   const getFit = useFitScores(client, symbol ? [symbol] : []);
 
   useEffect(() => {
@@ -161,6 +167,24 @@ export default function StockDetail({ client }: { client: AxiosInstance }) {
       .catch(() => setError(`Failed to load ${symbol}`))
       .finally(() => setLoading(false));
   }, [client, symbol]);
+
+  // #92: lazy — only fetch when the (collapsed-by-default) Sector zone is
+  // open, keyed on (symbol, open) rather than a one-shot flag. Re-opening the
+  // same symbol's zone skips the refetch (fetchedSectorForRef still matches);
+  // navigating to a different symbol while it's open refetches automatically,
+  // since react-router reuses this component instance across a param change
+  // rather than remounting it.
+  useEffect(() => {
+    if (!sectorZoneOpen || fetchedSectorForRef.current === symbol) return;
+    fetchedSectorForRef.current = symbol;
+    setSectorLoading(true);
+    fetchSectorComparison(client, symbol)
+      .then(setSectorComparison)
+      .catch(() => {
+        /* best-effort — the zone just stays in its loading/empty state */
+      })
+      .finally(() => setSectorLoading(false));
+  }, [client, symbol, sectorZoneOpen]);
 
   if (loading) return <div className="text-center py-8">Loading {symbol}…</div>;
   if (error) return <p className="text-red-500 text-sm">{error}</p>;
@@ -321,13 +345,11 @@ export default function StockDetail({ client }: { client: AxiosInstance }) {
         )}
       </CollapsibleZone>
 
-      {/* #92 (separate ticket) fills this zone's real content — which metrics
-          get benchmarked and how sector averages are computed. #90 only
-          establishes its position in the zone order. */}
-      <CollapsibleZone type="sector" defaultOpen={false}>
-        <p className="text-sm text-[var(--text-secondary)]">
-          Sector comparison is coming soon — how {fund.symbol} stacks up against its sector peers.
-        </p>
+      <CollapsibleZone type="sector" defaultOpen={false} onOpenChange={setSectorZoneOpen}>
+        <SectorComparisonContent
+          data={sectorComparison?.symbol === fund.symbol ? sectorComparison : undefined}
+          loading={sectorLoading}
+        />
       </CollapsibleZone>
     </div>
   );

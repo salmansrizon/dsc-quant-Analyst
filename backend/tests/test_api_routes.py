@@ -245,6 +245,34 @@ def test_fit_batch_route_rejects_an_empty_symbol_list(authed):
     assert resp.status_code == 422
 
 
+# ── Sector comparison (#92, spine #84) ───────────────────────────────────────
+
+def test_get_sector_comparison_through_the_seam(authed, monkeypatch):
+    def dispatch(sql, params=None):
+        if "SELECT Sector FROM" in sql:
+            return [{"Sector": "Telecom"}]
+        if "Symbol, Sector, LTP" in sql:
+            return [{"Symbol": "GP", "Sector": "Telecom", "LTP": 300.0},
+                    {"Symbol": "ROBI", "Sector": "Telecom", "LTP": 30.0}]
+        if "price_archive" in sql:
+            return [{"Symbol": "GP", "pe": 10.0, "vol": 0.05, "bars": 30},
+                    {"Symbol": "ROBI", "pe": 20.0, "vol": 0.2, "bars": 30}]
+        return []
+    monkeypatch.setattr(db, "query_rows", dispatch)
+
+    resp = authed.get("/api/sector-comparison/gp")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["symbol"] == "GP"
+    assert body["sector"] == "Telecom"
+    assert {m["metric"] for m in body["metrics"]} == {"pe", "pb", "yield", "growth"}
+
+
+def test_sector_comparison_route_requires_auth():
+    resp = TestClient(app).get("/api/sector-comparison/GP")
+    assert resp.status_code in (401, 403)
+
+
 def test_portfolio_health_route(authed, monkeypatch):
     def dispatch(sql, params=None):
         if "p.symbol" in sql:                              # get_portfolio

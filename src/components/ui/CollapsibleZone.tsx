@@ -10,6 +10,8 @@ interface CollapsibleZoneProps {
   type: ZoneType;
   defaultOpen?: boolean;
   children: ReactNode;
+  /** #92: lets a parent lazy-fetch data on first expand instead of on mount. */
+  onOpenChange?: (open: boolean) => void;
 }
 
 // #90: the progressive-disclosure form of a Zone card — used for Fundamentals
@@ -21,11 +23,21 @@ interface CollapsibleZoneProps {
 // clickable element, not a div — and unlike Zone, has no `actions` slot:
 // nesting another interactive control inside the Trigger button would be
 // invalid HTML and would toggle the collapse on every click.
-export function CollapsibleZone({ type, defaultOpen = false, children }: CollapsibleZoneProps) {
+export function CollapsibleZone({
+  type,
+  defaultOpen = false,
+  children,
+  onOpenChange,
+}: CollapsibleZoneProps) {
   const [open, setOpen] = useState(defaultOpen);
 
+  const handleOpenChange = (next: boolean) => {
+    setOpen(next);
+    onOpenChange?.(next);
+  };
+
   return (
-    <Collapsible.Root open={open} onOpenChange={setOpen} className={CARD_BASE_CLASS}>
+    <Collapsible.Root open={open} onOpenChange={handleOpenChange} className={CARD_BASE_CLASS}>
       <Collapsible.Trigger className="flex w-full items-center justify-between gap-2 p-5 text-left">
         <ZoneHeader type={type} />
         <ChevronDown

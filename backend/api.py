@@ -16,7 +16,7 @@ from .models import (
     ScreenerRequest, ScreenerResponse, ScreenerWatchlistAdd,
     SubscriptionCreate, BundleCreate, NotificationPreferences,
     InvestorProfile, ProfileUpdate, FitScore, FitBatchRequest, PortfolioHealth, Recommendations,
-    BehaviourBatch, Feed,
+    BehaviourBatch, Feed, SectorComparison,
 )
 from .user_service import (
     create_user, get_user_by_email, get_user_credentials,
@@ -31,6 +31,7 @@ from . import subscriptions_service
 from . import notification_prefs_service
 from . import profile_service
 from . import fit_service
+from . import sector_comparison_service
 from . import portfolio_fit_service
 from . import recommendation_service
 from . import behaviour_service
@@ -349,6 +350,14 @@ def fit_score_batch(payload: FitBatchRequest, current_user: UserResponse = Depen
     # #89: the batched seam a page with many visible rows calls through — the
     # sector cohort is built once for the whole request, not once per symbol.
     return fit_service.score_many(current_user.id, payload.symbols)
+
+
+@app.get("/api/sector-comparison/{symbol}", response_model=SectorComparison)
+def sector_comparison(symbol: str, current_user: UserResponse = Depends(get_current_user)):
+    # #92: stock vs its sector's median for P/E, P/B, yield, growth — reuses
+    # #88's peer_metrics, no new bulk query. Fetched lazily by the frontend
+    # only when the (collapsed-by-default) sector zone is expanded.
+    return sector_comparison_service.compare(symbol)
 
 
 @app.get("/api/recommendations", response_model=Recommendations)

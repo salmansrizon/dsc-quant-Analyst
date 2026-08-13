@@ -32,7 +32,7 @@ _METRIC_KEYS = {"pe": "pe", "pb": "pb", "yield": "yield_",
                 "growth": "growth", "volatility": "volatility"}
 
 
-def _sector_of(symbol: str) -> str | None:
+def sector_of(symbol: str) -> str | None:
     rows = db.query_rows(
         f"SELECT Sector FROM {db.table_id('lankabd_datamatrix')} WHERE Symbol = @s LIMIT 1",
         [bigquery.ScalarQueryParameter("s", "STRING", symbol)],
@@ -40,7 +40,7 @@ def _sector_of(symbol: str) -> str | None:
     return rows[0]["Sector"] if rows else None
 
 
-def _peer_metrics(sector: str | None) -> dict[str, dict]:
+def peer_metrics(sector: str | None) -> dict[str, dict]:
     """Every symbol in `sector` (or the whole market when `sector` is None), each
     with its derived fit metrics — the same figures `get_fundamentals` computes,
     but for the cohort in a handful of reads.
@@ -155,7 +155,7 @@ class _MarketCache:
 
     def peers(self) -> dict[str, dict]:
         if self._peers is None:
-            self._peers = _peer_metrics(None)
+            self._peers = peer_metrics(None)
         return self._peers
 
 
@@ -178,16 +178,16 @@ def score_many(user_id: str, symbols: list[str]) -> dict[str, dict]:
     profile = get_profile(user_id)
     market = _MarketCache()
 
-    sector_of: dict[str, str | None] = {}
+    sector_by_symbol: dict[str, str | None] = {}
     peers_by_sector: dict[str | None, dict[str, dict]] = {}
     cohort_by_sector: dict[str | None, tuple[dict, dict]] = {}
     out: dict[str, dict] = {}
     for symbol in symbols:
-        if symbol not in sector_of:
-            sector_of[symbol] = _sector_of(symbol)
-        sector = sector_of[symbol]
+        if symbol not in sector_by_symbol:
+            sector_by_symbol[symbol] = sector_of(symbol)
+        sector = sector_by_symbol[symbol]
         if sector not in peers_by_sector:
-            peers_by_sector[sector] = _peer_metrics(sector) if sector else {}
+            peers_by_sector[sector] = peer_metrics(sector) if sector else {}
             cohort_by_sector[sector] = _cohort(peers_by_sector[sector], market)
         peers = peers_by_sector[sector]
         cohort, scope = cohort_by_sector[sector]      # built once per sector, not per symbol

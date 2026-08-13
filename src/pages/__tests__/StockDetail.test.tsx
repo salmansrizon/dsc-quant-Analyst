@@ -1,6 +1,6 @@
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { MemoryRouter, Routes, Route } from 'react-router-dom';
+import { Link, MemoryRouter, Routes, Route } from 'react-router-dom';
 import { vi } from 'vitest';
 import type { AxiosInstance } from 'axios';
 import StockDetail from '../StockDetail';
@@ -94,5 +94,64 @@ describe('StockDetail', () => {
     } as unknown as AxiosInstance;
     renderDetail(client);
     expect(await screen.findByText('Failed to load GP')).toBeInTheDocument();
+  });
+
+  it('refetches sector comparison instead of showing stale data after navigating to a different symbol (#92)', async () => {
+    const fundBySymbol: Record<string, typeof FUND> = {
+      GP: FUND,
+      ROBI: { ...FUND, symbol: 'ROBI' },
+    };
+    const sectorBySymbol: Record<string, object> = {
+      GP: {
+        symbol: 'GP',
+        sector: 'Telecom',
+        metrics: [
+          { metric: 'pe', label: 'P/E', subject_value: 10, sector_median: 16, peer_count: 5, comparable: true },
+        ],
+      },
+      ROBI: {
+        symbol: 'ROBI',
+        sector: 'Telecom',
+        metrics: [
+          { metric: 'pe', label: 'P/E', subject_value: 99, sector_median: 16, peer_count: 5, comparable: true },
+        ],
+      },
+    };
+    const client = {
+      get: vi.fn((url: string) => {
+        const sym = url.split('/').pop() as string;
+        if (url.includes('/fundamentals/')) return Promise.resolve({ data: fundBySymbol[sym] });
+        if (url.includes('/sector-comparison/')) return Promise.resolve({ data: sectorBySymbol[sym] });
+        return Promise.resolve({ data: [] });
+      }),
+      post: vi.fn().mockResolvedValue({ data: { id: 'a1' } }),
+    } as unknown as AxiosInstance;
+
+    render(
+      <ToastProvider>
+        <MemoryRouter initialEntries={['/stock/GP']}>
+          <Link to="/stock/ROBI">go to ROBI</Link>
+          <Routes>
+            <Route path="/stock/:symbol" element={<StockDetail client={client} />} />
+          </Routes>
+        </MemoryRouter>
+      </ToastProvider>,
+    );
+
+    await screen.findByRole('heading', { name: 'GP', level: 1 });
+    await userEvent.click(screen.getByRole('button', { name: /sector comparison/i }));
+    expect(await screen.findByText('10.00')).toBeInTheDocument();
+
+    await userEvent.click(screen.getByText('go to ROBI'));
+    await screen.findByRole('heading', { name: 'ROBI', level: 1 });
+
+    // The page's loading flash unmounts the whole tree on every symbol
+    // change (pre-existing, out of #92's scope), so the zone collapses again
+    // — but re-expanding it must fetch ROBI's own data, never GP's stale
+    // value from before the navigation.
+    expect(screen.queryByText('10.00')).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: /sector comparison/i }));
+    expect(await screen.findByText('99.00')).toBeInTheDocument();
+    expect(screen.queryByText('10.00')).not.toBeInTheDocument();
   });
 });

@@ -205,6 +205,28 @@ class FitBatchRequest(BaseModel):
     symbols: list[str] = Field(min_length=1, max_length=100)
 
 
+# ─── Sector comparison (#92, spine #84) ───────────────────────────────────────
+
+class SectorComparisonMetric(BaseModel):
+    """One metric's stock-vs-sector-median comparison. `comparable` is False
+    when fewer than sector_comparison_service.MIN_COHORT peers have a value —
+    unlike the fit engine (#88), this never falls back to the market-wide
+    distribution: the whole premise is sector-specific, so a thin metric says
+    so instead of silently comparing against the wrong cohort."""
+    metric: str                         # "pe" | "pb" | "yield" | "growth"
+    label: str                          # "P/E", "P/B", "Dividend Yield %", "EPS Growth %/yr"
+    subject_value: Optional[float] = None
+    sector_median: Optional[float] = None
+    peer_count: int
+    comparable: bool
+
+
+class SectorComparison(BaseModel):
+    symbol: str
+    sector: Optional[str] = None
+    metrics: list[SectorComparisonMetric]
+
+
 # ─── Behaviour tracking (#86, personalization spine #84) ─────────────────────
 
 BehaviourType = Literal[

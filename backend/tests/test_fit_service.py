@@ -7,6 +7,8 @@ import pytest
 
 from backend import db, fit_service
 
+# conftest.py's autouse clear_fit_service_caches fixture resets
+# fit_service._cached_peer_metrics (#106) before/after every test in the run.
 
 DM = [
     {"Symbol": "GP", "Sector": "Telecom", "LTP": 300.0},
@@ -107,6 +109,8 @@ def test_score_many_cohort_reads_are_independent_of_symbol_count(wired, monkeypa
     # score_many is the seam #89/#91/#93 rank through: the sector cohort is built
     # once per sector (+ at most one market fallback), NOT a per-symbol fan-out.
     # So scoring three same-sector symbols costs the same reads as scoring one.
+    # (The fixture's 3-peer Telecom sector is thin — < MIN_COHORT — so this also
+    # exercises the market-wide fallback: 1 sector read + 1 market read = 2.)
     calls = {"n": 0}
     orig = db.query_rows                          # the wired dispatch
     def counting(sql, params=None):
@@ -118,14 +122,66 @@ def test_score_many_cohort_reads_are_independent_of_symbol_count(wired, monkeypa
     many = fit_service.score_many("u1", ["GP", "ROBI", "BATBC"])   # all Telecom
     assert set(many) == {"GP", "ROBI", "BATBC"}
     assert many["GP"]["symbol"] == "GP"
-    many_reads = calls["n"]
-
-    calls["n"] = 0
-    fit_service.score_many("u1", ["GP"])
-    assert many_reads == calls["n"]               # 3 symbols cost no more than 1
+    assert calls["n"] == 2                         # 3 symbols cost no more than 1 (+ market fallback)
 
 def test_score_many_single_symbol_matches_fit_for(wired):
     many = fit_service.score_many("u1", ["GP"])["GP"]
     one = fit_service.fit_for("u1", "GP")
     assert many["composite"] == one["composite"]
     assert [a["axis"] for a in many["axes"]] == [a["axis"] for a in one["axes"]]
+
+
+def test_peer_metrics_is_cached_across_calls_for_the_same_sector_same_day(wired, monkeypatch):
+    # #106: a second score_many call for the same sector, same day, should hit
+    # the cache — zero further price_archive reads, not "the same as before".
+    calls = {"n": 0}
+    orig = db.query_rows
+    def counting(sql, params=None):
+        if "price_archive" in sql:
+            calls["n"] += 1
+        return orig(sql, params)
+    monkeypatch.setattr(db, "query_rows", counting)
+
+    fit_service.score_many("u1", ["GP", "ROBI", "BATBC"])
+    assert calls["n"] == 2                         # sector read + market-fallback read
+    calls["n"] = 0
+    fit_service.score_many("u1", ["GP"])           # same sector, same (mocked) day
+    assert calls["n"] == 0
+
+
+def test_peer_metrics_cache_is_keyed_per_sector(monkeypatch):
+    # A different sector must not reuse another sector's cached cohort.
+    calls = {"n": 0}
+    def counting(sql, params=None):
+        if "price_archive" in sql:
+            calls["n"] += 1
+        return []
+    monkeypatch.setattr(db, "query_rows", counting)
+
+    fit_service.peer_metrics("Telecom")
+    fit_service.peer_metrics("Bank")
+    assert calls["n"] == 2                         # each sector queried once, independently
+    fit_service.peer_metrics("Telecom")             # revisiting Telecom -> cache hit
+    assert calls["n"] == 2
+
+
+def test_peer_metrics_refetches_on_a_new_day(monkeypatch):
+    # The cache key includes the day, so a day rollover is a fresh fetch —
+    # simulated by monkeypatching the day helper rather than real time travel.
+    calls = {"n": 0}
+    def counting(sql, params=None):
+        if "price_archive" in sql:
+            calls["n"] += 1
+        return []
+    monkeypatch.setattr(db, "query_rows", counting)
+
+    monkeypatch.setattr(fit_service, "_today", lambda: "2026-01-01")
+    fit_service.peer_metrics("Telecom")
+    assert calls["n"] == 1
+
+    fit_service.peer_metrics("Telecom")            # same day -> cached
+    assert calls["n"] == 1
+
+    monkeypatch.setattr(fit_service, "_today", lambda: "2026-01-02")
+    fit_service.peer_metrics("Telecom")             # new day -> refetched
+    assert calls["n"] == 2

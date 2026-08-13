@@ -9,8 +9,24 @@ functions the single-stock path uses, so the subject is compared like-for-like.
 When a sector has too few peers for a percentile to mean anything (< MIN_COHORT),
 each thin metric falls back to the market-wide distribution — the fallback the
 decision called for.
+
+#106: a sector's cohort is a market aggregate, identical for every user asking
+about that sector on the same day — recomputing it per request wastes free-tier
+quota. `peer_metrics` is cached in-process, keyed by (sector, today's UTC date):
+a new day is a fresh key, so the cache self-invalidates once the nightly ETL
+(etl-market.yml) would plausibly have refreshed the underlying tables, with no
+explicit invalidation logic. (A request landing before that day's ETL finishes
+can seed that day's entry with the previous day's figures for the rest of the
+day — a bounded, once-a-day worst case; not tracked more precisely, since that
+would mean reading the ETL tables' own last-updated timestamp.) This also
+retires `_MarketCache`: with `peer_metrics(None)` itself cached, a second call
+for the market-wide fallback is already a cheap cache hit, so the per-request
+wrapper class that existed only to avoid re-querying within one `score_many`
+call is redundant.
 """
 from collections import defaultdict
+from datetime import datetime, timezone
+from functools import lru_cache
 
 from google.cloud import bigquery
 
@@ -40,10 +56,26 @@ def sector_of(symbol: str) -> str | None:
     return rows[0]["Sector"] if rows else None
 
 
+def _today() -> str:
+    return datetime.now(timezone.utc).date().isoformat()
+
+
+@lru_cache(maxsize=64)
+def _cached_peer_metrics(sector: str | None, day: str) -> dict[str, dict]:
+    return _fetch_peer_metrics(sector)
+
+
 def peer_metrics(sector: str | None) -> dict[str, dict]:
     """Every symbol in `sector` (or the whole market when `sector` is None), each
-    with its derived fit metrics — the same figures `get_fundamentals` computes,
-    but for the cohort in a handful of reads.
+    with its derived fit metrics. Cached per (sector, day) — see module
+    docstring (#106); callers must treat the returned dict as read-only, since
+    it's shared across every caller for the rest of the day."""
+    return _cached_peer_metrics(sector, _today())
+
+
+def _fetch_peer_metrics(sector: str | None) -> dict[str, dict]:
+    """The uncached bulk reads `peer_metrics` fronts — the same figures
+    `get_fundamentals` computes, but for the cohort in a handful of reads.
 
     PE and volatility come from `price_archive` (the archive carries the daily
     valuation columns; the datamatrix's PE columns only exist after a widened
@@ -128,35 +160,24 @@ def _arrays(peers: dict[str, dict]) -> dict[str, list[float]]:
     }
 
 
-def _cohort(peers: dict[str, dict], market: "_MarketCache") -> tuple[dict, dict]:
+def _cohort(peers: dict[str, dict]) -> tuple[dict, dict]:
     """Build the engine's cohort arrays + their scope labels from a sector's peers,
     filling any thin metric (< MIN_COHORT) from the market-wide distribution
-    (decision: n < 5). `market` is a lazy, once-built market cohort shared across
-    every symbol in a batch."""
+    (decision: n < 5). `peer_metrics(None)` is itself day-cached (#106), so
+    calling it here costs nothing beyond the first sector that needs the
+    fallback each day."""
     sector_arrays = _arrays(peers)
     cohort: dict[str, list[float]] = {}
     scope: dict[str, str] = {}
     for ck in _METRIC_KEYS:
         arr = sector_arrays.get(ck, [])
         if len(arr) < MIN_COHORT:
-            marr = _arrays(market.peers()).get(ck, [])
+            marr = _arrays(peer_metrics(None)).get(ck, [])
             if len(marr) > len(arr):
                 cohort[ck], scope[ck] = marr, "market"
                 continue
         cohort[ck], scope[ck] = arr, "sector"
     return cohort, scope
-
-
-class _MarketCache:
-    """Builds the market-wide peer set at most once per request, however many
-    sectors and symbols end up needing the n<5 fallback."""
-    def __init__(self):
-        self._peers: dict[str, dict] | None = None
-
-    def peers(self) -> dict[str, dict]:
-        if self._peers is None:
-            self._peers = peer_metrics(None)
-        return self._peers
 
 
 def _null_subject(sector: str | None) -> dict:
@@ -172,11 +193,12 @@ def fit_for(user_id: str, symbol: str) -> dict:
 def score_many(user_id: str, symbols: list[str]) -> dict[str, dict]:
     """Score many stocks against one profile — the seam #89 (feed) / #91
     (portfolio) / #93 (recommendations) rank through. The sector cohort is built
-    ONCE per sector (not a per-symbol fan-out), and the market fallback at most
-    once for the whole batch. Returns {SYMBOL: FitScore-dict}."""
+    ONCE per sector (not a per-symbol fan-out) within this call, and — since
+    #106 — `peer_metrics` is itself cached per (sector, day), so repeating the
+    same sector across separate `score_many` calls the same day costs no
+    further BigQuery reads either. Returns {SYMBOL: FitScore-dict}."""
     symbols = [s.upper() for s in symbols]
     profile = get_profile(user_id)
-    market = _MarketCache()
 
     sector_by_symbol: dict[str, str | None] = {}
     peers_by_sector: dict[str | None, dict[str, dict]] = {}
@@ -188,13 +210,14 @@ def score_many(user_id: str, symbols: list[str]) -> dict[str, dict]:
         sector = sector_by_symbol[symbol]
         if sector not in peers_by_sector:
             peers_by_sector[sector] = peer_metrics(sector) if sector else {}
-            cohort_by_sector[sector] = _cohort(peers_by_sector[sector], market)
+            cohort_by_sector[sector] = _cohort(peers_by_sector[sector])
         peers = peers_by_sector[sector]
         cohort, scope = cohort_by_sector[sector]      # built once per sector, not per symbol
+        market = peer_metrics(None) if _uses_market(scope) else {}
         if symbol in peers:
             subject = peers[symbol]
-        elif _uses_market(scope) and symbol in market.peers():
-            subject = market.peers()[symbol]        # thin sector: subject rode the fallback
+        elif symbol in market:
+            subject = market[symbol]                # thin sector: subject rode the fallback
         else:
             subject = _null_subject(sector)
         out[symbol] = engine_score(profile, symbol, subject, cohort, scope).model_dump()

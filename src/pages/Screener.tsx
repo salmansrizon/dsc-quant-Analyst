@@ -2,6 +2,8 @@ import { useState } from 'react';
 import { track } from '../api/behaviour';
 import type { AxiosInstance } from 'axios';
 import { Link } from 'react-router-dom';
+import { FitScorecard } from '../components/ui/FitScorecard';
+import { useFitScores } from '../hooks/useFitScores';
 
 interface Row {
   symbol: string;
@@ -44,6 +46,7 @@ export default function Screener({ client }: { client: AxiosInstance }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const fitScores = useFitScores(client, rows.map((r) => r.symbol));
 
   const body = (preset?: string) => ({
     preset,
@@ -213,6 +216,7 @@ export default function Screener({ client }: { client: AxiosInstance }) {
                 <tr className="text-left text-gray-500">
                   <th className="px-3 py-2" />
                   <th className="px-3 py-2">Symbol</th>
+                  <th className="px-3 py-2">Fit</th>
                   <th className="px-3 py-2">Sector</th>
                   <th className="px-3 py-2 text-right">Price</th>
                   <th className="px-3 py-2 text-right">Mkt Cap (bn)</th>
@@ -236,6 +240,9 @@ export default function Screener({ client }: { client: AxiosInstance }) {
                       <Link to={`/stock/${r.symbol}`} className="text-indigo-600 hover:underline">
                         {r.symbol}
                       </Link>
+                    </td>
+                    <td className="px-3 py-2">
+                      <FitScorecard fit={fitScores[r.symbol.toUpperCase()]} />
                     </td>
                     <td className="px-3 py-2 text-gray-600">{r.sector ?? '—'}</td>
                     <td className="px-3 py-2 text-right">{num(r.price)}</td>

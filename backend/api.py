@@ -15,7 +15,7 @@ from .models import (
     WatchlistAdd, PortfolioAdd, PortfolioUpdate, AlertCreate,
     ScreenerRequest, ScreenerResponse, ScreenerWatchlistAdd,
     SubscriptionCreate, BundleCreate, NotificationPreferences,
-    InvestorProfile, ProfileUpdate, FitScore, PortfolioHealth, Recommendations,
+    InvestorProfile, ProfileUpdate, FitScore, FitBatchRequest, PortfolioHealth, Recommendations,
     BehaviourBatch, Feed,
 )
 from .user_service import (
@@ -342,6 +342,13 @@ def profile_sectors(current_user: UserResponse = Depends(get_current_user)):
 def fit_score(symbol: str, current_user: UserResponse = Depends(get_current_user)):
     # Explainable per-axis fit of a stock against the caller's profile (#88).
     return fit_service.fit_for(current_user.id, symbol)
+
+
+@app.post("/api/fit/batch", response_model=dict[str, FitScore])
+def fit_score_batch(payload: FitBatchRequest, current_user: UserResponse = Depends(get_current_user)):
+    # #89: the batched seam a page with many visible rows calls through — the
+    # sector cohort is built once for the whole request, not once per symbol.
+    return fit_service.score_many(current_user.id, payload.symbols)
 
 
 @app.get("/api/recommendations", response_model=Recommendations)

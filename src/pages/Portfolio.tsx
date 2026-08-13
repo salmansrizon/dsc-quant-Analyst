@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react';
 import type { AxiosInstance } from 'axios';
+import { FitScorecard } from '../components/ui/FitScorecard';
+import { useFitScores } from '../hooks/useFitScores';
 
 interface Holding {
   id: string;
@@ -25,6 +27,7 @@ export default function Portfolio({ client }: { client: AxiosInstance }) {
   const [holdings, setHoldings] = useState<Holding[]>([]);
   const [summary, setSummary] = useState<Summary>({});
   const [loading, setLoading] = useState(true);
+  const fitScores = useFitScores(client, holdings.map((h) => h.symbol));
 
   useEffect(() => {
     Promise.all([client.get('/portfolio'), client.get('/portfolio/summary')])
@@ -65,6 +68,7 @@ export default function Portfolio({ client }: { client: AxiosInstance }) {
           <thead>
             <tr>
               <th className="px-4 py-2 text-left">Symbol</th>
+              <th className="px-4 py-2 text-left">Fit</th>
               <th className="px-4 py-2 text-right">Qty</th>
               <th className="px-4 py-2 text-right">Buy Price</th>
               <th className="px-4 py-2 text-right">Current</th>
@@ -76,6 +80,9 @@ export default function Portfolio({ client }: { client: AxiosInstance }) {
             {holdings.map((h) => (
               <tr key={h.id} data-testid="portfolio-row">
                 <td className="px-4 py-2 font-medium">{h.symbol}</td>
+                <td className="px-4 py-2">
+                  <FitScorecard fit={fitScores[h.symbol.toUpperCase()]} />
+                </td>
                 <td className="px-4 py-2 text-right">{h.quantity}</td>
                 <td className="px-4 py-2 text-right">{money(h.buy_price)}</td>
                 <td className="px-4 py-2 text-right">{money(h.current_price)}</td>

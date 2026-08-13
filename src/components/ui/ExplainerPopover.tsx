@@ -1,6 +1,12 @@
 import * as HoverCard from '@radix-ui/react-hover-card';
 import { CircleHelp } from 'lucide-react';
 import type { ReactNode } from 'react';
+import {
+  HOVER_CARD_ARROW_CLASS,
+  HOVER_CARD_CLOSE_DELAY,
+  HOVER_CARD_CONTENT_CLASS,
+  HOVER_CARD_OPEN_DELAY,
+} from '../../design/hoverCard';
 
 interface ExplainerPopoverProps {
   /** The reason string — must always be human-readable, per the map's
@@ -14,7 +20,7 @@ interface ExplainerPopoverProps {
 // market data doesn't get one — see #87's microcopy-scope decision.
 export function ExplainerPopover({ children, label = 'What does this mean?' }: ExplainerPopoverProps) {
   return (
-    <HoverCard.Root openDelay={150} closeDelay={100}>
+    <HoverCard.Root openDelay={HOVER_CARD_OPEN_DELAY} closeDelay={HOVER_CARD_CLOSE_DELAY}>
       <HoverCard.Trigger asChild>
         <button
           type="button"
@@ -25,13 +31,9 @@ export function ExplainerPopover({ children, label = 'What does this mean?' }: E
         </button>
       </HoverCard.Trigger>
       <HoverCard.Portal>
-        <HoverCard.Content
-          side="top"
-          sideOffset={6}
-          className="max-w-xs rounded-lg border border-[var(--border-color)] bg-[var(--bg-elevated)] p-3 text-sm text-[var(--text-primary)] shadow-[var(--shadow-elevated)]"
-        >
+        <HoverCard.Content side="top" sideOffset={6} className={HOVER_CARD_CONTENT_CLASS}>
           {children}
-          <HoverCard.Arrow className="fill-[var(--bg-elevated)]" />
+          <HoverCard.Arrow className={HOVER_CARD_ARROW_CLASS} />
         </HoverCard.Content>
       </HoverCard.Portal>
     </HoverCard.Root>

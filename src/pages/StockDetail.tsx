@@ -7,6 +7,8 @@ import PriceChart, { type Candle } from '../components/PriceChart/PriceChart';
 import CandlestickChart from '../components/CandlestickChart/CandlestickChart';
 import { Badge } from '../components/ui/Badge';
 import { ExplainerPopover } from '../components/ui/ExplainerPopover';
+import { FitScorecard } from '../components/ui/FitScorecard';
+import { useFitScores } from '../hooks/useFitScores';
 import { errorMessage } from '../api/errorMessage';
 import { useToast } from '../context/ToastContext';
 
@@ -119,6 +121,7 @@ export default function StockDetail({ client }: { client: AxiosInstance }) {
   const [chart, setChart] = useState<'line' | 'candles'>('line');
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const fitScores = useFitScores(client, symbol ? [symbol] : []);
 
   useEffect(() => {
     setLoading(true);
@@ -148,7 +151,10 @@ export default function StockDetail({ client }: { client: AxiosInstance }) {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-semibold">{fund.symbol}</h1>
+        <div className="flex items-center gap-3">
+          <h1 className="text-2xl font-semibold">{fund.symbol}</h1>
+          <FitScorecard fit={fitScores[fund.symbol.toUpperCase()]} />
+        </div>
         <Link to="/screener" className="text-sm text-indigo-600 hover:underline">
           ← Screener
         </Link>

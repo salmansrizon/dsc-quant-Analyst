@@ -17,15 +17,19 @@ export interface ScorecardAxis {
 interface ScorecardShellProps {
   axes: ScorecardAxis[];
   revealIndex?: number;
+  /** Renders above the axes list — e.g. #89's "complete your profile" prompt
+   * on a default-profile scorecard, which must precede the axes, not follow. */
+  header?: ReactNode;
   footer?: ReactNode;
 }
 
-// The presentational shell for the Fit Scorecard — #89 (blocked on this
-// ticket) supplies the real fit-engine axes; this only defines the layout,
-// the explainer wiring, and the badge/value slots.
-export function ScorecardShell({ axes, revealIndex, footer }: ScorecardShellProps) {
+// The presentational shell for the Fit Scorecard — #89 supplies the real
+// fit-engine axes; this only defines the layout, the explainer wiring, and
+// the badge/value slots.
+export function ScorecardShell({ axes, revealIndex, header, footer }: ScorecardShellProps) {
   return (
     <Zone type="fit" revealIndex={revealIndex}>
+      {header}
       <ul className="flex flex-col gap-3">
         {axes.map((axis) => (
           <li key={axis.key} className="flex items-center justify-between gap-3">

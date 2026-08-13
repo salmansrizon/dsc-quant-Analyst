@@ -199,6 +199,12 @@ class FitScore(BaseModel):
     disclaimer: str
 
 
+class FitBatchRequest(BaseModel):
+    """#89: score many symbols in one call through score_many's batched seam —
+    the sector cohort is built once, not once per visible row."""
+    symbols: list[str] = Field(min_length=1, max_length=100)
+
+
 # ─── Behaviour tracking (#86, personalization spine #84) ─────────────────────
 
 BehaviourType = Literal[

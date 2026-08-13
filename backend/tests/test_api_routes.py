@@ -203,6 +203,48 @@ def test_fit_route_requires_auth():
     assert TestClient(app).get("/api/fit/GP").status_code in (401, 403)
 
 
+def test_post_fit_batch_scores_multiple_symbols_through_the_seam(authed, monkeypatch):
+    # #89: the batched seam a page with many visible rows calls instead of
+    # fanning out one GET /api/fit/{symbol} per row — the sector cohort must
+    # still only be built once, same as score_many's own contract.
+    def dispatch(sql, params=None):
+        if "investor_profiles" in sql:
+            return []                              # neutral default profile
+        if "SELECT Sector FROM" in sql:
+            return [{"Sector": "Telecom"}]
+        if "Symbol, Sector, LTP" in sql:
+            return [{"Symbol": "GP", "Sector": "Telecom", "LTP": 300.0},
+                    {"Symbol": "ROBI", "Sector": "Telecom", "LTP": 30.0}]
+        if "price_archive" in sql:
+            return [{"Symbol": "GP", "pe": 10.0, "vol": 0.05, "bars": 30},
+                    {"Symbol": "ROBI", "pe": 20.0, "vol": 0.2, "bars": 30}]
+        if "fundamentals_earnings" in sql:
+            return [{"symbol": "GP", "year": 2018, "eps": 5.0, "nav": 40.0},
+                    {"symbol": "GP", "year": 2024, "eps": 12.0, "nav": 60.0}]
+        if "fundamentals_dividends" in sql:
+            return [{"symbol": "GP", "year": 2024, "dividend_type": "ANNUAL",
+                     "cash_dividend_pct": 200.0, "publish_date": "2024-06-01"}]
+        return []
+    monkeypatch.setattr(db, "query_rows", dispatch)
+
+    resp = authed.post("/api/fit/batch", json={"symbols": ["gp", "robi"]})
+    assert resp.status_code == 200
+    body = resp.json()
+    assert set(body) == {"GP", "ROBI"}
+    assert body["GP"]["symbol"] == "GP"
+    assert {a["axis"] for a in body["GP"]["axes"]} == {"Value", "Income", "Growth", "Stability", "Sector"}
+
+
+def test_fit_batch_route_requires_auth():
+    resp = TestClient(app).post("/api/fit/batch", json={"symbols": ["GP"]})
+    assert resp.status_code in (401, 403)
+
+
+def test_fit_batch_route_rejects_an_empty_symbol_list(authed):
+    resp = authed.post("/api/fit/batch", json={"symbols": []})
+    assert resp.status_code == 422
+
+
 def test_portfolio_health_route(authed, monkeypatch):
     def dispatch(sql, params=None):
         if "p.symbol" in sql:                              # get_portfolio

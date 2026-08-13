@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
 import type { AxiosInstance } from 'axios';
 import PriceChart, { type Candle } from '../components/PriceChart/PriceChart';
+import { FitScorecard } from '../components/ui/FitScorecard';
+import { useFitScores } from '../hooks/useFitScores';
 
 interface WatchlistItem {
   id: string;
@@ -16,6 +18,7 @@ export default function Watchlist({ client }: { client: AxiosInstance }) {
   const [selected, setSelected] = useState<string>('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const fitScores = useFitScores(client, items.map((it) => it.symbol));
 
   useEffect(() => {
     client
@@ -49,6 +52,7 @@ export default function Watchlist({ client }: { client: AxiosInstance }) {
             <thead>
               <tr>
                 <th className="px-4 py-2 text-left">Symbol</th>
+                <th className="px-4 py-2 text-left">Fit</th>
                 <th className="px-4 py-2 text-left">Sector</th>
                 <th className="px-4 py-2 text-right">LTP</th>
                 <th className="px-4 py-2 text-right">Change %</th>
@@ -59,6 +63,9 @@ export default function Watchlist({ client }: { client: AxiosInstance }) {
               {items.map((it) => (
                 <tr key={it.id} data-testid="watchlist-row">
                   <td className="px-4 py-2 font-medium">{it.symbol}</td>
+                  <td className="px-4 py-2">
+                    <FitScorecard fit={fitScores[it.symbol.toUpperCase()]} />
+                  </td>
                   <td className="px-4 py-2 text-gray-600">{it.Sector ?? '—'}</td>
                   <td className="px-4 py-2 text-right">{it.LTP?.toFixed(2) ?? '—'}</td>
                   <td

@@ -2,15 +2,46 @@
    base styles below (unlayered custom classes .card/.border/.btn-*, CSS-variable
    dark mode) stay the base layer; unlayered CSS wins the cascade over Tailwind's
    layered utilities, so the 18 pre-classed files' utilities light up additively
-   without the reset clobbering existing styling. #87 revisits preflight when it
-   defines the design language. */
+   without the reset clobbering existing styling. #87 defines the design tokens
+   below but intentionally leaves preflight disabled — turning it on now would
+   reset the 18 files still styled by the legacy unlayered classes before #97
+   (full app reskin) has migrated them off. Revisit preflight there. */
 @layer theme, base, components, utilities;
 @import 'tailwindcss/theme.css' layer(theme);
 @import 'tailwindcss/utilities.css' layer(utilities);
 
+/* #87: dark is the product default (TradingView-style), so :root itself is the
+   dark palette — no flash of the light theme before ThemeContext's effect runs
+   on mount. [data-theme='light'] below is the explicit opt-out. Palette is our
+   own (near-black navy surfaces, single accent hue), not lifted from
+   tradingview.com — see #87's decision record. */
 :root {
+  --bg-primary: #0d0f14;
+  --bg-secondary: #161a22;
+  --bg-elevated: #1e2330;
+  --text-primary: #e6e8ec;
+  --text-secondary: #9aa1ad;
+  --accent-blue: #3b82f6;
+  --accent-green: #34d399;
+  --accent-red: #f87171;
+  --border-color: #2b303c;
+  --body-gradient: linear-gradient(135deg, #0a0c11 0%, #12151c 100%);
+  --shadow-elevated: 0 8px 24px rgba(0, 0, 0, 0.45);
+
+  /* Zone-type identity accents (#87 zone vocabulary) — muted, categorical,
+     distinct from --accent-blue so the primary brand accent stays legible. */
+  --zone-price: var(--accent-blue);
+  --zone-fundamentals: #2dd4bf;
+  --zone-fit: #a78bfa;
+  --zone-sector: #fbbf24;
+  --zone-news: #94a3b8;
+}
+
+/* Light mode — explicit opt-out via ThemeContext's toggle. */
+[data-theme='light'] {
   --bg-primary: #f7f7f7;
   --bg-secondary: #ffffff;
+  --bg-elevated: #ffffff;
   --text-primary: #1a1a1a;
   --text-secondary: #666666;
   --accent-blue: #2563eb;
@@ -18,21 +49,13 @@
   --accent-red: #ef4444;
   --border-color: #e5e7eb;
   --body-gradient: linear-gradient(135deg, #f0f4f8 0%, #e5e7eb 100%);
-}
+  --shadow-elevated: 0 8px 24px rgba(0, 0, 0, 0.12);
 
-/* Dark mode (#82). ThemeContext toggles data-theme on <html>; these overrides
-   flow through the CSS-variable-backed utility classes below (.card, .border,
-   .text-primary, .btn-*, body). */
-[data-theme='dark'] {
-  --bg-primary: #12151c;
-  --bg-secondary: #1b1f2a;
-  --text-primary: #e6e8ec;
-  --text-secondary: #9aa1ad;
-  --accent-blue: #3b82f6;
-  --accent-green: #34d399;
-  --accent-red: #f87171;
-  --border-color: #2b303c;
-  --body-gradient: linear-gradient(135deg, #0d0f14 0%, #161a22 100%);
+  --zone-price: var(--accent-blue);
+  --zone-fundamentals: #0d9488;
+  --zone-fit: #7c3aed;
+  --zone-sector: #d97706;
+  --zone-news: #64748b;
 }
 
 * {

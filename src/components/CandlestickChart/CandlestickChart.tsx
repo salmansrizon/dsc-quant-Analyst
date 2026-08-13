@@ -1,16 +1,16 @@
-import { useMemo } from 'react';
 import {
-  Bar,
-  ComposedChart,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis,
-} from 'recharts';
+  CandlestickSeries,
+  ColorType,
+  createChart,
+  type IChartApi,
+  type ISeriesApi,
+} from 'lightweight-charts';
+import { useEffect, useRef } from 'react';
+import { useTheme } from '../../context/ThemeContext';
 import type { Candle } from '../PriceChart/PriceChart';
 
 interface OHLC {
-  date: string;
+  time: string;
   open: number;
   high: number;
   low: number;
@@ -26,48 +26,84 @@ function toOHLC(c: Candle): OHLC {
   const high = (anyC.high ?? anyC.High ?? Math.max(open, close)) as number;
   const low = (anyC.low ?? anyC.Low ?? Math.min(open, close)) as number;
   const date = (anyC.date ?? anyC.Date ?? '') as string;
-  return { date, open, high, low, close };
+  return { time: date, open, high, low, close };
 }
 
-// Recharts renders one Bar spanning [low, high]; this shape paints the wick +
-// the open→close body, green up / red down, off the theme CSS variables.
-function CandleShape(props: {
-  x?: number;
-  y?: number;
-  width?: number;
-  height?: number;
-  payload?: OHLC;
-}) {
-  const { x = 0, y = 0, width = 0, height = 0, payload } = props;
-  if (!payload) return null;
-  const { open, close, high, low } = payload;
-  const isUp = close >= open;
-  const color = isUp ? 'var(--accent-green)' : 'var(--accent-red)';
-  const range = high - low || 1;
-  const bodyTop = y + (height * (high - Math.max(open, close))) / range;
-  const bodyBottom = y + (height * (high - Math.min(open, close))) / range;
-  const bodyHeight = Math.max(bodyBottom - bodyTop, 1);
-  const cx = x + width / 2;
-  return (
-    <g>
-      <line x1={cx} x2={cx} y1={y} y2={y + height} stroke={color} strokeWidth={1} />
-      <rect x={x} y={bodyTop} width={width} height={bodyHeight} fill={color} />
-    </g>
-  );
+function cssVar(name: string, fallback: string): string {
+  if (typeof window === 'undefined') return fallback;
+  const value = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+  return value || fallback;
+}
+
+// #87: reads the design tokens live (not hard-coded) so the chart follows the
+// light/dark toggle — lightweight-charts paints to canvas, so colors must be
+// resolved to literal strings rather than left as var(--x) references.
+function chartLayoutOptions() {
+  const borderColor = cssVar('--border-color', '#2b303c');
+  return {
+    layout: {
+      background: { type: ColorType.Solid, color: 'transparent' },
+      textColor: cssVar('--text-secondary', '#9aa1ad'),
+    },
+    grid: {
+      vertLines: { color: borderColor },
+      horzLines: { color: borderColor },
+    },
+    timeScale: { borderColor },
+    rightPriceScale: { borderColor },
+  };
+}
+
+function candleSeriesOptions() {
+  const up = cssVar('--accent-green', '#34d399');
+  const down = cssVar('--accent-red', '#f87171');
+  return {
+    upColor: up,
+    downColor: down,
+    borderVisible: false,
+    wickUpColor: up,
+    wickDownColor: down,
+  };
 }
 
 export default function CandlestickChart({ data }: { data: Candle[] }) {
-  const series = useMemo(() => data.map(toOHLC), [data]);
-  return (
-    <div data-testid="candlestick-chart" style={{ height: 300 }}>
-      <ResponsiveContainer width="100%" height="100%">
-        <ComposedChart data={series}>
-          <XAxis dataKey="date" tick={{ fontSize: 11 }} minTickGap={24} axisLine={false} tickLine={false} />
-          <YAxis domain={['dataMin', 'dataMax']} tick={{ fontSize: 11 }} width={48} axisLine={false} tickLine={false} />
-          <Tooltip />
-          <Bar dataKey={(d: OHLC) => [d.low, d.high]} shape={CandleShape as never} isAnimationActive={false} />
-        </ComposedChart>
-      </ResponsiveContainer>
-    </div>
-  );
+  const containerRef = useRef<HTMLDivElement>(null);
+  const chartRef = useRef<IChartApi | null>(null);
+  const seriesRef = useRef<ISeriesApi<'Candlestick'> | null>(null);
+  const { theme } = useTheme();
+
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+
+    const chart = createChart(container, { autoSize: true, ...chartLayoutOptions() });
+    const series = chart.addSeries(CandlestickSeries, candleSeriesOptions());
+    chartRef.current = chart;
+    seriesRef.current = series;
+
+    return () => {
+      chart.remove();
+      chartRef.current = null;
+      seriesRef.current = null;
+    };
+  }, []);
+
+  // Re-apply resolved colors whenever the light/dark toggle flips.
+  useEffect(() => {
+    chartRef.current?.applyOptions(chartLayoutOptions());
+    seriesRef.current?.applyOptions(candleSeriesOptions());
+  }, [theme]);
+
+  useEffect(() => {
+    const series = seriesRef.current;
+    if (!series) return;
+    const points = data
+      .map(toOHLC)
+      .filter((d) => d.time)
+      .sort((a, b) => (a.time < b.time ? -1 : a.time > b.time ? 1 : 0));
+    series.setData(points as never);
+    chartRef.current?.timeScale().fitContent();
+  }, [data]);
+
+  return <div ref={containerRef} data-testid="candlestick-chart" style={{ height: 300 }} />;
 }

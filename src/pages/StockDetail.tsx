@@ -5,6 +5,8 @@ import type { AxiosInstance } from 'axios';
 import { Bell } from 'lucide-react';
 import PriceChart, { type Candle } from '../components/PriceChart/PriceChart';
 import CandlestickChart from '../components/CandlestickChart/CandlestickChart';
+import { Badge } from '../components/ui/Badge';
+import { ExplainerPopover } from '../components/ui/ExplainerPopover';
 import { errorMessage } from '../api/errorMessage';
 import { useToast } from '../context/ToastContext';
 
@@ -213,11 +215,11 @@ export default function StockDetail({ client }: { client: AxiosInstance }) {
                   <td className="px-3 py-2 font-medium">
                     {r.reported_as}
                     {r.sign_inverted && (
-                      <span
-                        title="Sign may be misleading — e.g. a loss over negative equity"
-                        className="ml-2 text-xs text-amber-600"
-                      >
-                        ⚠ sign
+                      <span className="ml-2 inline-flex items-center gap-1">
+                        <Badge variant="warning">⚠ sign</Badge>
+                        <ExplainerPopover label="Why this sign may be misleading">
+                          Sign may be misleading — e.g. a loss over negative equity.
+                        </ExplainerPopover>
                       </span>
                     )}
                   </td>

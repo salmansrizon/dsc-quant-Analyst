@@ -8,11 +8,11 @@ interface ThemeContextValue {
 }
 
 // Ported from main's ThemeContext (#82). Drives dark mode through the
-// `data-theme` attribute on <html> — index.css defines the [data-theme='dark']
-// CSS-variable overrides, so this works with the repo's actual styling (there
-// is no Tailwind here; utility-class dark: variants would be inert).
+// `data-theme` attribute on <html> — index.css's :root is the dark palette by
+// default (#87: dark is the product default, TradingView-style) and
+// [data-theme='light'] is the explicit opt-out.
 const ThemeContext = createContext<ThemeContextValue>({
-  theme: 'light',
+  theme: 'dark',
   toggleTheme: () => {},
 });
 
@@ -20,7 +20,7 @@ export const useTheme = () => useContext(ThemeContext);
 
 function initialTheme(): Theme {
   const stored = typeof localStorage !== 'undefined' ? localStorage.getItem('theme') : null;
-  return stored === 'dark' || stored === 'light' ? stored : 'light';
+  return stored === 'dark' || stored === 'light' ? stored : 'dark';
 }
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {

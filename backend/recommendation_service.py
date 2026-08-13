@@ -102,7 +102,7 @@ def _rank(user_id, candidates, sector_of, profile, engaged, unmet, fits):
             sources.append("gap")
         sources = sources or ["fit"]
         boost = (_GAP_BOOST if "gap" in sources else 0.0) \
-            + _AFFINITY_WEIGHT * affinity.affinity_score(user_id, sym)
+            + _AFFINITY_WEIGHT * affinity.affinity_score(user_id, sym, sec)
         ranked.append((fit.composite + boost, sym, sec, fit, sources))
     ranked.sort(key=lambda t: t[0], reverse=True)
     return [(sym, sec, fit, sources) for _, sym, sec, fit, sources in ranked]

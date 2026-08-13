@@ -1,7 +1,10 @@
 """Recommendations + strategy nudges (#93). The service's BQ deps (profile,
-portfolio, universe, score_many) are monkeypatched so the generator/ranking/nudge
-logic tests deterministically, no BigQuery."""
-from backend import recommendation_service as rec, fit_service
+portfolio, universe, score_many, affinity) are monkeypatched so the
+generator/ranking/nudge logic tests deterministically, no BigQuery. Affinity's
+own blend/threshold/caching formula (#107) has its own dedicated
+test_affinity.py — here it's neutralized to the pre-#107 placeholder so ranking
+order stays a pure function of fit."""
+from backend import recommendation_service as rec, fit_service, affinity
 from backend.models import InvestorProfile
 
 
@@ -48,6 +51,8 @@ def _wire(monkeypatch, profile, holdings):
     monkeypatch.setattr(rec, "_universe", lambda: UNIVERSE)
     monkeypatch.setattr(fit_service, "score_many",
                         lambda uid, syms: {s: FITS[s] for s in syms if s in FITS})
+    monkeypatch.setattr(affinity, "engaged_sectors", lambda uid: [])
+    monkeypatch.setattr(affinity, "affinity_score", lambda uid, sym, sector=None: 0.0)
 
 
 def test_default_profile_returns_no_recs_and_a_set_profile_nudge(monkeypatch):

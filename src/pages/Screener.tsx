@@ -46,7 +46,7 @@ export default function Screener({ client }: { client: AxiosInstance }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
-  const fitScores = useFitScores(client, rows.map((r) => r.symbol));
+  const getFit = useFitScores(client, rows.map((r) => r.symbol));
 
   const body = (preset?: string) => ({
     preset,
@@ -242,7 +242,7 @@ export default function Screener({ client }: { client: AxiosInstance }) {
                       </Link>
                     </td>
                     <td className="px-3 py-2">
-                      <FitScorecard fit={fitScores[r.symbol.toUpperCase()]} />
+                      <FitScorecard fit={getFit(r.symbol)} />
                     </td>
                     <td className="px-3 py-2 text-gray-600">{r.sector ?? '—'}</td>
                     <td className="px-3 py-2 text-right">{num(r.price)}</td>

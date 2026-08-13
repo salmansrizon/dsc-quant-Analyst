@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
-import { getZoneConfig, type ZoneType } from '../../design/zones';
+import type { ZoneType } from '../../design/zones';
 import { Card } from './Card';
+import { ZoneHeader } from './ZoneHeader';
 
 interface ZoneProps {
   type: ZoneType;
@@ -13,17 +14,10 @@ interface ZoneProps {
 // / Dashboard (#96) section renders through one of these instead of a bespoke
 // per-page layout.
 export function Zone({ type, children, revealIndex, actions }: ZoneProps) {
-  const config = getZoneConfig(type);
-  const { Icon } = config;
   return (
     <Card revealIndex={revealIndex} testId={`zone-${type}`}>
       <div className="mb-3 flex items-center justify-between gap-2">
-        <div className="flex items-center gap-2">
-          <Icon size={16} style={{ color: config.colorVar }} />
-          <span className="text-sm font-semibold" style={{ color: config.colorVar }}>
-            {config.label}
-          </span>
-        </div>
+        <ZoneHeader type={type} />
         {actions}
       </div>
       {children}

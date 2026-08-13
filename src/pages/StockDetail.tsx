@@ -142,7 +142,7 @@ export default function StockDetail({ client }: { client: AxiosInstance }) {
   const [chart, setChart] = useState<'line' | 'candles'>('line');
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
-  const fitScores = useFitScores(client, symbol ? [symbol] : []);
+  const getFit = useFitScores(client, symbol ? [symbol] : []);
 
   useEffect(() => {
     setLoading(true);
@@ -168,7 +168,7 @@ export default function StockDetail({ client }: { client: AxiosInstance }) {
 
   const d = fund.derived;
   const ratios = Object.entries(fund.reported);
-  const fit = fitScores[fund.symbol.toUpperCase()];
+  const fit = getFit(fund.symbol);
 
   return (
     <div className="space-y-6">

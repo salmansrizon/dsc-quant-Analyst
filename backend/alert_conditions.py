@@ -43,16 +43,6 @@ def price_condition(op: str, value: float) -> str:
     return json.dumps({"op": op, "value": value})
 
 
-def describe(symbol: str, condition_json: Optional[str]) -> str:
-    """A human phrase for a condition, e.g. "GP above 100".
-
-    Owns the rendering of a condition so callers building a notification subject
-    don't re-parse condition_json themselves.
-    """
-    cond = parse_condition(condition_json)
-    return f"{symbol} {cond.get('op')} {cond.get('value')}"
-
-
 def is_met(alert_type: str, condition_json: Optional[str],
            current_price: Optional[float]) -> Optional[bool]:
     """Whether the condition holds at `current_price`.

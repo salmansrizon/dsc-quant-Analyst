@@ -15,6 +15,8 @@ from .models import (
     WatchlistAdd, PortfolioAdd, PortfolioUpdate, AlertCreate,
     ScreenerRequest, ScreenerResponse, ScreenerWatchlistAdd,
     SubscriptionCreate, BundleCreate, NotificationPreferences,
+    InvestorProfile, ProfileUpdate, FitScore, FitBatchRequest, PortfolioHealth, Recommendations,
+    BehaviourBatch, Feed, SectorComparison,
 )
 from .user_service import (
     create_user, get_user_by_email, get_user_credentials,
@@ -27,14 +29,47 @@ from . import fundamentals_service
 from . import screener_service
 from . import subscriptions_service
 from . import notification_prefs_service
+from . import profile_service
+from . import fit_service
+from . import sector_comparison_service
+from . import portfolio_fit_service
+from . import recommendation_service
+from . import behaviour_service
+from . import feed_service
 
 FRONTEND_URL = os.environ.get("FRONTEND_URL", "http://localhost:5173")
+
+
+def _allowed_origins() -> list[str]:
+    """Explicit CORS allowlist (never `*` with credentials).
+
+    The app and this API are served same-origin on Vercel (the frontend and the
+    `/api` rewrite share one domain), so same-origin requests never hit CORS.
+    The allowlist only covers genuine cross-origin callers: the deployed site
+    (FRONTEND_URL / PORTAL_URL). Local dev servers are added only off-platform
+    (no `VERCEL` env) so production never trusts localhost.
+
+    `allow_origins=["*"]` with `allow_credentials=True` is both a security smell
+    and spec-invalid — browsers refuse to send credentials to a wildcard origin.
+
+    Both URLs are read from the env here (not the module-level FRONTEND_URL
+    constant) so origin config has a single source of truth, and every entry is
+    trailing-slash-normalized so set membership is reliable.
+    """
+    origins = {
+        os.environ.get("FRONTEND_URL", "").rstrip("/"),
+        os.environ.get("PORTAL_URL", "").rstrip("/"),
+    }
+    if not os.environ.get("VERCEL"):
+        origins |= {"http://localhost:5173", "http://localhost:3000"}
+    return sorted(o for o in origins if o)
+
 
 app = FastAPI(title="DSC Quant Analyst API", version="1.0.0")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=_allowed_origins(),
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -293,13 +328,84 @@ def watchlist_list(current_user: UserResponse = Depends(get_current_user)):
 
 @app.post("/api/watchlist")
 def watchlist_add(payload: WatchlistAdd, current_user: UserResponse = Depends(get_current_user)):
-    return watchlist_service.add_to_watchlist(current_user.id, payload.symbol)
+    result = watchlist_service.add_to_watchlist(current_user.id, payload.symbol)
+    behaviour_service.emit(current_user.id, "watchlist_add", symbol=payload.symbol)
+    return result
 
 
 @app.delete("/api/watchlist/{symbol}")
 def watchlist_remove(symbol: str, current_user: UserResponse = Depends(get_current_user)):
     watchlist_service.remove_from_watchlist(current_user.id, symbol.upper())
+    behaviour_service.emit(current_user.id, "watchlist_remove", symbol=symbol.upper())
     return {"status": "removed"}
+
+
+# ── Investor profile (#85, personalization spine #84) ────────────────────────
+
+@app.get("/api/profile/me", response_model=InvestorProfile)
+def profile_me(current_user: UserResponse = Depends(get_current_user)):
+    # Never 404s: an unset profile resolves to the neutral default (is_default),
+    # which is what the onboarding nudge keys on.
+    return profile_service.get_profile(current_user.id)
+
+
+@app.put("/api/profile/me", response_model=InvestorProfile)
+def profile_update(payload: ProfileUpdate, current_user: UserResponse = Depends(get_current_user)):
+    # Enums are validated by Pydantic (422). Sectors are validated here against
+    # the live universe so a typo can't silently store an un-scoreable preference.
+    valid = set(profile_service.list_sector_names())
+    unknown = [s for s in payload.sector_prefs if s not in valid]
+    if unknown:
+        raise HTTPException(status_code=400, detail=f"Unknown sectors: {', '.join(unknown)}")
+    return profile_service.save_profile(current_user.id, payload.model_dump())
+
+
+@app.get("/api/profile/sectors")
+def profile_sectors(current_user: UserResponse = Depends(get_current_user)):
+    return profile_service.list_sector_names()
+
+
+@app.get("/api/fit/{symbol}", response_model=FitScore)
+def fit_score(symbol: str, current_user: UserResponse = Depends(get_current_user)):
+    # Explainable per-axis fit of a stock against the caller's profile (#88).
+    return fit_service.fit_for(current_user.id, symbol)
+
+
+@app.post("/api/fit/batch", response_model=dict[str, FitScore])
+def fit_score_batch(payload: FitBatchRequest, current_user: UserResponse = Depends(get_current_user)):
+    # #89: the batched seam a page with many visible rows calls through — the
+    # sector cohort is built once for the whole request, not once per symbol.
+    return fit_service.score_many(current_user.id, payload.symbols)
+
+
+@app.get("/api/sector-comparison/{symbol}", response_model=SectorComparison)
+def sector_comparison(symbol: str, current_user: UserResponse = Depends(get_current_user)):
+    # #92: stock vs its sector's median for P/E, P/B, yield, growth — reuses
+    # #88's peer_metrics, no new bulk query. Fetched lazily by the frontend
+    # only when the (collapsed-by-default) sector zone is expanded.
+    return sector_comparison_service.compare(symbol)
+
+
+@app.get("/api/recommendations", response_model=Recommendations)
+def recommendations(current_user: UserResponse = Depends(get_current_user)):
+    # Personalized 'for you' recs + strategy nudges — matches preferences, not advice (#93).
+    return recommendation_service.recommend(current_user.id)
+
+
+@app.get("/api/feed", response_model=Feed)
+def home_feed(limit: int = 20, offset: int = 0,
+              current_user: UserResponse = Depends(get_current_user)):
+    # Composed 'for you' home feed: recs/nudges + watchlist moves + alerts (#96).
+    return feed_service.feed(current_user.id, limit=limit, offset=offset)
+
+
+@app.post("/api/behaviour", status_code=202)
+def behaviour_track(batch: BehaviourBatch, current_user: UserResponse = Depends(get_current_user)):
+    # Fire-and-forget implicit-signal capture (#86). Best-effort: a dropped
+    # beacon is fine, so this never blocks the UI and always 202s.
+    n = behaviour_service.record_events(
+        current_user.id, [e.model_dump() for e in batch.events])
+    return {"recorded": n}
 
 
 # ── Portfolio ────────────────────────────────────────────────────────────────
@@ -309,6 +415,12 @@ def portfolio_list(current_user: UserResponse = Depends(get_current_user)):
     return portfolio_service.get_portfolio(current_user.id)
 
 
+@app.get("/api/portfolio/health", response_model=PortfolioHealth)
+def portfolio_health(current_user: UserResponse = Depends(get_current_user)):
+    # Portfolio-level fit vs the caller's profile — observations, never advice (#91).
+    return portfolio_fit_service.portfolio_health(current_user.id)
+
+
 @app.get("/api/portfolio/summary")
 def portfolio_summary(current_user: UserResponse = Depends(get_current_user)):
     return portfolio_service.portfolio_summary(current_user.id)
@@ -316,7 +428,9 @@ def portfolio_summary(current_user: UserResponse = Depends(get_current_user)):
 
 @app.post("/api/portfolio")
 def portfolio_add(payload: PortfolioAdd, current_user: UserResponse = Depends(get_current_user)):
-    return portfolio_service.add_to_portfolio(current_user.id, payload.model_dump())
+    result = portfolio_service.add_to_portfolio(current_user.id, payload.model_dump())
+    behaviour_service.emit(current_user.id, "portfolio", symbol=payload.symbol)
+    return result
 
 
 @app.put("/api/portfolio/{portfolio_id}")

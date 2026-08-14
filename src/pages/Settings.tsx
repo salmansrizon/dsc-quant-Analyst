@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react';
 import type { AxiosInstance } from 'axios';
-import { Bell } from 'lucide-react';
+import { Bell, UserCog } from 'lucide-react';
 import { errorMessage } from '../api/errorMessage';
 import { useToast } from '../context/ToastContext';
+import ProfileQuiz, { type Profile } from '../components/ProfileQuiz/ProfileQuiz';
 
 // The four channels the #78 endpoint understands, each with the payload field
 // that carries its delivery target.
@@ -39,6 +40,8 @@ export default function Settings({ client }: { client: AxiosInstance }) {
   const [prefs, setPrefs] = useState<Prefs>(EMPTY);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [profile, setProfile] = useState<Profile | null>(null);
+  const [quizOpen, setQuizOpen] = useState(false);
 
   useEffect(() => {
     client
@@ -47,6 +50,13 @@ export default function Settings({ client }: { client: AxiosInstance }) {
       .catch((err) => toast.error(errorMessage(err, 'Failed to load settings')))
       .finally(() => setLoading(false));
   }, [client, toast]);
+
+  useEffect(() => {
+    client
+      .get('/profile/me')
+      .then((res) => setProfile(res.data as Profile))
+      .catch(() => {/* profile is optional; the nudge handles first-run */});
+  }, [client]);
 
   const enabled = (key: string) => prefs.channels_enabled.includes(key);
 
@@ -119,6 +129,31 @@ export default function Settings({ client }: { client: AxiosInstance }) {
       >
         {saving ? 'Saving…' : 'Save Settings'}
       </button>
+
+      <h2 className="text-xl font-bold flex items-center gap-2 mt-4">
+        <UserCog size={22} /> Investor Profile
+      </h2>
+      <p className="text-secondary text-sm">
+        {profile && !profile.is_default
+          ? `Goal: ${profile.goal} · Risk: ${profile.risk} · Horizon: ${profile.horizon}`
+          : 'Not set — using neutral defaults.'}
+      </p>
+      <button
+        type="button"
+        onClick={() => setQuizOpen(true)}
+        className="btn-primary"
+        style={{ alignSelf: 'flex-start' }}
+      >
+        Edit investor profile
+      </button>
+
+      <ProfileQuiz
+        client={client}
+        open={quizOpen}
+        initial={profile ?? undefined}
+        onClose={() => setQuizOpen(false)}
+        onSaved={(p) => setProfile(p)}
+      />
     </div>
   );
 }

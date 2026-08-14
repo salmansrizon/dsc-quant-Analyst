@@ -1,8 +1,12 @@
 import { useContext } from 'react';
-import { Outlet, NavLink, useNavigate } from 'react-router-dom';
+import type { AxiosInstance } from 'axios';
+import { AnimatePresence, motion } from 'motion/react';
+import { Outlet, NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { Moon, Sun } from 'lucide-react';
 import { AuthContext } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
+import { pageTransition } from '../design/motion';
+import ProfileNudge from '../components/ProfileQuiz/ProfileNudge';
 
 const navItems = [
   { to: '/', label: 'Dashboard', end: true },
@@ -20,10 +24,11 @@ const linkClass = ({ isActive }: { isActive: boolean }) =>
       : 'text-gray-700 hover:text-indigo-600 hover:bg-indigo-50'
   }`;
 
-function Layout() {
+function Layout({ client }: { client: AxiosInstance }) {
   const { user, logout } = useContext(AuthContext);
   const { theme, toggleTheme } = useTheme();
   const navigate = useNavigate();
+  const location = useLocation();
 
   const handleLogout = () => {
     logout();
@@ -79,7 +84,20 @@ function Layout() {
         </nav>
       </header>
       <main className="max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8">
-        <Outlet />
+        <ProfileNudge client={client} />
+        {/* #87: theme/route-transition motion trigger — fades page content on
+            route change, scoped exactly to what the decision record allows. */}
+        <AnimatePresence mode="wait">
+          <motion.div
+            key={location.pathname}
+            variants={pageTransition}
+            initial="initial"
+            animate="animate"
+            exit="exit"
+          >
+            <Outlet />
+          </motion.div>
+        </AnimatePresence>
       </main>
     </div>
   );

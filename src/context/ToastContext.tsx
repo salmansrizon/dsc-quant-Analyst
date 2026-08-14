@@ -1,4 +1,4 @@
-import React, { createContext, useCallback, useContext, useState } from 'react';
+import React, { createContext, useCallback, useContext, useMemo, useState } from 'react';
 import { AlertCircle, CheckCircle, X } from 'lucide-react';
 
 type ToastType = 'error' | 'success';
@@ -31,10 +31,15 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
 
   const dismiss = (id: number) => setToasts((prev) => prev.filter((t) => t.id !== id));
 
-  const api: ToastApi = {
-    error: (msg) => show(msg, 'error'),
-    success: (msg) => show(msg, 'success'),
-  };
+  // Stable across renders (show is a useCallback with empty deps) — without
+  // this, any effect that lists `toast` in its deps AND calls toast.error/
+  // success inside itself (e.g. ProfileNudge on a failed fetch) re-fires on
+  // every toast shown, which shows another toast, which re-fires again: an
+  // infinite loop hammering the backend. Found via #90's visual verification.
+  const api: ToastApi = useMemo(() => ({
+    error: (msg: string) => show(msg, 'error'),
+    success: (msg: string) => show(msg, 'success'),
+  }), [show]);
 
   return (
     <ToastContext.Provider value={api}>

@@ -1,7 +1,9 @@
+import { useEffect } from 'react';
 import type { AxiosInstance } from 'axios';
 import { BrowserRouter, Route, Routes } from 'react-router-dom';
 
 import defaultClient from './api/client';
+import { initBehaviour } from './api/behaviour';
 import { AuthProvider } from './context/AuthContext';
 import { ThemeProvider } from './context/ThemeContext';
 import { ToastProvider } from './context/ToastContext';
@@ -23,6 +25,8 @@ interface AppProps {
 }
 
 function App({ client = defaultClient }: AppProps) {
+  // #86: start the behaviour capture buffer/flush loop for the app's lifetime.
+  useEffect(() => initBehaviour(client), [client]);
   return (
     <ThemeProvider>
     <ToastProvider>
@@ -35,7 +39,7 @@ function App({ client = defaultClient }: AppProps) {
           <Route
             element={
               <PrivateRoute>
-                <Layout />
+                <Layout client={client} />
               </PrivateRoute>
             }
           >
@@ -52,7 +56,7 @@ function App({ client = defaultClient }: AppProps) {
             path="/admin"
             element={
               <PrivateRoute adminOnly>
-                <Layout />
+                <Layout client={client} />
               </PrivateRoute>
             }
           >

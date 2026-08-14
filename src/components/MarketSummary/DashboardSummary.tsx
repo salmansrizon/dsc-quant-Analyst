@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import type { AxiosInstance } from 'axios';
+import { VARIANT_COLOR_VAR } from '../ui/Badge';
 
 interface MarketSummaryData {
   summary: {
@@ -28,31 +29,35 @@ export default function MarketSummary({ client }: { client: AxiosInstance }) {
   }, [client]);
 
   if (error) {
-    return <div className="text-red-500">Error loading market data: {error}</div>;
+    return <div style={{ color: VARIANT_COLOR_VAR.negative }}>Error loading market data: {error}</div>;
   }
   if (!data) {
-    return <div className="text-gray-500">Loading...</div>;
+    return <div className="text-[var(--text-secondary)]">Loading...</div>;
   }
 
   return (
     <div data-testid="market-summary">
-      <h1 className="text-2xl font-bold">Market Summary</h1>
-      <p className="text-lg">LTP: {data?.summary?.ltp ?? '—'}</p>
-      <p className="text-lg">Change: {data?.summary?.change ?? '—'}</p>
-      <h2 className="mt-4 text-xl font-medium">Sectors Dashboard</h2>
+      <h1 className="text-2xl font-bold text-[var(--text-primary)]">Market Summary</h1>
+      <p className="text-lg tabular-nums text-[var(--text-primary)]">LTP: {data?.summary?.ltp ?? '—'}</p>
+      <p className="text-lg tabular-nums text-[var(--text-primary)]">
+        Change: {data?.summary?.change ?? '—'}
+      </p>
+      <h2 className="mt-4 text-xl font-medium text-[var(--text-primary)]">Sectors Dashboard</h2>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {(data.sectors ?? []).map((sector) => {
           const up = sector.change >= 0;
-          const bgClass = up ? 'bg-green-100' : 'bg-red-100';
-          const textColor = up ? 'text-green-800' : 'text-red-800';
+          const color = up ? VARIANT_COLOR_VAR.positive : VARIANT_COLOR_VAR.negative;
           return (
-            <div key={sector.name} className={`p-4 rounded-sm ${bgClass} border border-gray-200`}>
-              <p className={`${textColor} font-medium text-sm`}>{sector.name}</p>
-              <p className="text-sm">{sector.count} stocks</p>
-              <p className="text-xs">{sector.change.toFixed(2)}% change</p>
-              </div>
-            );
+            <div
+              key={sector.name}
+              className="rounded-lg border border-[var(--border-color)] bg-[var(--bg-secondary)] p-4"
+            >
+              <p className="text-sm font-medium" style={{ color }}>{sector.name}</p>
+              <p className="text-sm text-[var(--text-secondary)]">{sector.count} stocks</p>
+              <p className="text-xs tabular-nums" style={{ color }}>{sector.change.toFixed(2)}% change</p>
+            </div>
+          );
         })}
       </div>
     </div>

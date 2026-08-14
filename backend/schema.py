@@ -21,6 +21,13 @@ _STR = "STRING"
 class TableSpec(NamedTuple):
     key: str                              # column the latest version resolves per
     columns: tuple[tuple[str, str], ...]  # (name, BigQuery type)
+    # Raw, immutable, time-partitioned tables (#86 behaviour_events) set these:
+    # BigQuery drops partitions older than `expiration_days` itself — a storage
+    # lifecycle, not a DELETE (the free tier forbids DML). `versioned=False`
+    # skips the append-only `_current` view (these rows are never superseded).
+    partition: str | None = None          # DATE/TIMESTAMP column to partition by
+    expiration_days: int | None = None    # partition auto-expiry window
+    versioned: bool = True                # False = raw log, no _current view
 
 
 TABLES: dict[str, TableSpec] = {
@@ -143,6 +150,41 @@ TABLES: dict[str, TableSpec] = {
         ("record_date", "DATE"), ("year", "INT64"),
         ("subscription_open", "DATE"), ("subscription_close", "DATE"),
         ("source", _STR),
+        ("updated_at", _TS), ("is_deleted", "BOOL"),
+    )),
+    # Investor profile (#85, personalization spine #84). One row per user
+    # (id = user_id), append-versioned — an edit is a new version, the `_current`
+    # view resolves the latest. `sector_prefs` is a JSON rank-ordered array
+    # string ([0] = top choice); the #88 fit engine derives weights from rank.
+    # `is_default` marks the neutral cold-start object (never user-set), which is
+    # what the nudge banner keys on.
+    "investor_profiles": TableSpec("id", (
+        ("id", _STR), ("user_id", _STR),
+        ("goal", _STR),          # income|growth|preservation
+        ("risk", _STR),          # low|med|high
+        ("horizon", _STR),       # short|medium|long
+        ("sector_prefs", _STR),  # JSON rank-ordered array
+        ("is_default", "BOOL"),
+        ("updated_at", _TS), ("is_deleted", "BOOL"),
+    )),
+    # Raw behaviour events (#86, spine #84). Immutable facts that age out: BQ
+    # drops partitions older than 8 days itself (7-day window + a day of slack
+    # for a late rollup), so no DELETE is ever issued. Not versioned — an event
+    # is never revised. `payload` holds type-specific detail (screener filters);
+    # symbol/sector are promoted out so the rollup is plain GROUP BY, not JSON.
+    "behaviour_events": TableSpec("id", (
+        ("id", _STR), ("user_id", _STR), ("event_type", _STR),
+        ("symbol", _STR), ("sector", _STR), ("payload", _STR),
+        ("event_date", "DATE"), ("created_at", _TS),
+    ), partition="event_date", expiration_days=8, versioned=False),
+    # Per-user interest summary (#86). Rolled up daily from the 7-day event
+    # window + standing portfolio/watchlist state. Append-only versions +
+    # `_current`; `interest` is the 0..1 affinity #88/#93/#96 consume.
+    "behaviour_summary": TableSpec("id", (
+        ("id", _STR),                      # user_id|kind|key
+        ("user_id", _STR), ("kind", _STR), ("key", _STR),
+        ("interest", "FLOAT64"), ("event_count", "INT64"),
+        ("last_event_at", _TS),
         ("updated_at", _TS), ("is_deleted", "BOOL"),
     )),
     # One dividend DECLARATION (#57). A company declares several a year, so

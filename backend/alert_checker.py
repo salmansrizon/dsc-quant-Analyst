@@ -117,7 +117,7 @@ def build_notifier() -> Notifier:
     Local imports so the pure sweep above stays importable without the providers.
     """
     from backend import notifications_service, email_sender, notification_prefs_service
-    from backend.notifications import channels, messages
+    from backend.notifications import channels, templates
     from backend.user_service import get_user_by_id
 
     def _send(channel: str, user, prefs: dict, subject: str, text: str, html: str) -> bool:
@@ -142,12 +142,12 @@ def build_notifier() -> Notifier:
         enabled = prefs.get("channels_enabled") or ["email"]  # email is the default
 
         cond = alert_conditions.parse_condition(alert.get("condition_json"))
-        subject = f"Alert: {alert_conditions.describe(alert['symbol'], alert.get('condition_json'))}"
-        text = messages.build_alert_message(
-            alert["symbol"], _coerce(alert.get("current_price")),
-            _coerce(cond.get("value")), cond.get("op"),
+        notification = templates.AlertNotification(
+            symbol=alert["symbol"], ltp=_coerce(alert.get("current_price")),
+            target=_coerce(cond.get("value")), direction=cond.get("op"),
         )
-        html = "<p>" + text.replace("\n", "<br>") + "</p>"
+        subject, html = templates.alert_email(notification)
+        text = templates.alert_text(notification)
 
         delivered_any = False
         for channel in enabled:

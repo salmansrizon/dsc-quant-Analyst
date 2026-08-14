@@ -2,7 +2,7 @@
 Pydantic models for request/response schemas.
 """
 from pydantic import BaseModel, Field
-from typing import Optional
+from typing import Literal, Optional
 from datetime import datetime
 
 
@@ -136,6 +136,200 @@ class NotificationPreferences(BaseModel):
     email: Optional[str] = None
     web_push_subscription: Optional[str] = None
     channels_enabled: list[str] = []
+
+
+# ─── Investor profile (#85, personalization spine #84) ───────────────────────
+
+Goal = Literal["income", "growth", "preservation"]
+Risk = Literal["low", "med", "high"]
+Horizon = Literal["short", "medium", "long"]
+
+
+class InvestorProfile(BaseModel):
+    """The resolved, engine-ready profile the #88 fit engine + #93 recs consume.
+
+    Always non-null: an absent profile resolves to the neutral cold-start object
+    (is_default=True), so the engine never branches on None. sector_prefs is the
+    parsed rank-ordered list ([0] = top choice), never the stored JSON string.
+    """
+    goal: Goal
+    risk: Risk
+    horizon: Horizon
+    sector_prefs: list[str] = []
+    is_default: bool = False
+
+
+class ProfileUpdate(BaseModel):
+    """What the onboarding quiz / profile editor submits. Enums are validated by
+    Pydantic (422 on a bad value); sector_prefs is checked against the live
+    sector universe at the route (400)."""
+    goal: Goal
+    risk: Risk
+    horizon: Horizon
+    sector_prefs: list[str] = []
+
+
+# ─── Fit engine (#88, personalization spine #84) ─────────────────────────────
+
+class FitAxis(BaseModel):
+    """One explainable dimension of the fit scorecard. `score` is null when the
+    metric is missing or meaningless (e.g. negative-equity ROE) — a null axis is
+    dropped from the composite, never scored 0 (which would fake-penalize)."""
+    axis: str
+    score: Optional[float] = None      # 0..100, higher = better on this dimension
+    reason: str                        # mandatory human sentence
+    weight: float                      # this axis's share of the composite
+
+
+class FitScore(BaseModel):
+    """A stock scored against an investor profile (#88). Framing is always
+    'matches your preferences', never advice — the disclaimer rides here.
+
+    `composite` is computed for downstream ranking (feed #89 / recs #91 / nudges
+    #93) but is NOT a user-facing headline — the frontend renders axes + reasons
+    only (decision C). `scorable` is False below the 2-axis coverage floor, when
+    `composite` is None and the scorecard should say so. `weight_caption` is the
+    only place the profile->weight tilt surfaces, since the composite is hidden."""
+    symbol: str
+    composite: Optional[float] = None  # weighted mean over scored axes, 0..100 — internal-only
+    scorable: bool = True              # False when <2 axes scored (composite floored to None)
+    weight_caption: str = ""           # e.g. "Weighted toward Growth & Stability, from your profile."
+    axes: list[FitAxis]
+    is_default_profile: bool
+    disclaimer: str
+
+
+class FitBatchRequest(BaseModel):
+    """#89: score many symbols in one call through score_many's batched seam —
+    the sector cohort is built once, not once per visible row."""
+    symbols: list[str] = Field(min_length=1, max_length=100)
+
+
+# ─── Sector comparison (#92, spine #84) ───────────────────────────────────────
+
+class SectorComparisonMetric(BaseModel):
+    """One metric's stock-vs-sector-median comparison. `comparable` is False
+    when fewer than sector_comparison_service.MIN_COHORT peers have a value —
+    unlike the fit engine (#88), this never falls back to the market-wide
+    distribution: the whole premise is sector-specific, so a thin metric says
+    so instead of silently comparing against the wrong cohort."""
+    metric: str                         # "pe" | "pb" | "yield" | "growth"
+    label: str                          # "P/E", "P/B", "Dividend Yield %", "EPS Growth %/yr"
+    subject_value: Optional[float] = None
+    sector_median: Optional[float] = None
+    peer_count: int
+    comparable: bool
+
+
+class SectorComparison(BaseModel):
+    symbol: str
+    sector: Optional[str] = None
+    metrics: list[SectorComparisonMetric]
+
+
+# ─── Behaviour tracking (#86, personalization spine #84) ─────────────────────
+
+BehaviourType = Literal[
+    "view", "watchlist_add", "watchlist_remove", "portfolio",
+    "screener_run", "sector_view",
+]
+
+
+class BehaviourEvent(BaseModel):
+    """One implicit-signal event the frontend fires. The server stamps id,
+    user_id, event_date, created_at — the client cannot spoof them."""
+    event_type: BehaviourType
+    symbol: Optional[str] = None
+    sector: Optional[str] = None
+    payload: Optional[dict] = None
+
+
+class BehaviourBatch(BaseModel):
+    """A flush of buffered events (batched to cut append volume)."""
+    events: list[BehaviourEvent] = Field(default_factory=list, max_length=100)
+
+
+# ─── Portfolio personalization (#91, spine #84) ──────────────────────────────
+
+class PortfolioFinding(BaseModel):
+    """One 'health vs your profile' finding. `kind` names the signal; `severity`
+    is good|caution|warn; `headline` is qualitative for fit-derived findings (no
+    score digits, per #88 decision C) but factual for structural ones (percent,
+    counts); `reason` is an OBSERVATION, never advice — the actionable nudges
+    live in #93."""
+    kind: str          # concentration|count|risk_fit|goal_fit|mix|unmet_prefs
+    severity: str      # good|caution|warn
+    headline: str
+    reason: str
+
+
+class PortfolioHealth(BaseModel):
+    """The aggregated read of a portfolio against its owner's profile (#91).
+    `unweighted` is True when no holding could be valued and findings fell back
+    to equal weight — the panel flags the read as coarse."""
+    holdings_valued: int
+    total_value: float
+    is_default_profile: bool
+    unweighted: bool = False
+    findings: list[PortfolioFinding]
+    disclaimer: str
+
+
+# ─── Recommendations + strategy nudges (#93, spine #84) ──────────────────────
+
+class Recommendation(BaseModel):
+    """A 'for you' stock suggestion. `match` is a qualitative tier (no composite
+    digits, #88 decision C); `reason` carries the dominant fit axis + why it
+    surfaced, framed 'matches your preferences', never 'buy'. `sources` names the
+    generators that surfaced it (fit|behaviour|gap)."""
+    symbol: str
+    sector: Optional[str] = None
+    match: str             # strong|good
+    reason: str
+    sources: list[str]
+
+
+class StrategyNudge(BaseModel):
+    """An actionable nudge over the portfolio findings (#91). Additive-only —
+    names stocks that would ADDRESS a finding, never a stock to sell — and stated
+    in the conditional/consequence frame ('adding X would reduce Y'), never an
+    imperative."""
+    kind: str              # concentration|goal_fit|mix|unmet_prefs|set_profile
+    headline: str
+    reason: str
+    symbols: list[str]     # additive candidates that address it
+
+
+class Recommendations(BaseModel):
+    """The personalized rec/nudge stream (#93) the feed (#96) composes from."""
+    recs: list[Recommendation]
+    nudges: list[StrategyNudge]
+    is_default_profile: bool
+    disclaimer: str
+
+
+# ─── Personalized home feed (#96, spine #84) ─────────────────────────────────
+
+class FeedItem(BaseModel):
+    """One card on the 'for you' home feed. `kind` orders it (nudge > rec >
+    watchlist_move > alert); `reason` frames it 'matches your interests', never
+    advice."""
+    kind: str              # nudge|recommendation|watchlist_move|alert
+    headline: str
+    reason: str
+    symbol: Optional[str] = None
+    symbols: list[str] = []
+    sources: list[str] = []
+
+
+class Feed(BaseModel):
+    """The composed 'for you' surface (#96): #93's recs/nudges plus non-personalized
+    context (watchlist moves, alerts), ordered + paginated. Behaviour reason strings
+    (#86/#107) enrich rec items once the affinity formula lands."""
+    items: list[FeedItem]
+    next_offset: Optional[int] = None
+    is_default_profile: bool
+    disclaimer: str
 
 
 # ─── Screener (#71) ───────────────────────────────────────────────────────────
